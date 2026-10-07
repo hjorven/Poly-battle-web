@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Poly Battle Web</title>
+    <title>Poly Battle</title>
     <style>
         * {
             box-sizing: border-box;
@@ -14,8 +14,8 @@
         }
 
         body {
-            background-color: #0f172a;
-            color: #f8fafc;
+            background-color: #fafafa;
+            color: #18181b;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex;
             flex-direction: column;
@@ -27,62 +27,65 @@
         }
 
         header {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             text-align: center;
         }
 
         h1 {
-            font-size: 1.5rem;
-            color: #38bdf8;
-            margin-bottom: 5px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+            color: #09090b;
+            margin-bottom: 4px;
         }
 
         #status-bar {
-            font-size: 0.95rem;
-            color: #94a3b8;
+            font-size: 0.875rem;
+            color: #71717a;
         }
 
         #game-container {
             position: relative;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-            border-radius: 12px;
+            background: #ffffff;
+            border: 1px solid #e4e4e7;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
             overflow: hidden;
-            background: #1e293b;
-            border: 2px solid #334155;
         }
 
         canvas {
             display: block;
-            background-color: #0f172a;
             cursor: pointer;
         }
 
         .controls {
             margin-top: 20px;
             display: flex;
-            gap: 15px;
+            gap: 12px;
         }
 
         button {
-            background-color: #0284c7;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            font-size: 1rem;
-            font-weight: bold;
-            border-radius: 8px;
+            background-color: #18181b;
+            color: #ffffff;
+            border: 1px solid #18181b;
+            padding: 10px 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 6px;
             cursor: pointer;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-            transition: background 0.2s, transform 0.1s;
+            transition: background-color 0.15s ease, border-color 0.15s ease;
+        }
+
+        button:hover {
+            background-color:። 27272a;
         }
 
         button:active {
-            transform: scale(0.96);
-            background-color: #0369a1;
+            background-color: #3f3f46;
         }
     </style>
 
-    <!-- Supabase CDN einbinden -->
+    <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -101,7 +104,6 @@
     </div>
 
     <script>
-        // Supabase Konfiguration
         const SUPABASE_URL = 'https://dzcikosdbkersscdmppz.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6Y2lrb3NkYmtlcnNzY2RtcHB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNjgyODksImV4cCI6MjEwNjk0NDI4OX0.4WFDB18GkYrhyEpKXqJWRNivM2u2gcfMOYTind7UuQI';
         
@@ -115,7 +117,7 @@
         const GRID_SIZE = 8;
         const TILE_SIZE = 50;
 
-        let gameId = null; // Aktuelle Match-ID
+        let gameId = null;
         let gameState = {
             board: [],
             units: [
@@ -124,7 +126,6 @@
             ]
         };
         let currentTurn = 'player_1';
-        let myPlayerRole = 'player_1'; // Zum Testen erst mal Spieler 1
         let selectedUnit = null;
 
         function initLocalBoard() {
@@ -139,45 +140,42 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 1. Kacheln
             for (let x = 0; x < GRID_SIZE; x++) {
                 for (let y = 0; y < GRID_SIZE; y++) {
                     const px = x * TILE_SIZE;
                     const py = y * TILE_SIZE;
 
-                    ctx.fillStyle = gameState.board[x][y].terrain === 1 ? '#0369a1' : '#15803d';
-                    ctx.fillRect(px, py, TILE_SIZE - 2, TILE_SIZE - 2);
+                    // Dezentere, klare Farben im reduzierten Stil
+                    ctx.fillStyle = gameState.board[x][y].terrain === 1 ? '#e0f2fe' : '#f4f4f5';
+                    ctx.fillRect(px, py, TILE_SIZE - 1, TILE_SIZE - 1);
 
                     if (selectedUnit && selectedUnit.x === x && selectedUnit.y === y) {
-                        ctx.strokeStyle = '#facc15';
-                        ctx.lineWidth = 3;
-                        ctx.strokeRect(px + 2, py + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+                        ctx.strokeStyle = '#18181b';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(px + 1, py + 1, TILE_SIZE - 3, TILE_SIZE - 3);
                     }
                 }
             }
 
-            // 2. Einheiten
             gameState.units.forEach(unit => {
                 const px = unit.x * TILE_SIZE;
                 const py = unit.y * TILE_SIZE;
 
-                ctx.fillStyle = unit.player === 'player_1' ? '#3b82f6' : '#ef4444';
+                ctx.fillStyle = unit.player === 'player_1' ? '#2563eb' : '#dc2626';
                 ctx.beginPath();
-                ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, TILE_SIZE / 2.5, 0, Math.PI * 2);
+                ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, TILE_SIZE / 3, 0, Math.PI * 2);
                 ctx.fill();
 
-                ctx.font = '24px sans-serif';
+                ctx.font = '20px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(unit.icon, px + TILE_SIZE / 2, py + TILE_SIZE / 2);
             });
         }
 
-        // Spiel in Supabase laden oder neues erstellen
         async function setupGame() {
             initLocalBoard();
 
-            // Versuche das letzte offene Spiel zu finden
             let { data: matches, error } = await _supabase
                 .from('matches')
                 .select('*')
@@ -185,14 +183,12 @@
                 .limit(1);
 
             if (matches && matches.length > 0) {
-                // Spiel existiert bereits, laden
                 const activeMatch = matches[0];
                 gameId = activeMatch.id;
                 gameState = activeMatch.game_state;
                 currentTurn = activeMatch.current_turn;
                 statusBar.textContent = `Spiel geladen. Am Zug: ${currentTurn}`;
             } else {
-                // Neues Spiel in Supabase anlegen
                 const { data, error: insertError } = await _supabase
                     .from('matches')
                     .insert([{
@@ -204,10 +200,10 @@
 
                 if (!insertError && data) {
                     gameId = data[0].id;
-                    statusBar.textContent = `Neues Spiel erstellt. Du bist Spieler 1.`;
+                    statusBar.textContent = `Neues Spiel erstellt.`;
                 } else {
                     statusBar.textContent = `Fehler beim Erstellen des Spiels.`;
-                    console.error(insertError);
+                    console.error('Supabase Insert Error:', insertError);
                 }
             }
 
@@ -215,8 +211,8 @@
             listenToRealtimeChanges();
         }
 
-        // Echtzeit-Lauscher für Supabase
         function listenToRealtimeChanges() {
+            if (!gameId) return;
             _supabase
                 .channel('public:matches')
                 .on('postgres_changes', {
@@ -225,17 +221,15 @@
                     table: 'matches',
                     filter: `id=eq.${gameId}`
                 }, payload => {
-                    console.log('Update vom Gegner erhalten!', payload.new);
                     gameState = payload.new.game_state;
                     currentTurn = payload.new.current_turn;
-                    statusBar.textContent = `Gegner hat gezogen! Am Zug: ${currentTurn}`;
+                    statusBar.textContent = `Zug erhalten. Am Zug: ${currentTurn}`;
                     selectedUnit = null;
                     draw();
                 })
                 .subscribe();
         }
 
-        // Zug in Supabase speichern
         async function syncGameState() {
             const nextTurn = currentTurn === 'player_1' ? 'player_2' : 'player_1';
 
@@ -249,17 +243,16 @@
                 .eq('id', gameId);
 
             if (error) {
-                console.error('Fehler beim Speichern:', error);
-                statusBar.textContent = 'Fehler beim Synchronisieren!';
+                statusBar.textContent = 'Fehler beim Synchronisieren.';
+                console.error(error);
             } else {
                 currentTurn = nextTurn;
-                statusBar.textContent = `Zug beendet. Warten auf Gegner... (Am Zug: ${currentTurn})`;
+                statusBar.textContent = `Warte auf Gegner...`;
                 selectedUnit = null;
                 draw();
             }
         }
 
-        // Klick / Touch auf das Canvas
         canvas.addEventListener('click', (e) => {
             const rect = canvas.getBoundingClientRect();
             const clickX = Math.floor((e.clientX - rect.left) / TILE_SIZE);
@@ -272,7 +265,7 @@
             if (clickedUnit) {
                 if (clickedUnit.player === currentTurn) {
                     selectedUnit = clickedUnit;
-                    statusBar.themes = `${selectedUnit.type} ausgewählt. Wohin bewegen?`;
+                    statusBar.textContent = `${selectedUnit.type} ausgewählt.`;
                     draw();
                 }
             } else if (selectedUnit) {
@@ -294,7 +287,6 @@
             syncGameState();
         });
 
-        // Start beim Laden der Seite
         setupGame();
     </script>
 </body>
