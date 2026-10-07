@@ -81,12 +81,15 @@
             background-color: #0369a1;
         }
     </style>
+
+    <!-- Supabase CDN einbinden -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
     <header>
         <h1>Poly Battle</h1>
-        <div id="status-bar">Wähle eine Einheit aus</div>
+        <div id="status-bar">Verbinde mit Supabase...</div>
     </header>
 
     <div id="game-container">
@@ -98,30 +101,37 @@
     </div>
 
     <script>
+        // Supabase Konfiguration
+        const SUPABASE_URL = 'https://dzcikosdbkersscdmppz.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6Y2lrb3NkYmtlcnNzY2RtcHB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNjgyODksImV4cCI6MjEwNjk0NDI4OX0.4WFDB18GkYrhyEpKXqJWRNivM2u2gcfMOYTind7UuQI';
+        
+        const { createClient } = supabase;
+        const _supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const statusBar = document.getElementById('status-bar');
 
-        const GRID_SIZE = 8; // 8x8 Feld
-        const TILE_SIZE = 50; // Pixel pro Kachel (8 * 50 = 400px)
+        const GRID_SIZE = 8;
+        const TILE_SIZE = 50;
 
-        // Spielfeld-Datenstruktur (Terrain & Einheiten)
-        // 0 = Gras, 1 = Wasser, 2 = Berg
-        let board = [];
-        let units = [
-            { x: 1, y: 1, player: 1, type: 'Krieger', icon: '⚔️' },
-            { x: 6, y: 6, player: 2, type: 'Krieger', icon: '🛡️' }
-        ];
-
+        let gameId = null; // Aktuelle Match-ID
+        let gameState = {
+            board: [],
+            units: [
+                { x: 1, y: 1, player: 'player_1', type: 'Krieger', icon: '⚔️' },
+                { x: 6, y: 6, player: 'player_2', type: 'Krieger', icon: '🛡️' }
+            ]
+        };
+        let currentTurn = 'player_1';
+        let myPlayerRole = 'player_1'; // Zum Testen erst mal Spieler 1
         let selectedUnit = null;
-        let currentPlayer = 1;
 
-        function initBoard() {
+        function initLocalBoard() {
             for (let x = 0; x < GRID_SIZE; x++) {
-                board[x] = [];
+                gameState.board[x] = [];
                 for (let y = 0; y < GRID_SIZE; y++) {
-                    // Einfaches Muster für Terrain
-                    board[x][y] = { terrain: (x + y) % 5 === 0 ? 1 : 0 };
+                    gameState.board[x][y] = { terrain: (x + y) % 5 === 0 ? 1 : 0 };
                 }
             }
         }
@@ -129,22 +139,15 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 1. Kacheln zeichnen
+            // 1. Kacheln
             for (let x = 0; x < GRID_SIZE; x++) {
                 for (let y = 0; y < GRID_SIZE; y++) {
                     const px = x * TILE_SIZE;
                     const py = y * TILE_SIZE;
 
-                    // Terrain-Farben
-                    if (board[x][y].terrain === 1) {
-                        ctx.fillStyle = '#0369a1'; // Wasser
-                    } else {
-                        ctx.fillStyle = '#15803d'; // Gras
-                    }
-
+                    ctx.fillStyle = gameState.board[x][y].terrain === 1 ? '#0369a1' : '#15803d';
                     ctx.fillRect(px, py, TILE_SIZE - 2, TILE_SIZE - 2);
 
-                    // Markierung für ausgewählte Einheit & Reichweite
                     if (selectedUnit && selectedUnit.x === x && selectedUnit.y === y) {
                         ctx.strokeStyle = '#facc15';
                         ctx.lineWidth = 3;
@@ -153,18 +156,16 @@
                 }
             }
 
-            // 2. Einheiten zeichnen
-            units.forEach(unit => {
+            // 2. Einheiten
+            gameState.units.forEach(unit => {
                 const px = unit.x * TILE_SIZE;
                 const py = unit.y * TILE_SIZE;
 
-                // Spieler-Hintergrundkreis
-                ctx.fillStyle = unit.player === 1 ? '#3b82f6' : '#ef4444';
+                ctx.fillStyle = unit.player === 'player_1' ? '#3b82f6' : '#ef4444';
                 ctx.beginPath();
                 ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, TILE_SIZE / 2.5, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Icon / Emoji
                 ctx.font = '24px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -172,7 +173,93 @@
             });
         }
 
-        // Touch / Klick Handling
+        // Spiel in Supabase laden oder neues erstellen
+        async function setupGame() {
+            initLocalBoard();
+
+            // Versuche das letzte offene Spiel zu finden
+            let { data: matches, error } = await _supabase
+                .from('matches')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (matches && matches.length > 0) {
+                // Spiel existiert bereits, laden
+                const activeMatch = matches[0];
+                gameId = activeMatch.id;
+                gameState = activeMatch.game_state;
+                currentTurn = activeMatch.current_turn;
+                statusBar.textContent = `Spiel geladen. Am Zug: ${currentTurn}`;
+            } else {
+                // Neues Spiel in Supabase anlegen
+                const { data, error: insertError } = await _supabase
+                    .from('matches')
+                    .insert([{
+                        game_state: gameState,
+                        current_turn: 'player_1',
+                        player_1: 'Aktiv'
+                    }])
+                    .select();
+
+                if (!insertError && data) {
+                    gameId = data[0].id;
+                    statusBar.textContent = `Neues Spiel erstellt. Du bist Spieler 1.`;
+                } else {
+                    statusBar.textContent = `Fehler beim Erstellen des Spiels.`;
+                    console.error(insertError);
+                }
+            }
+
+            draw();
+            listenToRealtimeChanges();
+        }
+
+        // Echtzeit-Lauscher für Supabase
+        function listenToRealtimeChanges() {
+            _supabase
+                .channel('public:matches')
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'matches',
+                    filter: `id=eq.${gameId}`
+                }, payload => {
+                    console.log('Update vom Gegner erhalten!', payload.new);
+                    gameState = payload.new.game_state;
+                    currentTurn = payload.new.current_turn;
+                    statusBar.textContent = `Gegner hat gezogen! Am Zug: ${currentTurn}`;
+                    selectedUnit = null;
+                    draw();
+                })
+                .subscribe();
+        }
+
+        // Zug in Supabase speichern
+        async function syncGameState() {
+            const nextTurn = currentTurn === 'player_1' ? 'player_2' : 'player_1';
+
+            const { error } = await _supabase
+                .from('matches')
+                .update({
+                    game_state: gameState,
+                    current_turn: nextTurn,
+                    last_move_at: new Date().toISOString()
+                })
+                .eq('id', gameId);
+
+            if (error) {
+                console.error('Fehler beim Speichern:', error);
+                statusBar.textContent = 'Fehler beim Synchronisieren!';
+            } else {
+                currentTurn = nextTurn;
+                statusBar.textContent = `Zug beendet. Warten auf Gegner... (Am Zug: ${currentTurn})`;
+                selectedUnit = null;
+                draw();
+            }
+        }
+
+        // Klick / Touch auf das Canvas
         canvas.addEventListener('click', (e) => {
             const rect = canvas.getBoundingClientRect();
             const clickX = Math.floor((e.clientX - rect.left) / TILE_SIZE);
@@ -180,43 +267,35 @@
 
             if (clickX < 0 || clickX >= GRID_SIZE || clickY < 0 || clickY >= GRID_SIZE) return;
 
-            // Prüfen, ob auf eine eigene Einheit geklickt wurde
-            const clickedUnit = units.find(u => u.x === clickX && u.y === clickY);
+            const clickedUnit = gameState.units.find(u => u.x === clickX && u.y === clickY);
 
             if (clickedUnit) {
-                if (clickedUnit.player === currentPlayer) {
+                if (clickedUnit.player === currentTurn) {
                     selectedUnit = clickedUnit;
-                    statusBar.textContent = `${selectedUnit.type} ausgewählt. Wohin bewegen?`;
+                    statusBar.themes = `${selectedUnit.type} ausgewählt. Wohin bewegen?`;
                     draw();
                 }
             } else if (selectedUnit) {
-                // Wenn Einheit ausgewählt ist und auf ein leeres Feld geklickt wird -> Bewegen (max 1 Feld als Test)
                 const dx = Math.abs(selectedUnit.x - clickX);
                 const dy = Math.abs(selectedUnit.y - clickY);
 
-                if (dx + dy === 1) { // Benachbartes Feld
+                if (dx + dy === 1) {
                     selectedUnit.x = clickX;
                     selectedUnit.y = clickY;
-                    statusBar.textContent = `Einheit bewegt.`;
-                    selectedUnit = null;
                     draw();
                 } else {
                     selectedUnit = null;
-                    statusBar.textContent = `Ungültiger Zug.`;
                     draw();
                 }
             }
         });
 
         document.getElementById('endTurnBtn').addEventListener('click', () => {
-            currentPlayer = currentPlayer === 1 ? 2 : 1;
-            selectedUnit = null;
-            statusBar.textContent = `Spieler ${currentPlayer} ist am Zug.`;
+            syncGameState();
         });
 
-        // Start
-        initBoard();
-        draw();
+        // Start beim Laden der Seite
+        setupGame();
     </script>
 </body>
 </html>
