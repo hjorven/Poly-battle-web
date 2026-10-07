@@ -5,87 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Poly Battle</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
         body {
-            background-color: #fafafa;
-            color: #18181b;
+            background-color: #fafafa; color: #18181b;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            overflow: hidden;
-            touch-action: manipulation;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; overflow: hidden; touch-action: manipulation;
         }
-
-        header {
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        h1 {
-            font-size: 1.25rem;
-            font-weight: 600;
-            letter-spacing: -0.025em;
-            color: #09090b;
-            margin-bottom: 4px;
-        }
-
-        #status-bar {
-            font-size: 0.875rem;
-            color: #71717a;
-        }
-
+        header { margin-bottom: 20px; text-align: center; padding: 0 12px; }
+        h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.025em; color: #09090b; margin-bottom: 4px; }
+        #status-bar { font-size: 0.875rem; color: #71717a; min-height: 1.2em; }
         #game-container {
-            position: relative;
-            background: #ffffff;
-            border: 1px solid #e4e4e7;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-            overflow: hidden;
+            position: relative; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05); overflow: hidden;
+            max-width: 100vw;
         }
-
-        canvas {
-            display: block;
-            cursor: pointer;
-        }
-
-        .controls {
-            margin-top: 20px;
-            display: flex;
-            gap: 12px;
-        }
-
+        canvas { display: block; cursor: pointer; max-width: 100%; height: auto; }
+        .controls { margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
         button {
-            background-color: #18181b;
-            color: #ffffff;
-            border: 1px solid #18181b;
-            padding: 10px 20px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background-color 0.15s ease;
+            background-color: #18181b; color: #ffffff; border: 1px solid #18181b;
+            padding: 10px 20px; font-size: 0.875rem; font-weight: 500; border-radius: 6px;
+            cursor: pointer; transition: background-color 0.15s ease;
         }
-
-        button:hover {
-            background-color: #27272a;
-        }
-
-        button:active {
-            background-color: #3f3f46;
-        }
+        button:hover { background-color: #27272a; }
+        button:active { background-color: #3f3f46; }
+        button.secondary { background: #ffffff; color: #18181b; border-color: #d4d4d8; }
+        button.secondary:hover { background: #f4f4f5; }
+        button:disabled { opacity: 0.4; cursor: default; }
     </style>
-
-    <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -100,55 +47,104 @@
     </div>
 
     <div class="controls">
-        <button id="endTurnBtn">Zug beenden</button>
+        <button id="endTurnBtn" disabled>Zug beenden</button>
+        <button id="copyLinkBtn" class="secondary">Link kopieren</button>
+        <button id="newGameBtn" class="secondary">Neues Spiel</button>
     </div>
 
     <script>
         const SUPABASE_URL = 'https://dzcikosdbkersscdmppz.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6Y2lrb3NkYmtlcnNzY2RtcHB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNjgyODksImV4cCI6MjEwNjk0NDI4OX0.4WFDB18GkYrhyEpKXqJWRNivM2u2gcfMOYTind7UuQI';
-        
-        const { createClient } = supabase;
-        const _supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const statusBar = document.getElementById('status-bar');
+        const endTurnBtn = document.getElementById('endTurnBtn');
 
         const GRID_SIZE = 8;
         const TILE_SIZE = 50;
+        const MAX_HP = 3;
+        const NAMES = { player_1: 'Blau', player_2: 'Rot' };
 
         let gameId = null;
-        let gameState = {
-            board: [],
-            units: [
-                { x: 1, y: 1, player: 'player_1', type: 'Krieger', icon: '⚔️' },
-                { x: 6, y: 6, player: 'player_2', type: 'Krieger', icon: '🛡️' }
-            ]
-        };
+        let gameState = null;
         let currentTurn = 'player_1';
-        let selectedUnit = null;
+        let hasOpponent = false;
+        let myRole = null;          // 'player_1', 'player_2' oder null (Zuschauer)
+        let selectedId = null;
 
-        function initLocalBoard() {
+        // Jedes Gerät bekommt eine feste ID, damit es nach dem Neuladen seine Rolle behält
+        function getToken() {
+            try {
+                let t = localStorage.getItem('pb_token');
+                if (!t) { t = crypto.randomUUID(); localStorage.setItem('pb_token', t); }
+                return t;
+            } catch (e) { return crypto.randomUUID(); }
+        }
+        const token = getToken();
+
+        function newState() {
+            const board = [];
             for (let x = 0; x < GRID_SIZE; x++) {
-                gameState.board[x] = [];
-                for (let y = 0; y < GRID_SIZE; y++) {
-                    gameState.board[x][y] = { terrain: (x + y) % 5 === 0 ? 1 : 0 };
-                }
+                board[x] = [];
+                for (let y = 0; y < GRID_SIZE; y++) board[x][y] = { terrain: (x + y) % 5 === 0 ? 1 : 0 };
             }
+            const units = [];
+            [[1, 1], [2, 0], [0, 2]].forEach(([x, y], i) => {
+                units.push({ id: 'p1_' + i, x, y, player: 'player_1', type: 'Krieger', icon: '⚔️', hp: MAX_HP, acted: false });
+                units.push({ id: 'p2_' + i, x: 7 - x, y: 7 - y, player: 'player_2', type: 'Krieger', icon: '🛡️', hp: MAX_HP, acted: false });
+            });
+            return { board, units, winner: null };
+        }
+
+        const selected = () => gameState && gameState.units.find(u => u.id === selectedId);
+        const unitAt = (x, y) => gameState.units.find(u => u.x === x && u.y === y);
+        const canAct = () => !!gameState && !gameState.winner && hasOpponent && myRole && myRole === currentTurn;
+
+        function updateStatus(msg) {
+            let text = msg;
+            if (!text) {
+                if (!gameState) text = '';
+                else if (gameState.winner) {
+                    text = `${NAMES[gameState.winner]} hat gewonnen.`;
+                    if (myRole) text += myRole === gameState.winner ? ' Du hast gewonnen.' : ' Du hast verloren.';
+                }
+                else if (!myRole) text = `Zuschauer. Am Zug: ${NAMES[currentTurn]}`;
+                else if (!hasOpponent) text = 'Warte auf Mitspieler. Kopiere den Link und schicke ihn weiter.';
+                else text = (myRole === currentTurn ? 'Du bist am Zug' : 'Gegner ist am Zug') + ` (du bist ${NAMES[myRole]})`;
+            }
+            statusBar.textContent = text;
+            endTurnBtn.disabled = !canAct();
+        }
+
+        function applyMatch(m) {
+            gameState = m.game_state;
+            currentTurn = m.current_turn;
+            hasOpponent = !!m.player_2;
+            if (!selected()) selectedId = null;
+            updateStatus();
         }
 
         function draw() {
+            if (!gameState) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const sel = selected();
 
             for (let x = 0; x < GRID_SIZE; x++) {
                 for (let y = 0; y < GRID_SIZE; y++) {
-                    const px = x * TILE_SIZE;
-                    const py = y * TILE_SIZE;
-
+                    const px = x * TILE_SIZE, py = y * TILE_SIZE;
                     ctx.fillStyle = gameState.board[x][y].terrain === 1 ? '#e0f2fe' : '#f4f4f5';
                     ctx.fillRect(px, py, TILE_SIZE - 1, TILE_SIZE - 1);
 
-                    if (selectedUnit && selectedUnit.x === x && selectedUnit.y === y) {
+                    if (sel && !sel.acted && Math.abs(sel.x - x) + Math.abs(sel.y - y) === 1) {
+                        const target = unitAt(x, y);
+                        ctx.fillStyle = target ? '#dc2626' : '#a1a1aa';
+                        ctx.beginPath();
+                        ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, target ? 5 : 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    if (sel && sel.x === x && sel.y === y) {
                         ctx.strokeStyle = '#18181b';
                         ctx.lineWidth = 2;
                         ctx.strokeRect(px + 1, py + 1, TILE_SIZE - 3, TILE_SIZE - 3);
@@ -156,142 +152,157 @@
                 }
             }
 
-            gameState.units.forEach(unit => {
-                const px = unit.x * TILE_SIZE;
-                const py = unit.y * TILE_SIZE;
-
-                ctx.fillStyle = unit.player === 'player_1' ? '#2563eb' : '#dc2626';
+            gameState.units.forEach(u => {
+                const px = u.x * TILE_SIZE, py = u.y * TILE_SIZE;
+                ctx.globalAlpha = u.acted ? 0.45 : 1;
+                ctx.fillStyle = u.player === 'player_1' ? '#2563eb' : '#dc2626';
                 ctx.beginPath();
-                ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, TILE_SIZE / 3, 0, Math.PI * 2);
+                ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2 - 3, TILE_SIZE / 3, 0, Math.PI * 2);
                 ctx.fill();
-
                 ctx.font = '20px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(unit.icon, px + TILE_SIZE / 2, py + TILE_SIZE / 2);
+                ctx.fillText(u.icon, px + TILE_SIZE / 2, py + TILE_SIZE / 2 - 3);
+                ctx.fillStyle = '#18181b';
+                ctx.font = '600 11px sans-serif';
+                ctx.fillText(`${u.hp}/${MAX_HP}`, px + TILE_SIZE / 2, py + TILE_SIZE - 7);
+                ctx.globalAlpha = 1;
             });
         }
 
-        async function setupGame() {
-            initLocalBoard();
-
-            // Prüfen, ob es ein aktives Spiel gibt
-            let { data: matches, error } = await _supabase
-                .from('matches')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(1);
-
-            if (error) {
-                console.error('Fehler beim Laden:', error);
-            }
-
-            if (matches && matches.length > 0) {
-                const activeMatch = matches[0];
-                gameId = activeMatch.id;
-                gameState = activeMatch.game_state;
-                currentTurn = activeMatch.current_turn;
-                statusBar.textContent = `Spiel geladen. Am Zug: ${currentTurn}`;
-            } else {
-                // Neues Spiel anlegen, falls keins existiert
-                const { data, error: insertError } = await _supabase
-                    .from('matches')
-                    .insert([{
-                        game_state: gameState,
-                        current_turn: 'player_1',
-                        player_1: 'Aktiv'
-                    }])
-                    .select();
-
-                if (insertError) {
-                    statusBar.textContent = `Fehler beim Erstellen des Spiels.`;
-                    console.error('Supabase Insert Error:', insertError);
-                } else if (data && data.length > 0) {
-                    gameId = data[0].id;
-                    statusBar.textContent = `Neues Spiel erstellt.`;
-                }
-            }
-
-            draw();
-            listenToRealtimeChanges();
+        function fail(msg, err) {
+            statusBar.textContent = msg;
+            if (err) console.error(err);
         }
 
-        function listenToRealtimeChanges() {
+        async function createMatch() {
+            const { data, error } = await _supabase
+                .from('matches')
+                .insert([{ game_state: newState(), current_turn: 'player_1', player_1: token }])
+                .select()
+                .single();
+            if (error) return fail('Fehler beim Erstellen des Spiels.', error);
+            gameId = data.id;
+            location.hash = gameId;
+            myRole = 'player_1';
+            applyMatch(data);
+        }
+
+        async function joinMatch() {
+            const { data, error } = await _supabase.from('matches').select('*').eq('id', gameId).single();
+            if (error || !data) return fail('Spiel nicht gefunden. Prüfe den Link.', error);
+
+            if (data.player_1 === token) myRole = 'player_1';
+            else if (data.player_2 === token) myRole = 'player_2';
+            else if (!data.player_2) {
+                // Nur setzen, wenn der Platz noch frei ist (schützt vor Doppelbelegung)
+                const { data: upd } = await _supabase
+                    .from('matches').update({ player_2: token })
+                    .eq('id', gameId).is('player_2', null).select();
+                if (upd && upd.length) { myRole = 'player_2'; data.player_2 = token; }
+            }
+            applyMatch(data);
+        }
+
+        function listen() {
             if (!gameId) return;
             _supabase
-                .channel('public:matches')
+                .channel('match-' + gameId)
                 .on('postgres_changes', {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'matches',
-                    filter: `id=eq.${gameId}`
+                    event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${gameId}`
                 }, payload => {
-                    gameState = payload.new.game_state;
-                    currentTurn = payload.new.current_turn;
-                    statusBar.textContent = `Zug erhalten. Am Zug: ${currentTurn}`;
-                    selectedUnit = null;
+                    applyMatch(payload.new);
                     draw();
                 })
                 .subscribe();
         }
 
-        async function syncGameState() {
+        async function save(nextTurn) {
             if (!gameId) return;
-            const nextTurn = currentTurn === 'player_1' ? 'player_2' : 'player_1';
-
+            const turn = nextTurn || currentTurn;
             const { error } = await _supabase
                 .from('matches')
-                .update({
-                    game_state: gameState,
-                    current_turn: nextTurn,
-                    last_move_at: new Date().toISOString()
-                })
+                .update({ game_state: gameState, current_turn: turn, last_move_at: new Date().toISOString() })
                 .eq('id', gameId);
-
-            if (error) {
-                statusBar.textContent = 'Fehler beim Synchronisieren.';
-                console.error(error);
-            } else {
-                currentTurn = nextTurn;
-                statusBar.textContent = `Warte auf Gegner...`;
-                selectedUnit = null;
-                draw();
-            }
+            if (error) return fail('Fehler beim Synchronisieren.', error);
+            currentTurn = turn;
+            updateStatus();
+            draw();
         }
 
-        canvas.addEventListener('click', (e) => {
+        function checkWinner() {
+            const p1 = gameState.units.some(u => u.player === 'player_1');
+            const p2 = gameState.units.some(u => u.player === 'player_2');
+            if (!p1) gameState.winner = 'player_2';
+            else if (!p2) gameState.winner = 'player_1';
+        }
+
+        canvas.addEventListener('click', e => {
+            if (!canAct()) return;
             const rect = canvas.getBoundingClientRect();
-            const clickX = Math.floor((e.clientX - rect.left) / TILE_SIZE);
-            const clickY = Math.floor((e.clientY - rect.top) / TILE_SIZE);
+            const scale = canvas.width / rect.width;
+            const x = Math.floor(((e.clientX - rect.left) * scale) / TILE_SIZE);
+            const y = Math.floor(((e.clientY - rect.top) * scale) / TILE_SIZE);
+            if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) return;
 
-            if (clickX < 0 || clickX >= GRID_SIZE || clickY < 0 || clickY >= GRID_SIZE) return;
+            const clicked = unitAt(x, y);
+            const sel = selected();
 
-            const clickedUnit = gameState.units.find(u => u.x === clickX && u.y === clickY);
+            if (clicked && clicked.player === myRole) {
+                selectedId = clicked.id;
+                draw();
+                return;
+            }
+            if (!sel || sel.acted || Math.abs(sel.x - x) + Math.abs(sel.y - y) !== 1) {
+                selectedId = null;
+                draw();
+                return;
+            }
 
-            if (clickedUnit) {
-                if (clickedUnit.player === currentTurn) {
-                    selectedUnit = clickedUnit;
-                    statusBar.textContent = `${selectedUnit.type} ausgewählt.`;
-                    draw();
-                }
-            } else if (selectedUnit) {
-                const dx = Math.abs(selectedUnit.x - clickX);
-                const dy = Math.abs(selectedUnit.y - clickY);
+            if (clicked) {
+                clicked.hp -= 1;
+                if (clicked.hp <= 0) gameState.units = gameState.units.filter(u => u !== clicked);
+            } else {
+                sel.x = x;
+                sel.y = y;
+            }
+            sel.acted = true;
+            selectedId = null;
+            checkWinner();
+            updateStatus();
+            draw();
+            save();
+        });
 
-                if (dx + dy === 1) {
-                    selectedUnit.x = clickX;
-                    selectedUnit.y = clickY;
-                    draw();
-                } else {
-                    selectedUnit = null;
-                    draw();
-                }
+        endTurnBtn.addEventListener('click', () => {
+            if (!canAct()) return;
+            const next = currentTurn === 'player_1' ? 'player_2' : 'player_1';
+            gameState.units.forEach(u => { u.acted = false; });
+            selectedId = null;
+            save(next);
+        });
+
+        document.getElementById('copyLinkBtn').addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(location.href);
+                updateStatus('Link kopiert.');
+                setTimeout(() => updateStatus(), 1500);
+            } catch (e) {
+                prompt('Link zum Teilen:', location.href);
             }
         });
 
-        document.getElementById('endTurnBtn').addEventListener('click', () => {
-            syncGameState();
+        document.getElementById('newGameBtn').addEventListener('click', () => {
+            location.hash = '';
+            location.reload();
         });
+
+        async function setupGame() {
+            gameId = location.hash.slice(1) || null;
+            if (gameId) await joinMatch(); else await createMatch();
+            draw();
+            listen();
+        }
 
         setupGame();
     </script>
