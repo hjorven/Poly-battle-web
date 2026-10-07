@@ -130,7 +130,7 @@ export function showCityPanel(state, city, ctx) {
     <div class="panel-head">
       <div>
         <div class="panel-title">🏙 Stadt</div>
-        <div class="panel-sub" style="color:${city.owner ? '#' + COLORS[city.owner].toString(16).padStart(6, '0') : '#98a0ad'}">${ownerName}</div>
+        <div class="panel-sub" style="color:${city.owner ? '#' + COLORS[city.owner].toString(16).padStart(6, '0') : '#71717a'}">${ownerName}</div>
       </div>
       <span class="panel-sub">${city.pop >= MAX_POP ? 'max. Bev.' : ''}</span>
     </div>
