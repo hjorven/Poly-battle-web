@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Poly Battle Web</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        header {
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            color: #38bdf8;
+            margin-bottom: 5px;
+        }
+
+        #status-bar {
+            font-size: 0.95rem;
+            color: #94a3b8;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+            overflow: hidden;
+            background: #1e293b;
+            border: 2px solid #334155;
+        }
+
+        canvas {
+            display: block;
+            background-color: #0f172a;
+            cursor: pointer;
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+        }
+
+        button {
+            background-color: #0284c7;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:active {
+            transform: scale(0.96);
+            background-color: #0369a1;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Poly Battle</h1>
+        <div id="status-bar">Wähle eine Einheit aus</div>
+    </header>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+    </div>
+
+    <div class="controls">
+        <button id="endTurnBtn">Zug beenden</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusBar = document.getElementById('status-bar');
+
+        const GRID_SIZE = 8; // 8x8 Feld
+        const TILE_SIZE = 50; // Pixel pro Kachel (8 * 50 = 400px)
+
+        // Spielfeld-Datenstruktur (Terrain & Einheiten)
+        // 0 = Gras, 1 = Wasser, 2 = Berg
+        let board = [];
+        let units = [
+            { x: 1, y: 1, player: 1, type: 'Krieger', icon: '⚔️' },
+            { x: 6, y: 6, player: 2, type: 'Krieger', icon: '🛡️' }
+        ];
+
+        let selectedUnit = null;
+        let currentPlayer = 1;
+
+        function initBoard() {
+            for (let x = 0; x < GRID_SIZE; x++) {
+                board[x] = [];
+                for (let y = 0; y < GRID_SIZE; y++) {
+                    // Einfaches Muster für Terrain
+                    board[x][y] = { terrain: (x + y) % 5 === 0 ? 1 : 0 };
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Kacheln zeichnen
+            for (let x = 0; x < GRID_SIZE; x++) {
+                for (let y = 0; y < GRID_SIZE; y++) {
+                    const px = x * TILE_SIZE;
+                    const py = y * TILE_SIZE;
+
+                    // Terrain-Farben
+                    if (board[x][y].terrain === 1) {
+                        ctx.fillStyle = '#0369a1'; // Wasser
+                    } else {
+                        ctx.fillStyle = '#15803d'; // Gras
+                    }
+
+                    ctx.fillRect(px, py, TILE_SIZE - 2, TILE_SIZE - 2);
+
+                    // Markierung für ausgewählte Einheit & Reichweite
+                    if (selectedUnit && selectedUnit.x === x && selectedUnit.y === y) {
+                        ctx.strokeStyle = '#facc15';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(px + 2, py + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+                    }
+                }
+            }
+
+            // 2. Einheiten zeichnen
+            units.forEach(unit => {
+                const px = unit.x * TILE_SIZE;
+                const py = unit.y * TILE_SIZE;
+
+                // Spieler-Hintergrundkreis
+                ctx.fillStyle = unit.player === 1 ? '#3b82f6' : '#ef4444';
+                ctx.beginPath();
+                ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, TILE_SIZE / 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Icon / Emoji
+                ctx.font = '24px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(unit.icon, px + TILE_SIZE / 2, py + TILE_SIZE / 2);
+            });
+        }
+
+        // Touch / Klick Handling
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = Math.floor((e.clientX - rect.left) / TILE_SIZE);
+            const clickY = Math.floor((e.clientY - rect.top) / TILE_SIZE);
+
+            if (clickX < 0 || clickX >= GRID_SIZE || clickY < 0 || clickY >= GRID_SIZE) return;
+
+            // Prüfen, ob auf eine eigene Einheit geklickt wurde
+            const clickedUnit = units.find(u => u.x === clickX && u.y === clickY);
+
+            if (clickedUnit) {
+                if (clickedUnit.player === currentPlayer) {
+                    selectedUnit = clickedUnit;
+                    statusBar.textContent = `${selectedUnit.type} ausgewählt. Wohin bewegen?`;
+                    draw();
+                }
+            } else if (selectedUnit) {
+                // Wenn Einheit ausgewählt ist und auf ein leeres Feld geklickt wird -> Bewegen (max 1 Feld als Test)
+                const dx = Math.abs(selectedUnit.x - clickX);
+                const dy = Math.abs(selectedUnit.y - clickY);
+
+                if (dx + dy === 1) { // Benachbartes Feld
+                    selectedUnit.x = clickX;
+                    selectedUnit.y = clickY;
+                    statusBar.textContent = `Einheit bewegt.`;
+                    selectedUnit = null;
+                    draw();
+                } else {
+                    selectedUnit = null;
+                    statusBar.textContent = `Ungültiger Zug.`;
+                    draw();
+                }
+            }
+        });
+
+        document.getElementById('endTurnBtn').addEventListener('click', () => {
+            currentPlayer = currentPlayer === 1 ? 2 : 1;
+            selectedUnit = null;
+            statusBar.textContent = `Spieler ${currentPlayer} ist am Zug.`;
+        });
+
+        // Start
+        initBoard();
+        draw();
+    </script>
+</body>
+</html>
