@@ -73,11 +73,11 @@
             font-weight: 500;
             border-radius: 6px;
             cursor: pointer;
-            transition: background-color 0.15s ease, border-color 0.15s ease;
+            transition: background-color 0.15s ease;
         }
 
         button:hover {
-            background-color:። 27272a;
+            background-color: #27272a;
         }
 
         button:active {
@@ -145,7 +145,6 @@
                     const px = x * TILE_SIZE;
                     const py = y * TILE_SIZE;
 
-                    // Dezentere, klare Farben im reduzierten Stil
                     ctx.fillStyle = gameState.board[x][y].terrain === 1 ? '#e0f2fe' : '#f4f4f5';
                     ctx.fillRect(px, py, TILE_SIZE - 1, TILE_SIZE - 1);
 
@@ -176,11 +175,16 @@
         async function setupGame() {
             initLocalBoard();
 
+            // Prüfen, ob es ein aktives Spiel gibt
             let { data: matches, error } = await _supabase
                 .from('matches')
                 .select('*')
                 .order('created_at', { ascending: false })
                 .limit(1);
+
+            if (error) {
+                console.error('Fehler beim Laden:', error);
+            }
 
             if (matches && matches.length > 0) {
                 const activeMatch = matches[0];
@@ -189,6 +193,7 @@
                 currentTurn = activeMatch.current_turn;
                 statusBar.textContent = `Spiel geladen. Am Zug: ${currentTurn}`;
             } else {
+                // Neues Spiel anlegen, falls keins existiert
                 const { data, error: insertError } = await _supabase
                     .from('matches')
                     .insert([{
@@ -198,12 +203,12 @@
                     }])
                     .select();
 
-                if (!insertError && data) {
-                    gameId = data[0].id;
-                    statusBar.textContent = `Neues Spiel erstellt.`;
-                } else {
+                if (insertError) {
                     statusBar.textContent = `Fehler beim Erstellen des Spiels.`;
                     console.error('Supabase Insert Error:', insertError);
+                } else if (data && data.length > 0) {
+                    gameId = data[0].id;
+                    statusBar.textContent = `Neues Spiel erstellt.`;
                 }
             }
 
@@ -231,6 +236,7 @@
         }
 
         async function syncGameState() {
+            if (!gameId) return;
             const nextTurn = currentTurn === 'player_1' ? 'player_2' : 'player_1';
 
             const { error } = await _supabase
