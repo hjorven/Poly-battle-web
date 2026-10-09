@@ -14,7 +14,7 @@ export function initUI(h) {
 }
 
 export function setStatus(text) {
-  const statusEl = \$('status');
+  const statusEl = $('status');
   if (!statusEl) return;
   statusEl.textContent = text;
   statusEl.className = 'text-sm font-semibold text-zinc-900 bg-white px-4 py-2 rounded-lg border border-zinc-200 shadow-sm';
@@ -163,7 +163,7 @@ export function showCityPanel(state, city, ctx) {
     ${actions}
   `);
 
-  \$('panel')?.querySelectorAll('[data-train]').forEach(btn => {
+  $('panel')?.querySelectorAll('[data-train]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onTrain(city, btn.dataset.train));
   });
 }
@@ -226,7 +226,7 @@ export function closeTech() {
 }
 
 export function isTechOpen() {
-  return !\$('tech-overlay')?.classList.contains('hidden');
+  return !$('tech-overlay')?.classList.contains('hidden');
 }
 
 export function showMenu() {
@@ -251,7 +251,7 @@ export function showWinner(state, ctx) {
     textEl.textContent = `Sieg nach Runde ${state.round}`;
   }
   
-  \$('winner-overlay')?.classList.remove('hidden');
+  $('winner-overlay')?.classList.remove('hidden');
 }
 
 export function hideWinner() {
