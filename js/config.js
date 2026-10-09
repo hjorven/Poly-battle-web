@@ -6,60 +6,16 @@ export const MAX_POP = 5;
 export const START_STARS = 5;
 export const BASE_CITY_POP = 1;
 
-export const TRIBES = {
-  imperius: { name: 'Imperius', startTech: 'organisation', color: 0x2563eb, biome: 'grassland', description: 'Ausgewogen mit schnellem Städtewachstum.' },
-  bardur: { name: 'Bardur', startTech: 'jagd', color: 0x475569, biome: 'snow', description: 'Startet in Nadelwäldern mit hoher Jagdausbeute.' },
-  oumaji: { name: 'Oumaji', startTech: 'reitkunst', color: 0xd97706, biome: 'desert', description: 'Schnelle Reiterei in weiten Wüsten.' },
-  xin_xi: { name: 'Xin-Xi', startTech: 'klettern', color: 0xdc2626, biome: 'mountain', description: 'Bergvolk mit hoher Sichtweite und Erzvorkommen.' }
-};
-
-export const TERRAIN = {
-  plains: { name: 'Ebene', color: 0x74c043, height: 0.5, walkable: true, move: 1, def: 0 },
-  desert: { name: 'Wüste', color: 0xeab308, height: 0.5, walkable: true, move: 1, def: 0 },
-  snow: { name: 'Schnee', color: 0xe2e8f0, height: 0.5, walkable: true, move: 1, def: 0 },
-  forest: { name: 'Wald', color: 0x4c9a2a, height: 0.5, walkable: true, move: 2, def: 1 },
-  mountain: { name: 'Berg', color: 0x9b9b94, height: 1.15, walkable: false, move: 99, def: 2 },
-  water: { name: 'Flachwasser', color: 0x3fa7e0, height: 0.3, walkable: false, move: 99, def: 0 },
-  ocean: { name: 'Tiefsee', color: 0x1d4ed8, height: 0.2, walkable: false, move: 99, def: 0 }
-};
-
-export const UNITS = {
-  warrior: { name: 'Krieger', cost: 2, atk: 2, def: 2, move: 2, range: 1, maxHp: 10, tech: null, skill: null },
-  rider: { name: 'Reiter', cost: 3, atk: 2, def: 1, move: 3, range: 1, maxHp: 10, tech: 'reitkunst', skill: 'escape' },
-  archer: { name: 'Schütze', cost: 3, atk: 2, def: 1, move: 2, range: 2, maxHp: 10, tech: 'jagd', skill: null },
-  defender: { name: 'Verteidiger', cost: 3, atk: 1, def: 3, move: 1, range: 1, maxHp: 15, tech: 'schildmacher', skill: 'fortify' },
-  swordsman: { name: 'Schwertkämpfer', cost: 5, atk: 3, def: 3, move: 2, range: 1, maxHp: 15, tech: 'schmiedekunst', skill: null },
-  catapult: { name: 'Katapult', cost: 8, atk: 4, def: 1, move: 1, range: 3, maxHp: 10, tech: 'mathematik', skill: null },
-  mindbender: { name: 'Heiler', cost: 5, atk: 0, def: 1, move: 1, range: 1, maxHp: 10, tech: 'philosophie', skill: 'heal' }Hier ist die Auswertung deiner Fragen und die direkte Erweiterung des Codes:
-
-* **Stämme & Biome:** War bisher nur als vereinfachtes Farbsystem angelegt. **Jetzt hinzugefügt:** Es gibt nun wählbare Stämme (Imperius, Bardur, Oumaji, Kickoo, Xin-Xi) mit eigenen Start-Technologien, Emojis und Biomen.
-* **Berge & Terrain:** **Ja**, Berge, Wälder, Wasser und Ebenen wurden bereits prozedural generiert und in 3D gerendert.
-* **Erweiterter Techtree:** War bisher sehr klein. **Jetzt erweitert:** Der Forschungsbaum enthält nun 12 Technologien über 3 Tiers (inkl. Fischerei, Segeln, Diplomatie, Philosophie, Bogenschießen, Schmiedekunst etc.).
-* **Emojis:** Werden nun konsistent in Stämmen, Technologien, Einheiten und Benutzeroberflächen genutzt.
-
----
-
-### 1. `config.js` (Stämme, erweiterter Techtree & Einheiten)
-
-```javascript
-export const MAP_W = 14;
-export const MAP_H = 11;
-export const HEX_SIZE = 1;
-export const MAX_HP = 10;
-export const MAX_POP = 5;
-export const START_STARS = 5;
-export const BASE_CITY_POP = 1;
-
 export const NAMES = { player_1: 'Spieler 1', player_2: 'Spieler 2' };
 export const COLORS = { player_1: 0x2563eb, player_2: 0xdc2626, neutral: 0xa1a1aa };
 
 // Stämme mit Emojis, Start-Techs und Biomen
 export const TRIBES = {
-  imperius: { id: 'imperius', name: 'Imperius', emoji: '🦅', tech: 'organisation', biome: 'plains', color: 0x2563eb },
-  bardur: { id: 'bardur', name: 'Bardur', emoji: '🐻', tech: 'jagd', biome: 'forest', color: 0x475569 },
-  oumaji: { id: 'oumaji', name: 'Oumaji', emoji: '🏜️', tech: 'reitkunst', biome: 'plains', color: 0xd97706 },
-  kickoo: { id: 'kickoo', name: 'Kickoo', emoji: '🏝️', tech: 'fischerei', biome: 'water', color: 0x0d9488 },
-  xin_xi: { id: 'xin_xi', name: 'Xin-Xi', emoji: '⛰️', tech: 'klettern', biome: 'mountain', color: 0xdc2626 }
+  imperius: { id: 'imperius', name: 'Imperius', emoji: '🦅', tech: 'organisation', biome: 'plains', color: 0x2563eb, desc: 'Ausgewogen mit schnellem Städtewachstum.' },
+  bardur: { id: 'bardur', name: 'Bardur', emoji: '🐻', tech: 'jagd', biome: 'forest', color: 0x475569, desc: 'Startet in dichten Nadelwäldern.' },
+  oumaji: { id: 'oumaji', name: 'Oumaji', emoji: '🏜️', tech: 'reitkunst', biome: 'plains', color: 0xd97706, desc: 'Schnelle Reiterei in weiten Ebenen.' },
+  kickoo: { id: 'kickoo', name: 'Kickoo', emoji: '🏝️', tech: 'fischerei', biome: 'water', color: 0x0d9488, desc: 'Seefahrervolk mit reicher Küste.' },
+  xin_xi: { id: 'xin_xi', name: 'Xin-Xi', emoji: '⛰️', tech: 'klettern', biome: 'mountain', color: 0xdc2626, desc: 'Bergvolk mit hoher Sichtweite.' }
 };
 
 export const TERRAIN = {
