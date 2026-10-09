@@ -9,10 +9,6 @@ let tileMeshes = [];
 const tiles = new Map();
 const unitNodes = new Map();
 const cityNodes = new Map();
-let highlightGroup;
-let selectedMesh = null;
-let tweens = [];
-let effects = [];
 let onPick = null;
 let pointerDownAt = null;
 let initialized = false;
@@ -44,15 +40,12 @@ export function initRender(canvas, opts = {}) {
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, 300);
   raycaster = new THREE.Raycaster();
 
-  const hemi = new THREE.HemisphereLight(0xffffff, 0xd4d4d8, 0.9);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0xd4d4d8, 0.95);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+  const sun = new THREE.DirectionalLight(0xffffff, 1.1);
   sun.position.set(24, 34, 14);
   sun.castShadow = true;
   scene.add(sun);
-
-  highlightGroup = new THREE.Group();
-  scene.add(highlightGroup);
 
   const cx = 10, cz = 10;
   camera.position.set(cx - 2, 19, cz + 17);
@@ -75,10 +68,8 @@ export function initRender(canvas, opts = {}) {
   resize();
   window.addEventListener('resize', resize);
 
-  function loop(now) {
+  function loop() {
     requestAnimationFrame(loop);
-    stepTweens(now);
-    stepEffects(now);
     controls.update();
     renderer.render(scene, camera);
   }
@@ -109,6 +100,46 @@ function pick(clientX, clientY) {
   return hk(h.q, h.r);
 }
 
+// --- 3D DEKORATIONEN FÜR GELÄNDE ---
+
+function addForestTrees(parent, topY) {
+  const trunkGeo = geo('tree_trunk', () => new THREE.CylinderGeometry(0.04, 0.05, 0.22, 5));
+  const foliageGeo = geo('tree_foliage', () => new THREE.ConeGeometry(0.22, 0.5, 5));
+  const trunkMat = mat(0x5c4033);
+  const foliageMat = mat(0x2e7d32);
+
+  const offsets = [
+    { x: -0.22, z: -0.12 },
+    { x: 0.22, z: -0.08 },
+    { x: 0, z: 0.22 }
+  ];
+
+  offsets.forEach(off => {
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.set(off.x, topY + 0.11, off.z);
+    parent.add(trunk);
+
+    const foliage = new THREE.Mesh(foliageGeo, foliageMat);
+    foliage.position.set(off.x, topY + 0.4, off.z);
+    parent.add(foliage);
+  });
+}
+
+function addMountainPeaks(parent, topY) {
+  const peakGeo = geo('mountain_peak', () => new THREE.ConeGeometry(0.55, 0.85, 6));
+  const snowGeo = geo('mountain_snow', () => new THREE.ConeGeometry(0.28, 0.35, 6));
+  const peakMat = mat(0x6b7280);
+  const snowMat = mat(0xf9fafb);
+
+  const peak = new THREE.Mesh(peakGeo, peakMat);
+  peak.position.set(0, topY + 0.42, 0);
+  parent.add(peak);
+
+  const snow = new THREE.Mesh(snowGeo, snowMat);
+  snow.position.set(0, topY + 0.68, 0);
+  parent.add(snow);
+}
+
 function buildTiles(state) {
   for (let r = 0; r < MAP_H; r++) {
     for (let q = 0; q < MAP_W; q++) {
@@ -119,6 +150,10 @@ function buildTiles(state) {
       const p = toWorld(q, r);
       mesh.position.set(p.x, def.height / 2, p.z);
       mesh.userData.hex = { q, r };
+
+      if (t === 'forest') addForestTrees(mesh, def.height / 2);
+      else if (t === 'mountain') addMountainPeaks(mesh, def.height / 2);
+
       scene.add(mesh);
       tileMeshes.push(mesh);
       tiles.set(hk(q, r), { mesh, top: def.height, terrain: t });
@@ -131,43 +166,135 @@ function hexTop(key) {
   return t ? t.top : 0.5;
 }
 
+// --- 3D GEBÄUDE FÜR STÄDTE ---
+
+function buildCityModel(owner) {
+  const g = new THREE.Group();
+  const teamColor = COLORS[owner] || COLORS.neutral;
+  const wallMat = mat(0xe5e7eb);
+  const roofMat = mat(teamColor);
+  const baseMat = mat(0x9ca3af);
+
+  // Fundament
+  const base = new THREE.Mesh(geo('cityBase', () => new THREE.CylinderGeometry(0.55, 0.6, 0.12, 6)), baseMat);
+  base.position.y = 0.06;
+  g.add(base);
+
+  // Hauptturm
+  const tower = new THREE.Mesh(geo('cityTower', () => new THREE.BoxGeometry(0.32, 0.45, 0.32)), wallMat);
+  tower.position.set(0, 0.32, 0);
+  g.add(tower);
+
+  const roof = new THREE.Mesh(geo('cityRoof', () => new THREE.ConeGeometry(0.28, 0.32, 4)), roofMat);
+  roof.position.set(0, 0.7, 0);
+  roof.rotation.y = Math.PI / 4;
+  g.add(roof);
+
+  // Kleine Nebenhäuser
+  const houseGeo = geo('house', () => new THREE.BoxGeometry(0.18, 0.2, 0.18));
+  const houseRoofGeo = geo('houseRoof', () => new THREE.ConeGeometry(0.15, 0.18, 4));
+
+  const housePositions = [
+    { x: -0.25, z: 0.15 },
+    { x: 0.25, z: 0.15 },
+    { x: 0, z: -0.28 }
+  ];
+
+  housePositions.forEach(pos => {
+    const h = new THREE.Mesh(houseGeo, wallMat);
+    h.position.set(pos.x, 0.2, pos.z);
+    g.add(h);
+
+    const hr = new THREE.Mesh(houseRoofGeo, roofMat);
+    hr.position.set(pos.x, 0.38, pos.z);
+    hr.rotation.y = Math.PI / 4;
+    g.add(hr);
+  });
+
+  return g;
+}
+
+// --- 3D FIGUR-MODELLE FÜR EINHEITEN ---
+
 function unitBody(type, owner) {
   const g = new THREE.Group();
   const team = COLORS[owner] || 0x71717a;
-  const teamMats = [];
+  const teamMat = mat(team);
+  const skinMat = mat(0xffdbac);
+  const woodMat = mat(0x8b5a2b);
+  const metalMat = mat(0xd1d5db);
+
   const add = (mesh, x, y, z) => {
     mesh.position.set(x, y, z);
     g.add(mesh);
     return mesh;
   };
-  const teamMat = () => {
-    const m = mat(team);
-    teamMats.push(m);
-    return m;
+
+  // Basiskörper (Torso + Kopf) für Infanterie
+  const addHumanoid = (yOffset = 0) => {
+    const body = new THREE.Mesh(geo('u_body', () => new THREE.CylinderGeometry(0.12, 0.1, 0.28, 6)), teamMat);
+    const head = new THREE.Mesh(geo('u_head', () => new THREE.SphereGeometry(0.09, 8, 8)), skinMat);
+    add(body, 0, yOffset + 0.2, 0);
+    add(head, 0, yOffset + 0.38, 0);
   };
 
   if (type === 'warrior') {
-    add(new THREE.Mesh(geo('oct22', () => new THREE.OctahedronGeometry(0.22)), teamMat()), 0, 0.26, 0);
+    addHumanoid();
+    // Schwert & Schild
+    add(new THREE.Mesh(geo('u_sword', () => new THREE.BoxGeometry(0.04, 0.3, 0.04)), metalMat), 0.16, 0.26, 0.05);
+    add(new THREE.Mesh(geo('u_shield', () => new THREE.BoxGeometry(0.05, 0.22, 0.18)), teamMat), -0.16, 0.24, 0);
+
   } else if (type === 'rider') {
-    add(new THREE.Mesh(geo('horse', () => new THREE.BoxGeometry(0.46, 0.19, 0.2)), mat(0x7a5230)), 0, 0.17, 0);
-    add(new THREE.Mesh(geo('oct13', () => new THREE.OctahedronGeometry(0.13)), teamMat()), 0, 0.4, 0);
+    // Pferd
+    add(new THREE.Mesh(geo('u_horse_body', () => new THREE.BoxGeometry(0.24, 0.2, 0.48)), woodMat), 0, 0.2, 0);
+    add(new THREE.Mesh(geo('u_horse_head', () => new THREE.BoxGeometry(0.12, 0.18, 0.22)), woodMat), 0, 0.35, 0.2);
+    // Reiter
+    addHumanoid(0.18);
+    // Lanze
+    add(new THREE.Mesh(geo('u_spear', () => new THREE.CylinderGeometry(0.02, 0.02, 0.55, 5)), woodMat), 0.18, 0.45, 0.1);
+
   } else if (type === 'archer') {
-    add(new THREE.Mesh(geo('cone19', () => new THREE.ConeGeometry(0.19, 0.44, 6)), teamMat()), 0, 0.22, 0);
+    addHumanoid();
+    // Bogen
+    add(new THREE.Mesh(geo('u_bow', () => new THREE.TorusGeometry(0.12, 0.02, 4, 8, Math.PI)), woodMat), 0.15, 0.28, 0);
+
   } else if (type === 'defender') {
-    add(new THREE.Mesh(geo('cylb', () => new THREE.CylinderGeometry(0.15, 0.19, 0.4, 6)), mat(0x7d838c)), 0, 0.2, 0);
-    add(new THREE.Mesh(geo('shield', () => new THREE.BoxGeometry(0.09, 0.36, 0.3)), teamMat()), 0.17, 0.26, 0);
+    addHumanoid();
+    // Großer Schild & Helm
+    add(new THREE.Mesh(geo('u_big_shield', () => new THREE.BoxGeometry(0.06, 0.35, 0.28)), metalMat), 0, 0.24, 0.18);
+    add(new THREE.Mesh(geo('u_helmet', () => new THREE.ConeGeometry(0.11, 0.12, 6)), metalMat), 0, 0.46, 0);
+
   } else if (type === 'swordsman') {
-    add(new THREE.Mesh(geo('oct25', () => new THREE.OctahedronGeometry(0.25)), teamMat()), 0, 0.3, 0);
+    addHumanoid();
+    // Rüstung & großes Schwert
+    add(new THREE.Mesh(geo('u_armor', () => new THREE.CylinderGeometry(0.13, 0.12, 0.2, 6)), metalMat), 0, 0.2, 0);
+    add(new THREE.Mesh(geo('u_big_sword', () => new THREE.BoxGeometry(0.05, 0.42, 0.06)), metalMat), 0.18, 0.32, 0);
+
   } else if (type === 'catapult') {
-    add(new THREE.Mesh(geo('catBase', () => new THREE.BoxGeometry(0.42, 0.13, 0.3)), mat(0x8b5a2b)), 0, 0.1, 0);
+    // Katapult-Gestell
+    add(new THREE.Mesh(geo('u_cat_frame', () => new THREE.BoxGeometry(0.38, 0.12, 0.48)), woodMat), 0, 0.12, 0);
+    // Räder
+    const wheelGeo = geo('u_wheel', () => new THREE.CylinderGeometry(0.08, 0.08, 0.04, 8));
+    const w1 = add(new THREE.Mesh(wheelGeo, metalMat), -0.2, 0.08, 0.18);
+    const w2 = add(new THREE.Mesh(wheelGeo, metalMat), 0.2, 0.08, 0.18);
+    w1.rotation.z = Math.PI / 2;
+    w2.rotation.z = Math.PI / 2;
+    // Wurfarm
+    const arm = add(new THREE.Mesh(geo('u_cat_arm', () => new THREE.BoxGeometry(0.06, 0.38, 0.06)), woodMat), 0, 0.28, -0.05);
+    arm.rotation.x = -Math.PI / 6;
+
   } else if (type === 'mindbender') {
-    add(new THREE.Mesh(geo('staff', () => new THREE.CylinderGeometry(0.03, 0.03, 0.6, 6)), mat(0xd4d4d8)), 0.15, 0.3, 0);
-    add(new THREE.Mesh(geo('robe', () => new THREE.ConeGeometry(0.22, 0.5, 6)), teamMat()), 0, 0.25, 0);
+    // Robe
+    add(new THREE.Mesh(geo('u_robe', () => new THREE.ConeGeometry(0.18, 0.4, 6)), teamMat), 0, 0.2, 0);
+    add(new THREE.Mesh(geo('u_head', () => new THREE.SphereGeometry(0.09, 8, 8)), skinMat), 0, 0.42, 0);
+    // Zauberstab mit leuchtendem Kristall
+    add(new THREE.Mesh(geo('u_staff', () => new THREE.CylinderGeometry(0.02, 0.02, 0.6, 6)), woodMat), 0.15, 0.32, 0.1);
+    add(new THREE.Mesh(geo('u_orb', () => new THREE.OctahedronGeometry(0.06)), mat(0x60a5fa)), 0.15, 0.64, 0.1);
+
   } else {
-    add(new THREE.Mesh(geo('default', () => new THREE.BoxGeometry(0.2, 0.2, 0.2)), teamMat()), 0, 0.2, 0);
+    addHumanoid();
   }
 
-  g.userData.teamMats = teamMats;
   return g;
 }
 
@@ -175,17 +302,20 @@ export function syncBoard(state) {
   if (!initialized) return Promise.resolve();
   if (!tiles.size) buildTiles(state);
 
+  // Städte aktualisieren
   for (const c of state.cities) {
     const key = hk(c.q, c.r);
-    if (!cityNodes.has(key)) {
-      const g = new THREE.Mesh(geo('cityMesh', () => new THREE.CylinderGeometry(0.5, 0.55, 0.2, 6)), mat(c.owner ? COLORS[c.owner] : 0xa1a1aa));
+    let node = cityNodes.get(key);
+    if (!node) {
+      node = buildCityModel(c.owner);
       const p = toWorld(c.q, c.r);
-      g.position.set(p.x, hexTop(key), p.z);
-      scene.add(g);
-      cityNodes.set(key, g);
+      node.position.set(p.x, hexTop(key), p.z);
+      scene.add(node);
+      cityNodes.set(key, node);
     }
   }
 
+  // Einheiten aktualisieren
   for (const u of state.units) {
     let node = unitNodes.get(u.id);
     if (!node) {
@@ -201,22 +331,6 @@ export function syncBoard(state) {
     }
   }
   return Promise.resolve();
-}
-
-function stepTweens(now) {
-  tweens = tweens.filter(tw => {
-    const raw = Math.min((now - tw.start) / tw.dur, 1);
-    tw.update(raw);
-    return raw < 1;
-  });
-}
-
-function stepEffects(now) {
-  effects = effects.filter(e => {
-    const raw = Math.min((now - e.start) / e.dur, 1);
-    e.update(raw);
-    return raw < 1;
-  });
 }
 
 export function playCombat() { return Promise.resolve(); }
