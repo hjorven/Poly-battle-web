@@ -1,4 +1,4 @@
-import { UNITS, TECHS, TECH_TIERS, TRIBES, NAMES, MAX_POP, MAX_HP, COLORS } from './config.js';
+import { UNITS, TECHS, TECH_TIERS, TRIBES, NAMES, MAX_POP, MAX_HP } from './config.js';
 
 const \$ = id => document.getElementById(id);
 let handlers = {};
@@ -38,10 +38,6 @@ export function toast(text, cls = '') {
   setTimeout(() => el.remove(), 2700);
 }
 
-export function unitEmoji(type) {
-  return UNITS[type]?.emoji || '❔';
-}
-
 export function updateStrip(state, ctx) {
   const strip = \$('player-strip');
   if (!strip) return;
@@ -56,12 +52,14 @@ export function updateStrip(state, ctx) {
 
   strip.innerHTML = `
     <div class="flex items-center gap-3 px-3 py-1.5 rounded-lg border border-zinc-200 bg-white font-semibold ${active1 ? 'ring-2 ring-zinc-900 shadow-sm' : 'opacity-70'}">
-      <span class="text-base">${p1Tribe.emoji} ${p1Tribe.name}</span>
-      <span class="text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 text-xs font-bold">⭐ ${state.stars.player_1}</span>
+      <span class="text-xs uppercase font-bold tracking-wider text-zinc-400">[${p1Tribe.code}]</span>
+      <span class="text-sm font-bold text-zinc-900">${p1Tribe.name}</span>
+      <span class="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-xs font-bold">Sterne: ${state.stars.player_1}</span>
     </div>
     <div class="flex items-center gap-3 px-3 py-1.5 rounded-lg border border-zinc-200 bg-white font-semibold ${active2 ? 'ring-2 ring-zinc-900 shadow-sm' : 'opacity-70'}">
-      <span class="text-base">${p2Tribe.emoji} ${p2Tribe.name}</span>
-      <span class="text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 text-xs font-bold">⭐ ${state.stars.player_2}</span>
+      <span class="text-xs uppercase font-bold tracking-wider text-zinc-400">[${p2Tribe.code}]</span>
+      <span class="text-sm font-bold text-zinc-900">${p2Tribe.name}</span>
+      <span class="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-xs font-bold">Sterne: ${state.stars.player_2}</span>
     </div>
   `;
 
@@ -105,19 +103,22 @@ export function showUnitPanel(state, unit, ctx) {
   panel(`
     <div class="flex justify-between items-start mb-4">
       <div>
-        <h2 class="text-xl font-bold text-zinc-900 flex items-center gap-2">${unitEmoji(unit.type)} ${def.name}</h2>
-        <div class="text-sm font-medium mt-0.5 text-zinc-500">${owner}${mine ? ' (deine Einheit)' : ''}</div>
+        <h2 class="text-lg font-bold text-zinc-900 flex items-center gap-2">
+          <span class="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-200 text-zinc-600">${def.code}</span>
+          ${def.name}
+        </h2>
+        <div class="text-xs font-medium mt-1 text-zinc-500">${owner}${mine ? ' (deine Einheit)' : ''}</div>
       </div>
-      <span class="text-xs font-bold px-2 py-1 rounded-md border ${unit.acted ? 'bg-zinc-50 text-zinc-400 border-zinc-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}">${unit.acted ? '✓ erledigt' : 'bereit'}</span>
+      <span class="text-xs font-bold px-2 py-1 rounded border ${unit.acted ? 'bg-zinc-50 text-zinc-400 border-zinc-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}">${unit.acted ? 'Inaktiv' : 'Bereit'}</span>
     </div>
     <div class="w-full bg-zinc-100 rounded-full h-2 mb-4 overflow-hidden border border-zinc-200">
       <div class="h-full rounded-full transition-all duration-300 ${unit.hp <= 3 ? 'bg-red-500' : 'bg-zinc-800'}" style="width:${hpPct}%"></div>
     </div>
-    <div class="grid grid-cols-2 gap-2 text-sm mb-4">
+    <div class="grid grid-cols-2 gap-2 text-xs mb-4">
       <div class="flex justify-between p-2 rounded bg-zinc-50 border border-zinc-200"><span class="text-zinc-500">Leben</span><strong class="text-zinc-900">${unit.hp}/${unit.maxHp || MAX_HP}</strong></div>
       <div class="flex justify-between p-2 rounded bg-zinc-50 border border-zinc-200"><span class="text-zinc-500">Angriff</span><strong class="text-zinc-900">${def.atk}</strong></div>
-      <div class="flex justify-between p-2 rounded bg-zinc-50 border border-zinc-200"><span class="text-zinc-500">Vert.</span><strong class="text-zinc-900">${def.def}</strong></div>
-      <div class="flex justify-between p-2 rounded bg-zinc-50 border border-zinc-200"><span class="text-zinc-500">Schritt</span><strong class="text-zinc-900">${unit.mp}/${def.move}</strong></div>
+      <div class="flex justify-between p-2 rounded bg-zinc-50 border border-zinc-200"><span class="text-zinc-500">Verteidigung</span><strong class="text-zinc-900">${def.def}</strong></div>
+      <div class="flex justify-between p-2 rounded bg-zinc-50 border border-zinc-200"><span class="text-zinc-500">Bewegung</span><strong class="text-zinc-900">${unit.mp}/${def.move}</strong></div>
     </div>
     <div class="p-2.5 text-xs text-zinc-600 bg-zinc-50 rounded border border-zinc-200">${hint}</div>
   `);
@@ -138,10 +139,10 @@ export function showCityPanel(state, city, ctx) {
       const disabled = !ctx.myTurn || city.trained || state.stars[ctx.actAs] < u.cost;
       actions += `<button class="w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${disabled ? 'border-zinc-200 bg-zinc-50 opacity-50 cursor-not-allowed' : 'border-zinc-300 bg-white hover:border-zinc-400'}" data-train="${t}" ${disabled ? 'disabled' : ''}>
         <div class="flex items-center gap-2">
-          <span class="text-lg">${u.emoji}</span>
-          <span class="font-bold text-zinc-900 text-sm">${u.name}</span>
+          <span class="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-200 text-zinc-600">${u.code}</span>
+          <span class="font-bold text-zinc-900 text-xs">${u.name}</span>
         </div>
-        <span class="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 text-xs">⭐ ${u.cost}</span>
+        <span class="font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-xs">${u.cost} Sterne</span>
       </button>`;
     }
     actions += `</div></div>`;
@@ -150,14 +151,14 @@ export function showCityPanel(state, city, ctx) {
   panel(`
     <div class="flex justify-between items-start mb-4">
       <div>
-        <h2 class="text-xl font-bold text-zinc-900">🏙 Stadt</h2>
-        <div class="text-sm font-medium mt-0.5 text-zinc-500">${ownerName}</div>
+        <h2 class="text-lg font-bold text-zinc-900">Stadt</h2>
+        <div class="text-xs font-medium mt-0.5 text-zinc-500">${ownerName}</div>
       </div>
       <span class="text-xs font-bold px-2 py-1 rounded bg-zinc-100 border border-zinc-200 text-zinc-600">Bev. ${city.pop}/${MAX_POP}</span>
     </div>
-    <div class="grid grid-cols-2 gap-2 text-center text-sm mb-2">
-      <div class="p-2 rounded bg-zinc-50 border border-zinc-200"><div class="text-zinc-400 text-[10px] font-bold uppercase">Einkommen</div><strong class="text-zinc-900 block text-sm">+${income} Sterne</strong></div>
-      <div class="p-2 rounded bg-zinc-50 border border-zinc-200"><div class="text-zinc-400 text-[10px] font-bold uppercase">Status</div><strong class="${city.trained ? 'text-zinc-400' : 'text-emerald-700'} block text-sm">${city.trained ? 'Ausgebildet' : 'Bereit'}</strong></div>
+    <div class="grid grid-cols-2 gap-2 text-center text-xs mb-2">
+      <div class="p-2 rounded bg-zinc-50 border border-zinc-200"><div class="text-zinc-400 text-[10px] font-bold uppercase">Einkommen</div><strong class="text-zinc-900 block text-xs">+${income} Sterne</strong></div>
+      <div class="p-2 rounded bg-zinc-50 border border-zinc-200"><div class="text-zinc-400 text-[10px] font-bold uppercase">Status</div><strong class="${city.trained ? 'text-zinc-400' : 'text-emerald-700'} block text-xs">${city.trained ? 'Ausgebildet' : 'Bereit'}</strong></div>
     </div>
     ${actions}
   `);
@@ -176,8 +177,8 @@ export function openTech(state, ctx) {
   const stars = state.stars[ctx.actAs];
   const topBar = \$('tech-stars');
   if (topBar) {
-    topBar.className = 'text-base font-bold text-amber-700 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-lg inline-flex mb-4 self-start';
-    topBar.textContent = '⭐ ' + stars + ' verfügbar';
+    topBar.className = 'text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg inline-flex mb-4 self-start';
+    topBar.textContent = 'Verfügbar: ' + stars + ' Sterne';
   }
   
   const list = \$('tech-list');
@@ -187,7 +188,7 @@ export function openTech(state, ctx) {
   TECH_TIERS.forEach((tier, i) => {
     const label = document.createElement('h3');
     label.className = 'text-xs font-bold tracking-widest text-zinc-400 uppercase mt-6 mb-3 border-b border-zinc-200 pb-1';
-    label.textContent = 'Tier ' + (i + 1);
+    label.textContent = 'Stufe ' + (i + 1);
     list.appendChild(label);
     
     for (const id of tier) {
@@ -203,13 +204,12 @@ export function openTech(state, ctx) {
       
       btn.innerHTML = `
         <div class="flex items-center gap-3">
-          <span class="text-2xl">${t.emoji}</span>
           <div class="flex flex-col">
             <span class="font-bold text-zinc-900 text-sm ${done ? 'line-through text-zinc-400' : ''}">${t.name}</span>
             <span class="text-xs text-zinc-500">${t.desc}${locked ? ' · <span class="text-zinc-400">benötigt ' + TECHS[t.req].name + '</span>' : ''}</span>
           </div>
         </div>
-        <span class="font-bold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded text-xs shrink-0 ml-3">⭐ ${t.baseCost}</span>
+        <span class="font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded text-xs shrink-0 ml-3">${t.baseCost} Sterne</span>
       `;
       
       if (!done && !locked && ctx.myTurn && !poor) {
@@ -241,13 +241,13 @@ export function showWinner(state, ctx) {
   const winner = state.winner;
   const titleEl = \$('winner-title');
   if (titleEl) {
-    titleEl.className = 'text-2xl font-bold text-zinc-900 mb-2';
+    titleEl.className = 'text-xl font-bold text-zinc-900 mb-2';
     titleEl.textContent = NAMES[winner] + ' gewinnt!';
   }
 
   const textEl = \$('winner-text');
   if (textEl) {
-    textEl.className = 'text-sm font-medium text-zinc-500 mb-6';
+    textEl.className = 'text-xs font-medium text-zinc-500 mb-6';
     textEl.textContent = `Sieg nach Runde ${state.round}`;
   }
   
