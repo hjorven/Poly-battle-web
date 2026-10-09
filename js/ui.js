@@ -1,11 +1,11 @@
 import { UNITS, TECHS, TECH_TIERS, TRIBES, NAMES, MAX_POP, MAX_HP } from './config.js';
 
-const \$ = id => document.getElementById(id);
+const $ = id => document.getElementById(id);
 let handlers = {};
 
 export function initUI(h) {
   handlers = h;
-  \$('techBtn')?.addEventListener('click', () => handlers.onOpenTech());
+  $('techBtn')?.addEventListener('click', () => handlers.onOpenTech());
   $('techClose')?.addEventListener('click', () => closeTech());$('endTurnBtn')?.addEventListener('click', () => handlers.onEndTurn());
   $('menuBtn')?.addEventListener('click', () => handlers.onMenu());$('winnerRestart')?.addEventListener('click', () => handlers.onRestart());
   document.querySelectorAll('[data-mode]').forEach(btn => {
@@ -21,7 +21,7 @@ export function setStatus(text) {
 }
 
 export function toast(text, cls = '') {
-  const area = \$('toast-area');
+  const area = $('toast-area');
   if (!area) return;
   const el = document.createElement('div');
   
@@ -39,7 +39,7 @@ export function toast(text, cls = '') {
 }
 
 export function updateStrip(state, ctx) {
-  const strip = \$('player-strip');
+  const strip = $('player-strip');
   if (!strip) return;
 
   const t1Key = state.tribes?.player_1 || 'imperius';
@@ -63,7 +63,7 @@ export function updateStrip(state, ctx) {
     </div>
   `;
 
-  const roundEl = \$('round-label');
+  const roundEl = $('round-label');
   if (roundEl) {
     roundEl.className = 'px-3 py-1 text-sm font-bold text-zinc-600 bg-zinc-100 rounded-md border border-zinc-200';
     roundEl.textContent = 'Runde ' + state.round;
@@ -71,18 +71,18 @@ export function updateStrip(state, ctx) {
 }
 
 export function setEndTurn(enabled) {
-  const btn = \$('endTurnBtn');
+  const btn = $('endTurnBtn');
   if (!btn) return;
   btn.disabled = !enabled;
   btn.className = `px-4 py-2 font-bold rounded-lg border transition-all ${enabled ? 'bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 shadow-sm' : 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed'}`;
 }
 
 export function hidePanel() {
-  \$('panel')?.classList.add('hidden');
+  $('panel')?.classList.add('hidden');
 }
 
 function panel(html) {
-  const p = \$('panel');
+  const p = $('panel');
   if (!p) return;
   p.innerHTML = `<div class="p-5 bg-white border border-zinc-200 shadow-lg rounded-xl overflow-hidden max-w-sm w-full">${html}</div>`;
   p.classList.remove('hidden');
@@ -169,19 +169,19 @@ export function showCityPanel(state, city, ctx) {
 }
 
 export function openTech(state, ctx) {
-  const overlay = \$('tech-overlay');
+  const overlay = $('tech-overlay');
   if (!overlay) return;
   
   overlay.className = 'fixed inset-0 bg-white/95 backdrop-blur-sm z-50 flex flex-col p-6 overflow-y-auto';
   
   const stars = state.stars[ctx.actAs];
-  const topBar = \$('tech-stars');
+  const topBar = $('tech-stars');
   if (topBar) {
     topBar.className = 'text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg inline-flex mb-4 self-start';
     topBar.textContent = 'Verfügbar: ' + stars + ' Sterne';
   }
   
-  const list = \$('tech-list');
+  const list = $('tech-list');
   if (!list) return;
   list.innerHTML = '';
   
@@ -222,7 +222,7 @@ export function openTech(state, ctx) {
 }
 
 export function closeTech() {
-  \$('tech-overlay')?.classList.add('hidden');
+  $('tech-overlay')?.classList.add('hidden');
 }
 
 export function isTechOpen() {
@@ -230,22 +230,22 @@ export function isTechOpen() {
 }
 
 export function showMenu() {
-  \$('menu-overlay')?.classList.remove('hidden');
+  $('menu-overlay')?.classList.remove('hidden');
 }
 
 export function hideMenu() {
-  \$('menu-overlay')?.classList.add('hidden');
+  $('menu-overlay')?.classList.add('hidden');
 }
 
 export function showWinner(state, ctx) {
   const winner = state.winner;
-  const titleEl = \$('winner-title');
+  const titleEl = $('winner-title');
   if (titleEl) {
     titleEl.className = 'text-xl font-bold text-zinc-900 mb-2';
     titleEl.textContent = NAMES[winner] + ' gewinnt!';
   }
 
-  const textEl = \$('winner-text');
+  const textEl = $('winner-text');
   if (textEl) {
     textEl.className = 'text-xs font-medium text-zinc-500 mb-6';
     textEl.textContent = `Sieg nach Runde ${state.round}`;
@@ -255,5 +255,5 @@ export function showWinner(state, ctx) {
 }
 
 export function hideWinner() {
-  \$('winner-overlay')?.classList.add('hidden');
+  $('winner-overlay')?.classList.add('hidden');
 }
