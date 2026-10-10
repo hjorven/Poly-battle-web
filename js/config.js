@@ -5,6 +5,7 @@ export const MAX_HP = 10;
 export const MAX_POP = 5;
 export const START_STARS = 3;
 export const BASE_CITY_POP = 2;
+export const VISION = { unit: 1, city: 2 };
 
 export const NAMES = { player_1: 'Blau', player_2: 'Rot' };
 export const COLORS = { player_1: 0x2563eb, player_2: 0xdc2626, neutral: 0xa1a1aa };
@@ -17,13 +18,13 @@ export const TERRAIN = {
 };
 
 export const UNITS = {
-  warrior: { name: 'Krieger', cost: 2, atk: 2, def: 2, move: 2, range: 1, tech: null },
-  archer: { name: 'Schütze', cost: 3, atk: 2, def: 1, move: 2, range: 2, tech: 'bogenschiessen' },
-  rider: { name: 'Reiter', cost: 3, atk: 2, def: 1, move: 3, range: 1, tech: 'reiten' },
-  defender: { name: 'Verteidiger', cost: 3, atk: 1, def: 4, move: 1, range: 1, tech: 'schildmacher' },
-  swordsman: { name: 'Schwertkämpfer', cost: 5, atk: 4, def: 3, move: 2, range: 1, tech: 'schmiedekunst' },
-  catapult: { name: 'Katapult', cost: 5, atk: 4, def: 1, move: 1, range: 3, tech: 'mathematik' },
-  mind_bender: { name: 'Gedankenbeuger', cost: 5, atk: 1, def: 2, move: 1, range: 1, tech: 'philosophie', heal: 2 }
+  warrior: { name: 'Krieger', cost: 2, atk: 2, def: 2, move: 2, range: 1, sight: 1, tech: null },
+  archer: { name: 'Schütze', cost: 3, atk: 2, def: 1, move: 2, range: 2, sight: 2, tech: 'bogenschiessen' },
+  rider: { name: 'Reiter', cost: 3, atk: 2, def: 1, move: 3, range: 1, sight: 1, tech: 'reiten' },
+  defender: { name: 'Verteidiger', cost: 3, atk: 1, def: 4, move: 1, range: 1, sight: 1, tech: 'schildmacher' },
+  swordsman: { name: 'Schwertkämpfer', cost: 5, atk: 4, def: 3, move: 2, range: 1, sight: 1, tech: 'schmiedekunst' },
+  catapult: { name: 'Katapult', cost: 5, atk: 4, def: 1, move: 1, range: 3, sight: 2, tech: 'mathematik' },
+  mind_bender: { name: 'Gedankenbeuger', cost: 5, atk: 1, def: 2, move: 1, range: 1, sight: 1, tech: 'philosophie', heal: 2 }
 };
 
 export const TECHS = {

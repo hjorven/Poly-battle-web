@@ -376,6 +376,24 @@ test('Gedankenbeuger heilt benachbarte Einheiten', () => {
   assert.strictEqual(healer.hp, MAX_HP, 'Heiler unverändert');
 });
 
+test('Fog of War: Sicht von Einheiten und Städten deckt Karte auf', () => {
+  const st = makeState();
+  st.explored = { player_1: [], player_2: [] };
+  const u = unit('a', 'player_1', 'warrior', 5, 5);
+  st.units = [u];
+  assert.ok(!R.isExplored(st, 'player_1', 5, 5), 'vorher verborgen');
+  R.updateExplored(st, 'player_1');
+  assert.ok(R.isExplored(st, 'player_1', 5, 5), 'eigenes Feld');
+  assert.ok(R.isExplored(st, 'player_1', 5, 6), 'Nachbarfeld');
+  assert.ok(!R.isExplored(st, 'player_1', 8, 8), 'entfernt bleibt verborgen');
+  assert.ok(!R.isExplored(st, 'player_2', 5, 5), 'P2 sieht nichts');
+  st.cities = [{ q: 10, r: 10, owner: 'player_1', pop: 2, trained: false }];
+  R.updateExplored(st, 'player_1');
+  assert.ok(R.isExplored(st, 'player_1', 10, 10), 'Stadt-Sicht');
+  assert.ok(R.isExplored(st, 'player_1', 10, 8), 'Stadt-Sicht Radius 2');
+  assert.ok(!R.isExplored(st, 'player_1', 10, 7), 'über Radius 2 hinaus');
+});
+
 test('Zug beenden: Reset, Einkommen, Rundenzähler', () => {
   const st = R.createGame(4242);
   for (const u of st.units.filter(u => u.owner === 'player_1')) { u.acted = true; u.mp = 0; }
