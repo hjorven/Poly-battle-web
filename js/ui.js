@@ -1,8 +1,9 @@
-import { UNITS, TECHS, TECH_TIERS, NAMES, MAX_POP, MAX_HP, COLORS } from './config.js';
-import { incomeFor, techCost } from './rules.js';
+import { UNITS, TECHS, TECH_TIERS, NAMES, MAX_POP, MAX_HP, COLORS, TRIBES, TRIBE_POOL } from './config.js';
+import { incomeFor, techCost, tribeName } from './rules.js';
 
 const $ = id => document.getElementById(id);
 let handlers = {};
+let selectedTribe = null;
 
 export function initUI(h) {
   handlers = h;
@@ -14,6 +15,33 @@ export function initUI(h) {
   document.querySelectorAll('[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onMode(btn.dataset.mode));
   });
+  buildTribePicker(h.onTribe || (() => {}));
+}
+
+export function getTribe() {
+  return selectedTribe;
+}
+
+function buildTribePicker(onPick) {
+  const wrap = $('tribe-pick');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  for (const id of TRIBE_POOL) {
+    const t = TRIBES[id];
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tribe-opt';
+    btn.dataset.tribe = id;
+    btn.innerHTML = `<span class="tribe-name">${t.name}</span><span class="tribe-tech">Start: ${t.startTechs.map(x => TECHS[x].name).join(', ')}</span>`;
+    btn.addEventListener('click', () => {
+      selectedTribe = selectedTribe === id ? null : id;
+      wrap.querySelectorAll('.tribe-opt').forEach(b => b.classList.toggle('active', b.dataset.tribe === selectedTribe));
+    });
+    wrap.appendChild(btn);
+  }
+  if (selectedTribe) {
+    wrap.querySelectorAll('.tribe-opt').forEach(b => b.classList.toggle('active', b.dataset.tribe === selectedTribe));
+  }
 }
 
 export function setStatus(text) {
@@ -37,16 +65,18 @@ function chip(player, state, ctx) {
   const units = state.units.filter(u => u.owner === player).length;
   const active = state.turn === player && !state.winner;
   const me = ctx.mode !== 'online' || ctx.myRole === player;
-  return `<div class="chip ${active ? 'active' : ''}">
+  const name = tribeName(state, player) || NAMES[player];
+  return `<div class="chip ${active ? 'active' : ''} ${cities === 0 ? 'dead' : ''}">
     <span class="dot" style="background:#${COLORS[player].toString(16).padStart(6, '0')}"></span>
-    <span>${NAMES[player]}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
+    <span>${name}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
     <span class="stars">${s} Sterne</span>
     <span class="meta">${cities} Städte · ${units} Einheiten</span>
   </div>`;
 }
 
 export function updateStrip(state, ctx) {
-  $('player-strip').innerHTML = chip('player_1', state, ctx) + chip('player_2', state, ctx);
+  const players = state.players && state.players.length ? state.players : ['player_1', 'player_2'];
+  $('player-strip').innerHTML = players.map(p => chip(p, state, ctx)).join('');
   $('round-label').textContent = 'Runde ' + state.round;
 }
 
@@ -66,7 +96,7 @@ function panel(html) {
 
 export function showUnitPanel(state, unit, ctx) {
   const def = UNITS[unit.type];
-  const owner = NAMES[unit.owner];
+  const owner = tribeName(state, unit.owner) || NAMES[unit.owner];
   const mine = unit.owner === ctx.actAs;
   const hpPct = Math.max(0, (unit.hp / MAX_HP) * 100);
   let hint = '';
@@ -101,7 +131,7 @@ export function showUnitPanel(state, unit, ctx) {
 
 export function showCityPanel(state, city, ctx) {
   const mine = city.owner === ctx.actAs && ctx.myTurn;
-  const ownerName = city.owner ? NAMES[city.owner] : 'Neutral';
+  const ownerName = city.owner ? (tribeName(state, city.owner) || NAMES[city.owner]) : 'Neutral';
   const income = city.owner ? incomeFor(state, city.owner) : city.pop;
   const occupied = state.units.some(u => u.q === city.q && u.r === city.r);
   let actions = '';
@@ -219,8 +249,8 @@ export function hideMenu() {
 
 export function showWinner(state, ctx) {
   const winner = state.winner;
-  $('winner-title').textContent = NAMES[winner] + ' gewinnt!';
-  let text = 'Alle Städte des Gegners wurden erobert.';
+  $('winner-title').textContent = (tribeName(state, winner) || NAMES[winner]) + ' gewinnt!';
+  let text = 'Alle anderen Städte wurden erobert.';
   if (ctx.mode === 'bot') text = winner === 'player_1' ? 'Du hast gewonnen.' : 'Die KI hat gewonnen.';
   else if (ctx.mode === 'online') text = winner === ctx.myRole ? 'Du hast gewonnen.' : 'Dein Gegner hat gewonnen.';
   $('winner-text').textContent = text + ` · Runde ${state.round}`;

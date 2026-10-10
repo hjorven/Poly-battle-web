@@ -52,7 +52,7 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-#player-strip { display: flex; gap: 8px; }
+#player-strip { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .chip {
   display: flex;
@@ -71,6 +71,7 @@ button:focus-visible {
   background: var(--hover);
   color: var(--text);
 }
+.chip.dead { background: var(--bg); }
 .chip .dot { width: 10px; height: 10px; flex: none; }
 .chip .stars { color: var(--accent); font-weight: 600; }
 .chip .meta { color: var(--muted); font-size: 12px; }
@@ -284,6 +285,31 @@ button:focus-visible {
 .footnote { color: var(--muted); font-size: 12px; margin-top: 16px; text-align: center; }
 
 .menu-buttons { display: flex; flex-direction: column; gap: 10px; }
+
+.tribe-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+.tribe-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.tribe-opt:hover { background: var(--hover); border-color: var(--border-strong); }
+.tribe-opt.active { border-color: var(--text); background: var(--hover); }
+.tribe-opt .tribe-name { font-weight: 700; }
+.tribe-opt .tribe-tech { font-size: 12px; color: var(--muted); line-height: 1.4; }
 
 .rules {
   margin-top: 24px;
