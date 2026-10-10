@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Poly Battle</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,6 89,28 89,72 50,94 11,72 11,28' fill='%2318181b'/></svg>">
   <script type="importmap">
     {
       "imports": {
@@ -20,7 +21,7 @@
   <header id="topbar">
     <div class="brand">Poly Battle</div>
     <div id="player-strip"></div>
-    <div id="status">Lade Spiel...</div>
+    <div id="status">Lade Spiel…</div>
     <div class="top-actions">
       <span id="round-label">Runde 1</span>
       <button id="techBtn" class="btn ghost">Forschung</button>
@@ -48,12 +49,14 @@
       <div class="rules">
         <h3>So wird gespielt</h3>
         <ul>
-          <li><b>Städte:</b> Bringen Sterne pro Runde. Kaufe Bevölkerung oder bilde Einheiten aus.</li>
-          <li><b>Einheiten:</b> Können sich bewegen und angreifen. Nach einem Angriff ist der Zug vorbei.</li>
-          <li><b>Forschung:</b> Schaltet stärkere Einheiten frei.</li>
-          <li><b>Sieg:</b> Erobere alle Städte des Gegners.</li>
+          <li><b>Städte</b> bringen pro Bevölkerung 1 Stern pro Runde. Kaufe Bevölkerung oder bilde Einheiten aus.</li>
+          <li><b>Einheiten</b> können sich bewegen und angreifen – nach einem Angriff ist der Zug vorbei.</li>
+          <li><b>Wald</b> gibt Verteidigungsbonus, <b>Berge</b> sind unpassierbar, <b>Wasser</b> braucht Technologie (nicht verfügbar).</li>
+          <li><b>Forschung</b> schaltet stärkere Einheiten frei (Schütze, Reiter, Verteidiger, Schwertkämpfer, Katapult).</li>
+          <li><b>Sieg:</b> Erbeute alle Städte des Gegners.</li>
         </ul>
       </div>
+      <p class="footnote">Karte ziehen: Ziehen · Zoomen: Rad/Zoom · Auswählen: Klick</p>
     </div>
   </div>
 
@@ -79,7 +82,5 @@
   </div>
 
   <script type="module" src="js/main.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
 </body>
 </html>
