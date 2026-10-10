@@ -9,6 +9,15 @@ export function initUI(h) {
   handlers = h;
   $('techBtn').addEventListener('click', () => handlers.onOpenTech());
   $('techClose').addEventListener('click', () => closeTech());
+  $('tech-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeTech();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && isTechOpen()) {
+      e.preventDefault();
+      closeTech();
+    }
+  });
   $('endTurnBtn').addEventListener('click', () => handlers.onEndTurn());
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
