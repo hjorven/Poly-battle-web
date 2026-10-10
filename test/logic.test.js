@@ -38,7 +38,8 @@ function assertInvariants(state) {
   const seen = new Set();
   for (const u of state.units) {
     assert.ok(inBounds(u.q, u.r), 'unit out of bounds');
-    assert.ok(TERRAIN[R.terrainAt(state, u.q, u.r)].walkable, 'unit on unwalkable tile');
+    const tile = R.terrainAt(state, u.q, u.r);
+    assert.ok(TERRAIN[tile].walkable || tile === 'mountain', 'unit on unwalkable tile');
     const k = hk(u.q, u.r);
     assert.ok(!seen.has(k), 'two units on same tile: ' + k);
     seen.add(k);
@@ -284,7 +285,7 @@ test('Ausbilden: Kosten, Tech-Gate, Belegung, Doppel-Ausbildung', () => {
   res = R.trainUnit(st, city, 'archer', 'player_1');
   assert.ok(!res.ok, 'Tech fehlt');
 
-  st.techs.player_1.push('jagd');
+  st.techs.player_1.push('bogenschiessen');
   res = R.trainUnit(st, city, 'archer', 'player_1');
   assert.ok(res.ok, 'nach Forschung ok');
   assert.strictEqual(st.stars.player_1, 8 - UNITS.archer.cost);
@@ -315,19 +316,64 @@ test('Bevölkerung: Kosten steigen, Maximum greift', () => {
   assert.strictEqual(last.reason, 'Maximale Bevölkerung');
 });
 
-test('Forschung: Reihenfolge, doppelt verboten, Ackerbau-Einkommen', () => {
+test('Forschung: Voraussetzungen, Kostenskalierung, Einkommen', () => {
   const st = makeState();
   st.cities = [{ q: 3, r: 3, owner: 'player_1', pop: 2, trained: false }];
   st.stars.player_1 = 100;
 
   const base = R.incomeFor(st, 'player_1');
   assert.strictEqual(base, 2, 'Einkommen = Bevölkerung');
-  assert.ok(!R.research(st, 'reitkunst', 'player_1').ok, 'Voraussetzung jagd fehlt');
-  assert.ok(R.research(st, 'jagd', 'player_1').ok);
-  assert.ok(!R.research(st, 'jagd', 'player_1').ok, 'nicht doppelt');
-  assert.ok(R.research(st, 'ackerbau', 'player_1').ok);
-  assert.strictEqual(R.incomeFor(st, 'player_1'), 3, 'Ackerbau +1 pro Stadt');
-  assert.ok(R.research(st, 'bergbau', 'player_1').ok, 'Voraussetzung ackerbau erfüllt');
+  assert.ok(!R.research(st, 'schildmacher', 'player_1').ok, 'Voraussetzung Organisation fehlt');
+  assert.strictEqual(R.techCost(st, 'organisation', 'player_1'), 2, 'Tier1 * (1 + 1 Stadt)');
+  assert.ok(R.research(st, 'organisation', 'player_1').ok);
+  assert.ok(!R.research(st, 'organisation', 'player_1').ok, 'nicht doppelt');
+  assert.strictEqual(R.incomeFor(st, 'player_1'), 3, 'Organisation +1 pro Stadt');
+  assert.ok(R.research(st, 'schildmacher', 'player_1').ok, 'Voraussetzung Organisation erfüllt');
+
+  st.cities.push({ q: 5, r: 5, owner: 'player_1', pop: 1, trained: false });
+  assert.strictEqual(R.techCost(st, 'jagd', 'player_1'), 3, 'Tier1 * (1 + 2 Städte)');
+});
+
+test('Klettern erlaubt das Betreten von Bergen', () => {
+  const st = makeState();
+  st.terrain[5 * MAP_W + 5] = 'mountain';
+  const u = unit('a', 'player_1', 'warrior', 6, 5);
+  st.units = [u];
+  assert.ok(!R.reachableMap(st, u).has('5,5'), 'ohne Klettern gesperrt');
+  st.techs.player_1.push('klettern');
+  assert.ok(R.reachableMap(st, u).has('5,5'), 'mit Klettern erreichbar');
+});
+
+test('Wege (Rösser) geben +1 Bewegung', () => {
+  const st = makeState();
+  const city = { q: 3, r: 3, owner: 'player_1', pop: 2, trained: false };
+  st.cities = [city];
+  st.stars.player_1 = 50;
+  st.techs.player_1.push('reiten', 'roesser');
+  const res = R.trainUnit(st, city, 'warrior', 'player_1');
+  assert.ok(res.ok);
+  assert.strictEqual(st.units[0].mp, UNITS.warrior.move + 1);
+});
+
+test('Philosophie senkt die Forschungskosten um 20 %', () => {
+  const st = makeState();
+  st.cities = [{ q: 3, r: 3, owner: 'player_1', pop: 2, trained: false }];
+  const before = R.techCost(st, 'mathematik', 'player_1');
+  st.techs.player_1.push('philosophie');
+  const after = R.techCost(st, 'mathematik', 'player_1');
+  assert.strictEqual(after, Math.ceil(before * 0.8));
+  assert.ok(after < before);
+});
+
+test('Gedankenbeuger heilt benachbarte Einheiten', () => {
+  const st = makeState();
+  const healer = unit('h', 'player_1', 'mind_bender', 5, 5);
+  const hurt = unit('x', 'player_1', 'warrior', 5, 6, { hp: 4 });
+  st.units = [healer, hurt];
+  st.turn = 'player_1';
+  R.startTurn(st);
+  assert.strictEqual(hurt.hp, 6, 'Heilung +2');
+  assert.strictEqual(healer.hp, MAX_HP, 'Heiler unverändert');
 });
 
 test('Zug beenden: Reset, Einkommen, Rundenzähler', () => {
