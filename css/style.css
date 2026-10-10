@@ -86,22 +86,32 @@ button:focus-visible {
 }
 
 .top-actions { display: flex; align-items: center; gap: 10px; }
-#round-label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+#round-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-variant-numeric: tabular-nums;
+}
 
 .btn {
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
-  padding: 9px 16px;
+  padding: 8px 16px;
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
   font-family: inherit;
 }
-.btn:hover { background: var(--hover); border-color: var(--border-strong); }
-.btn:active { background: var(--border); }
-.btn:disabled { opacity: 0.35; cursor: default; }
+.btn:hover:not(:disabled) { background: var(--hover); border-color: var(--border-strong); }
+.btn:active:not(:disabled) { background: var(--border); }
+.btn:disabled { opacity: 0.45; cursor: default; }
 .btn:disabled:hover { background: var(--panel); border-color: var(--border); }
 .btn.primary {
   background: var(--text);
@@ -109,7 +119,22 @@ button:focus-visible {
   color: #ffffff;
 }
 .btn.primary:hover:not(:disabled) { background: #3f3f46; border-color: #3f3f46; }
-.btn.primary:disabled { background: var(--text); }
+.btn.primary:active:not(:disabled) { background: #27272a; border-color: #27272a; }
+.btn.primary:disabled {
+  background: var(--hover);
+  border-color: var(--border);
+  color: var(--faint);
+  opacity: 1;
+}
+.btn.primary:disabled:hover { background: var(--hover); border-color: var(--border); }
+#endTurnBtn {
+  min-width: 140px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+@media (max-width: 720px) {
+  #endTurnBtn { min-width: 0; }
+}
 .btn.ghost { background: transparent; border-color: transparent; color: var(--text); }
 .btn.ghost:hover { background: var(--hover); border-color: transparent; }
 .btn.small { padding: 6px 10px; font-size: 13px; }
