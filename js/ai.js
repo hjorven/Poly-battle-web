@@ -1,8 +1,8 @@
 import * as R from './rules.js';
-import { UNITS, TECHS, UNIT_ORDER } from './config.js';
+import { UNITS } from './config.js';
 import { hexDistance, hk, inBounds } from './hex.js';
 
-const UNIT_VALUE = { warrior: 2, archer: 3, rider: 3, defender: 3, swordsman: 5, catapult: 5 };
+const UNIT_VALUE = { warrior: 2, archer: 3, rider: 3, defender: 3, swordsman: 5, catapult: 5, mind_bender: 4 };
 
 function attackScore(state, attacker, defender) {
   const dmg = R.combatDamage(attacker, defender, R.terrainAt(state, defender.q, defender.r));
@@ -90,9 +90,14 @@ export function botStep(state, player) {
     }
   }
 
-  const techOrder = ['jagd', 'ackerbau', 'reitkunst', 'bergbau', 'handwerk', 'mathematik'];
+  const techOrder = [
+    'organisation', 'jagd', 'klettern', 'reiten', 'fischerei',
+    'bogenschiessen', 'schildmacher', 'forstwirtschaft', 'bergbau', 'landwirtschaft',
+    'roesser', 'segeln', 'schmiedekunst', 'mathematik', 'philosophie',
+    'diplomatie', 'navigation', 'medaillen'
+  ];
   for (const t of techOrder) {
-    if (R.canResearch(state, t, player).ok && state.stars[player] >= TECHS[t].cost + 5) {
+    if (R.canResearch(state, t, player).ok && state.stars[player] >= R.techCost(state, t, player) + 5) {
       return { kind: 'research', tech: t };
     }
   }

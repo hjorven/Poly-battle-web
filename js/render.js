@@ -338,6 +338,10 @@ function unitBody(type, owner) {
     arm.rotation.z = 0.85;
     add(new THREE.Mesh(geo('stone', () => new THREE.IcosahedronGeometry(0.08, 0)), mat(0x9b9b94)), 0.24, 0.46, 0);
     add(new THREE.Mesh(geo('flagBox', () => new THREE.BoxGeometry(0.1, 0.1, 0.1)), teamMat()), -0.2, 0.2, 0);
+  } else if (type === 'mind_bender') {
+    add(new THREE.Mesh(geo('robe', () => new THREE.ConeGeometry(0.2, 0.5, 6)), teamMat()), 0, 0.25, 0);
+    add(new THREE.Mesh(geo('ico11', () => new THREE.IcosahedronGeometry(0.1, 0)), mat(0xe8c39a)), 0, 0.52, 0);
+    add(new THREE.Mesh(geo('orb', () => new THREE.IcosahedronGeometry(0.07, 0)), mat(0xe0b84d)), 0.2, 0.42, 0);
   }
 
   g.userData.teamMats = teamMats;
