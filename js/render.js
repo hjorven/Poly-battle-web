@@ -30,6 +30,17 @@ function mat(color, opts = {}) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true, ...opts });
 }
 
+const darkMats = new Map();
+function darkMatFor(t) {
+  if (!darkMats.has(t)) {
+    darkMats.set(t, new THREE.MeshLambertMaterial({
+      color: new THREE.Color(TERRAIN[t].color).multiplyScalar(0.45),
+      flatShading: true
+    }));
+  }
+  return darkMats.get(t);
+}
+
 export function initRender(canvas, opts = {}) {
   onPick = opts.onPick || null;
   try {
@@ -187,20 +198,11 @@ function buildTiles(state) {
   const foliageGeo = geo('tree_foliage', () => new THREE.ConeGeometry(0.2, 0.46, 5));
   const trunkMat = mat(0x5c4033);
   const foliageMat = mat(0x2e7d32);
+  const foliageMat2 = mat(0x256b28);
   const peakGeo = geo('mountain_peak', () => new THREE.ConeGeometry(0.52, 0.82, 6));
   const snowGeo = geo('mountain_snow', () => new THREE.ConeGeometry(0.26, 0.32, 6));
   const peakMat = mat(0x6b7280);
   const snowMat = mat(0xf9fafb);
-  const darkMats = new Map();
-  const darkMatFor = t => {
-    if (!darkMats.has(t)) {
-      darkMats.set(t, new THREE.MeshLambertMaterial({
-        color: new THREE.Color(TERRAIN[t].color).multiplyScalar(0.3),
-        flatShading: true
-      }));
-    }
-    return darkMats.get(t);
-  };
 
   for (let r = 0; r < MAP_H; r++) {
     for (let q = 0; q < MAP_W; q++) {
@@ -224,34 +226,39 @@ function buildTiles(state) {
       tiles.set(hk(q, r), { mesh, baseMat, top: def.height, terrain: t, decor, seen: true });
 
       if (t === 'forest') {
+        let s = (q * 73856093) ^ (r * 19349663);
+        const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
         const spots = [
-          { x: -0.22, z: -0.12 },
-          { x: 0.22, z: -0.08 },
-          { x: 0.0, z: 0.22 }
+          [-0.22, -0.12], [0.03, -0.2], [0.24, -0.02], [0.12, 0.22], [-0.2, 0.14]
         ];
-        const n = 1 + ((q * 7 + r * 13) % 2);
-        for (let i = 0; i < n + 1 && i < spots.length; i++) {
-          const off = spots[(i + ((q + r) % 3)) % spots.length];
+        const n = 3 + ((q * 7 + r * 13) % 3);
+        for (let i = 0; i < n; i++) {
+          const sp = spots[i % spots.length];
+          const jx = (rnd() - 0.5) * 0.08;
+          const jz = (rnd() - 0.5) * 0.08;
+          const sc = 0.85 + rnd() * 0.4;
           const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-          trunk.position.set(off.x, def.height + 0.11, off.z);
+          trunk.position.set(sp[0] + jx, def.height / 2 + 0.11, sp[1] + jz);
+          trunk.scale.set(1, sc, 1);
           trunk.castShadow = true;
           mesh.add(trunk);
           decor.push(trunk);
-          const foliage = new THREE.Mesh(foliageGeo, foliageMat);
-          foliage.position.set(off.x, def.height + 0.4, off.z);
+          const foliage = new THREE.Mesh(foliageGeo, rnd() < 0.5 ? foliageMat : foliageMat2);
+          foliage.position.set(sp[0] + jx, def.height / 2 + 0.45 * sc, sp[1] + jz);
+          foliage.scale.set(sc, sc, sc);
           foliage.castShadow = true;
           mesh.add(foliage);
           decor.push(foliage);
         }
       } else if (t === 'mountain') {
         const peak = new THREE.Mesh(peakGeo, peakMat);
-        peak.position.y = def.height + 0.41;
+        peak.position.y = def.height / 2 + 0.41;
         peak.rotation.y = 0.4;
         peak.castShadow = true;
         mesh.add(peak);
         decor.push(peak);
         const snow = new THREE.Mesh(snowGeo, snowMat);
-        snow.position.y = def.height + 0.68;
+        snow.position.y = def.height / 2 + 0.68;
         snow.castShadow = true;
         mesh.add(snow);
         decor.push(snow);
