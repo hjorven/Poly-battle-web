@@ -175,7 +175,10 @@ function pick(clientX, clientY) {
   const hits = raycaster.intersectObjects(tileMeshes, false);
   if (!hits.length) return null;
   const h = hits[0].object.userData.hex;
-  return hk(h.q, h.r);
+  const key = hk(h.q, h.r);
+  const t = tiles.get(key);
+  if (!t || !t.mesh.visible) return null;
+  return key;
 }
 
 function buildTiles(state) {
@@ -188,6 +191,8 @@ function buildTiles(state) {
   const snowGeo = geo('mountain_snow', () => new THREE.ConeGeometry(0.26, 0.32, 6));
   const peakMat = mat(0x6b7280);
   const snowMat = mat(0xf9fafb);
+  const fogGeo = geo('fog_tile', () => new THREE.CylinderGeometry(HEX_SIZE * TILE_GAP, HEX_SIZE * TILE_GAP, 0.1, 6));
+  const fogMat = new THREE.MeshBasicMaterial({ color: 0x16181d });
 
   for (let r = 0; r < MAP_H; r++) {
     for (let q = 0; q < MAP_W; q++) {
@@ -206,7 +211,13 @@ function buildTiles(state) {
       mesh.userData.hex = { q, r };
       scene.add(mesh);
       tileMeshes.push(mesh);
-      tiles.set(hk(q, r), { mesh, top: def.height, terrain: t });
+      const decor = [];
+      const fog = new THREE.Mesh(fogGeo, fogMat);
+      fog.position.set(p.x, def.height + 0.07, p.z);
+      fog.visible = false;
+      fog.renderOrder = 6;
+      scene.add(fog);
+      tiles.set(hk(q, r), { mesh, top: def.height, terrain: t, fog, decor });
 
       if (t === 'forest') {
         const spots = [
@@ -221,10 +232,12 @@ function buildTiles(state) {
           trunk.position.set(off.x, def.height + 0.11, off.z);
           trunk.castShadow = true;
           mesh.add(trunk);
+          decor.push(trunk);
           const foliage = new THREE.Mesh(foliageGeo, foliageMat);
           foliage.position.set(off.x, def.height + 0.4, off.z);
           foliage.castShadow = true;
           mesh.add(foliage);
+          decor.push(foliage);
         }
       } else if (t === 'mountain') {
         const peak = new THREE.Mesh(peakGeo, peakMat);
@@ -232,10 +245,12 @@ function buildTiles(state) {
         peak.rotation.y = 0.4;
         peak.castShadow = true;
         mesh.add(peak);
+        decor.push(peak);
         const snow = new THREE.Mesh(snowGeo, snowMat);
         snow.position.y = def.height + 0.68;
         snow.castShadow = true;
         mesh.add(snow);
+        decor.push(snow);
       }
     }
   }
@@ -244,6 +259,11 @@ function buildTiles(state) {
 function hexTop(key) {
   const t = tiles.get(key);
   return t ? t.top : 0.5;
+}
+
+function exploredSet(state, viewer) {
+  if (!viewer || !state.explored || !state.explored[viewer]) return null;
+  return new Set(state.explored[viewer]);
 }
 
 function makeHpSprite() {
@@ -476,9 +496,16 @@ function stepEffects(now) {
   }
 }
 
-export function syncBoard(state) {
+export function syncBoard(state, viewer = null) {
   if (!initialized) return Promise.resolve();
   if (!tiles.size) buildTiles(state);
+  const explored = exploredSet(state, viewer);
+  for (const [key, t] of tiles) {
+    const seen = !explored || explored.has(key);
+    t.mesh.visible = seen;
+    if (t.fog) t.fog.visible = !seen;
+    if (t.decor) for (const d of t.decor) d.visible = seen;
+  }
   for (const c of state.cities) placeCityNode(state, c);
 
   const alive = new Set();
@@ -520,6 +547,18 @@ export function syncBoard(state) {
         });
       }));
     }
+  }
+  for (const u of state.units) {
+    const node = unitNodes.get(u.id);
+    if (!node) continue;
+    const seen = !explored || u.owner === viewer || explored.has(hk(u.q, u.r));
+    node.group.visible = !!seen;
+  }
+  for (const c of state.cities) {
+    const node = cityNodes.get(hk(c.q, c.r));
+    if (!node) continue;
+    const seen = !explored || c.owner === viewer || explored.has(hk(c.q, c.r));
+    node.group.visible = !!seen;
   }
   for (const [id, node] of unitNodes) {
     if (alive.has(id) || node.dying) continue;
