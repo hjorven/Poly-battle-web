@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import * as R from '../js/rules.js';
-import { UNITS, TERRAIN, MAP_W, MAP_H, MAX_HP, START_STARS, MAX_POP } from '../js/config.js';
+import { UNITS, TERRAIN, MAP_W, MAP_H, MAX_HP, START_STARS, MAX_POP, TRIBES } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds } from '../js/hex.js';
 import { botStep } from '../js/ai.js';
 
@@ -51,7 +51,8 @@ function assertInvariants(state) {
     assert.ok(inBounds(c.q, c.r), 'city out of bounds');
     assert.ok(TERRAIN[R.terrainAt(state, c.q, c.r)].walkable, 'city unwalkable');
     assert.ok(c.pop >= 1 && c.pop <= MAX_POP, 'city pop out of range');
-    assert.ok(c.owner === null || c.owner === 'player_1' || c.owner === 'player_2', 'bad owner');
+    const ownerOk = c.owner === null || (state.players || []).includes(c.owner);
+    assert.ok(ownerOk, 'bad owner: ' + c.owner);
   }
 }
 
@@ -59,8 +60,9 @@ function makeState() {
   return {
     terrain: Array(MAP_W * MAP_H).fill('plains'),
     cities: [], units: [],
-    stars: { player_1: 10, player_2: 10 },
-    techs: { player_1: [], player_2: [] },
+    players: ['player_1', 'player_2', 'player_3', 'player_4'],
+    stars: { player_1: 10, player_2: 10, player_3: 10, player_4: 10 },
+    techs: { player_1: [], player_2: [], player_3: [], player_4: [] },
     turn: 'player_1', round: 1, winner: null
   };
 }
@@ -76,15 +78,31 @@ test('createGame: Grundinvarianten über mehrere Seeds', () => {
     const st = R.createGame(1000 + i);
     assertInvariants(st);
     assert.strictEqual(st.terrain.length, MAP_W * MAP_H);
-    assert.ok(st.cities.length >= 4, 'min 4 Städte, got ' + st.cities.length);
-    assert.strictEqual(st.cities.filter(c => c.owner === 'player_1').length, 1);
-    assert.strictEqual(st.cities.filter(c => c.owner === 'player_2').length, 1);
-    assert.strictEqual(st.units.filter(u => u.owner === 'player_1').length, 2);
-    assert.strictEqual(st.units.filter(u => u.owner === 'player_2').length, 2);
-    assert.strictEqual(st.stars.player_1, START_STARS + 2, 'P1 bekommt Starteinkommen');
-    assert.strictEqual(st.stars.player_2, START_STARS);
+    assert.strictEqual(st.players.length, 4, '4 Spieler');
+    assert.ok(st.cities.length >= st.players.length + 3, 'min Städte, got ' + st.cities.length);
+    const tribes = new Set(Object.values(st.tribes));
+    assert.strictEqual(tribes.size, 4, '4 unterschiedliche Stämme');
+    for (const owner of st.players) {
+      assert.strictEqual(st.cities.filter(c => c.owner === owner).length, 1, owner + ' Stadt');
+      assert.strictEqual(st.units.filter(u => u.owner === owner).length, 2, owner + ' Einheiten');
+      assert.strictEqual(st.stars[owner], owner === 'player_1' ? START_STARS + R.incomeFor(st, owner) : START_STARS, owner + ' Einkommen');
+      const tribe = TRIBES[st.tribes[owner]];
+      assert.ok(tribe, owner + ' unbekannter Stamm');
+      for (const tech of tribe.startTechs) assert.ok(st.techs[owner].includes(tech), owner + ' Start-Tech');
+    }
     assert.strictEqual(st.turn, 'player_1');
     assert.strictEqual(st.winner, null);
+  }
+});
+
+test('createGame: Spielerwahl setzt eigenen Stamm, KI bekommt die übrigen', () => {
+  for (let i = 0; i < 6; i++) {
+    const st = R.createGame(700 + i, 4, 'kickoo');
+    assert.strictEqual(st.tribes.player_1, 'kickoo');
+    for (const p of ['player_2', 'player_3', 'player_4']) {
+      assert.notStrictEqual(st.tribes[p], 'kickoo', p + ' hat nicht den Spielerstamm');
+    }
+    assert.strictEqual(new Set(Object.values(st.tribes)).size, 4, 'alle Stämme verschieden');
   }
 });
 
@@ -394,7 +412,7 @@ test('Fog of War: Sicht von Einheiten und Städten deckt Karte auf', () => {
   assert.ok(!R.isExplored(st, 'player_1', 10, 7), 'über Radius 2 hinaus');
 });
 
-test('Zug beenden: Reset, Einkommen, Rundenzähler', () => {
+test('Zug beenden: Rotation über 4 Spieler, Einkommen, Rundenzähler', () => {
   const st = R.createGame(4242);
   for (const u of st.units.filter(u => u.owner === 'player_1')) { u.acted = true; u.mp = 0; }
   const starsBefore = st.stars.player_2;
@@ -412,20 +430,37 @@ test('Zug beenden: Reset, Einkommen, Rundenzähler', () => {
   }
 
   R.endTurn(st);
+  assert.strictEqual(st.turn, 'player_3');
+  R.endTurn(st);
+  assert.strictEqual(st.turn, 'player_4');
+  R.endTurn(st);
   assert.strictEqual(st.turn, 'player_1');
-  assert.strictEqual(st.round, roundBefore + 1, 'Runde +1');
+  assert.strictEqual(st.round, roundBefore + 1, 'Runde +1 nach voller Runde');
   for (const u of st.units.filter(u => u.owner === 'player_1')) {
     assert.ok(!u.acted && u.mp === UNITS[u.type].move, 'P1-Einheiten zurückgesetzt');
   }
 });
 
+test('endTurn überspringt ausgeschiedene Spieler', () => {
+  const st = R.createGame(999);
+  for (const p of ['player_2', 'player_3']) {
+    st.cities = st.cities.filter(c => c.owner !== p);
+  }
+  st.units = st.units.filter(u => u.owner !== 'player_2' && u.owner !== 'player_3');
+  R.endTurn(st);
+  assert.strictEqual(st.turn, 'player_4', 'p2 und p3 (tot) werden übersprungen');
+  R.endTurn(st);
+  assert.strictEqual(st.turn, 'player_1');
+  assert.strictEqual(st.round, 2);
+});
+
 console.log('\n-- KI-Simulation --');
 
-test('Bot vs Bot: 25 Runden ohne Verletzungen', () => {
+test('4 Bots: 25 Runden ohne Verletzungen', () => {
   const st = R.createGame(777);
   let guard = 0;
   for (let round = 0; round < 25 && !st.winner; round++) {
-    for (const player of ['player_1', 'player_2']) {
+    for (const player of st.players) {
       let steps = 0;
       while (st.turn === player && !st.winner) {
         const step = botStep(st, player);
@@ -441,7 +476,7 @@ test('Bot vs Bot: 25 Runden ohne Verletzungen', () => {
         assertInvariants(st);
         steps++;
         if (steps > 200) throw new Error('Bot-Loop über 200 Schritte');
-        if (++guard > 8000) throw new Error('globale Sicherung ausgelöst');
+        if (++guard > 12000) throw new Error('globale Sicherung ausgelöst');
       }
       if (st.turn === player && !st.winner) R.endTurn(st);
       assertInvariants(st);
@@ -449,9 +484,10 @@ test('Bot vs Bot: 25 Runden ohne Verletzungen', () => {
   }
   assert.ok(st.round >= 2, 'Fortschritt im Spiel');
   if (st.winner) console.log('      (Sieger nach ' + st.round + ' Runden: ' + st.winner + ')');
-  else console.log('      (nach ' + st.round + ' Runden noch offen, Städte: ' +
-    st.cities.filter(c => c.owner === 'player_1').length + ':' +
-    st.cities.filter(c => c.owner === 'player_2').length + ')');
+  else {
+    const aliveCount = st.players.filter(p => st.cities.some(c => c.owner === p)).length;
+    console.log('      (nach ' + st.round + ' Runden offen, aktive Spieler: ' + aliveCount + ')');
+  }
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
