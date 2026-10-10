@@ -113,19 +113,27 @@ function actAs() {
   return ctx().actAs;
 }
 
+function viewer() {
+  if (!app.state) return null;
+  if (app.mode === 'hotseat') return app.state.turn;
+  if (app.mode === 'bot') return 'player_1';
+  if (app.mode === 'online') return app.myRole || null;
+  return null;
+}
+
 async function doMove(unit, q, r) {
   app.busy = true;
   const res = R.moveUnit(app.state, unit, q, r);
   if (!res.ok) { app.busy = false; refresh(); return; }
   app.sel = { kind: 'unit', id: unit.id };
-  await render.syncBoard(app.state);
+  await render.syncBoard(app.state, viewer());
   await afterAction(res.events);
 }
 
 async function doAttack(attacker, defender) {
   app.busy = true;
   const { events } = R.attack(app.state, attacker, defender);
-  render.syncBoard(app.state);
+  render.syncBoard(app.state, viewer());
   await render.playCombat(events);
   if (R.findUnit(app.state, attacker.id)) app.sel = { kind: 'unit', id: attacker.id };
   else app.sel = null;
@@ -137,7 +145,7 @@ async function doTrain(city, type) {
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
   ui.toast(`${UNITS[type].name} ausgebildet`, 'good');
-  await render.syncBoard(app.state);
+  await render.syncBoard(app.state, viewer());
   await afterAction();
 }
 
@@ -146,7 +154,7 @@ async function doBuyPop(city) {
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
   ui.toast('Bevölkerung wächst', 'good');
-  await render.syncBoard(app.state);
+  await render.syncBoard(app.state, viewer());
   await afterAction();
 }
 
@@ -164,7 +172,7 @@ async function doEndTurn() {
   app.busy = true;
   app.sel = null;
   R.endTurn(app.state);
-  await render.syncBoard(app.state);
+  await render.syncBoard(app.state, viewer());
   if (app.mode === 'hotseat') ui.toast(`Am Zug: ${NAMES[app.state.turn]}`);
   await afterAction();
 }
@@ -181,17 +189,17 @@ async function maybeBot() {
     if (!step) break;
     if (step.kind === 'attack') {
       const { events } = R.attack(app.state, step.attacker, step.defender);
-      render.syncBoard(app.state);
+      render.syncBoard(app.state, viewer());
       await render.playCombat(events);
     } else if (step.kind === 'move') {
       R.moveUnit(app.state, step.unit, step.q, step.r);
-      await render.syncBoard(app.state);
+      await render.syncBoard(app.state, viewer());
     } else if (step.kind === 'train') {
       R.trainUnit(app.state, step.city, step.type, 'player_2');
-      await render.syncBoard(app.state);
+      await render.syncBoard(app.state, viewer());
     } else if (step.kind === 'buyPop') {
       R.buyPop(app.state, step.city, 'player_2');
-      await render.syncBoard(app.state);
+      await render.syncBoard(app.state, viewer());
     } else if (step.kind === 'research') {
       R.research(app.state, step.tech, 'player_2');
     }
@@ -200,7 +208,7 @@ async function maybeBot() {
   }
   if (!app.state.winner) {
     R.endTurn(app.state);
-    await render.syncBoard(app.state);
+    await render.syncBoard(app.state, viewer());
   }
   app.busy = false;
   refresh();
@@ -265,7 +273,7 @@ function startLocal(mode) {
   ui.hideMenu();
   ui.hideWinner();
   document.getElementById('copyLinkBtn').classList.add('hidden');
-  render.syncBoard(app.state);
+  render.syncBoard(app.state, viewer());
   refresh();
 }
 
@@ -284,7 +292,7 @@ async function startOnline() {
     app.myRole = role;
     app.hasOpponent = !!match.player_2;
     ui.hideMenu();
-    render.syncBoard(app.state);
+    render.syncBoard(app.state, viewer());
     refresh();
     if (!app.myRole) ui.toast('Spiel läuft bereits – du schaust zu.');
   } else {
@@ -297,7 +305,7 @@ async function startOnline() {
     app.gameId = match.id;
     location.hash = match.id;
     ui.hideMenu();
-    render.syncBoard(app.state);
+    render.syncBoard(app.state, viewer());
     refresh();
     ui.toast('Spiel erstellt – teile den Link!', 'good');
   }
@@ -312,7 +320,7 @@ async function startOnline() {
     app.state = match.game_state;
     if (match.player_2) app.hasOpponent = true;
     app.busy = false;
-    render.syncBoard(app.state);
+    render.syncBoard(app.state, viewer());
     refresh();
   });
 }
