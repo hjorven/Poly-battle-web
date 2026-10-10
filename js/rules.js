@@ -1,6 +1,7 @@
 import {
   MAP_W, MAP_H, MAX_HP, MAX_POP, START_STARS, BASE_CITY_POP,
-  TERRAIN, UNITS, TECHS, UNIT_ORDER, COLORS, VISION, researchCost
+  TERRAIN, UNITS, TECHS, UNIT_ORDER, COLORS, VISION, researchCost,
+  TRIBES, TRIBE_POOL
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex } from './hex.js';
 
@@ -15,7 +16,23 @@ export function mulberry32(seed) {
 }
 
 const idx = (q, r) => r * MAP_W + q;
-const other = p => (p === 'player_1' ? 'player_2' : 'player_1');
+
+export function players(state) {
+  return state.players && state.players.length ? state.players : ['player_1', 'player_2'];
+}
+
+export function tribeOf(state, player) {
+  return state.tribes && TRIBES[state.tribes[player]] ? TRIBES[state.tribes[player]] : null;
+}
+
+export function tribeName(state, player) {
+  const t = tribeOf(state, player);
+  return t ? t.name : null;
+}
+
+export function alive(state, player) {
+  return state.cities.some(c => c.owner === player);
+}
 
 export function terrainAt(state, q, r) {
   return state.terrain[idx(q, r)];
@@ -117,8 +134,19 @@ export function startTurn(state) {
 }
 
 export function endTurn(state) {
-  state.turn = other(state.turn);
-  if (state.turn === 'player_1') state.round += 1;
+  const list = players(state);
+  const n = list.length;
+  const i = list.indexOf(state.turn);
+  let next = (i + 1) % n;
+  if (next === 0) state.round += 1;
+  state.turn = list[next];
+  let guard = 0;
+  while (!alive(state, state.turn) && guard < n * 2) {
+    next = (next + 1) % n;
+    if (next === 0) state.round += 1;
+    state.turn = list[next];
+    guard++;
+  }
   startTurn(state);
 }
 
@@ -217,10 +245,11 @@ export function moveUnit(state, unit, q, r) {
 }
 
 export function checkWinner(state) {
-  const p1 = state.cities.some(c => c.owner === 'player_1');
-  const p2 = state.cities.some(c => c.owner === 'player_2');
-  if (!p1) state.winner = 'player_2';
-  else if (!p2) state.winner = 'player_1';
+  const list = players(state);
+  const aliveList = list.filter(p => alive(state, p));
+  if (aliveList.length === 1) state.winner = aliveList[0];
+  const dead = new Set(list.filter(p => !alive(state, p)));
+  if (dead.size) state.units = state.units.filter(u => !dead.has(u.owner));
 }
 
 export function unlockedUnits(state, player) {
@@ -245,7 +274,7 @@ export function trainUnit(state, city, type, player) {
   state.stars[player] -= UNITS[type].cost;
   city.trained = true;
   state.units.push({
-    id: `${player[0]}${player === 'player_1' ? '1' : '2'}_${Date.now().toString(36)}_${unitSeq++}`,
+    id: `${player.replace('_', '')}_${Date.now().toString(36)}_${unitSeq++}`,
     owner: player, type, q: city.q, r: city.r,
     hp: MAX_HP, mp: maxMove(state, player, type), acted: false
   });
@@ -339,29 +368,61 @@ function carveLine(state, q1, r1, q2, r2, width = 1) {
   }
 }
 
-export function createGame(seed = Date.now()) {
+export function assignTribes(seed, count, chosenTribe = null) {
+  const rand = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  const pool = TRIBE_POOL.slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const out = {};
+  if (chosenTribe && TRIBES[chosenTribe]) {
+    out['player_1'] = chosenTribe;
+    const rest = pool.filter(t => t !== chosenTribe);
+    for (let k = 1; k < count; k++) out['player_' + (k + 1)] = rest[(k - 1) % rest.length];
+    return out;
+  }
+  for (let k = 0; k < count; k++) out['player_' + (k + 1)] = pool[k % pool.length];
+  return out;
+}
+
+export function createGame(seed = Date.now(), playerCount = 4, chosenTribe = null) {
   const rand = mulberry32(seed);
+  const count = Math.min(Math.max(playerCount, 2), 4);
+  const tribes = assignTribes(seed, count, chosenTribe);
   const state = {
     terrain: generateTerrain(rand),
     cities: [], units: [],
-    stars: { player_1: 0, player_2: 0 },
-    techs: { player_1: [], player_2: [] },
-    explored: { player_1: [], player_2: [] },
+    players: Array.from({ length: count }, (_, k) => 'player_' + (k + 1)),
+    tribes,
+    stars: {}, techs: {}, explored: {},
     turn: 'player_1', round: 1, winner: null
   };
+  for (const p of state.players) {
+    state.stars[p] = START_STARS;
+    state.techs[p] = tribes[p] ? TRIBES[tribes[p]].startTechs.slice() : [];
+    state.explored[p] = [];
+  }
 
-  const s1 = [1, MAP_H - 2];
-  const s2 = [MAP_W - 2, 1];
+  const starts = count === 4
+    ? [[1, MAP_H - 2], [MAP_W - 2, MAP_H - 2], [MAP_W - 2, 1], [1, 1]]
+    : [[1, MAP_H - 2], [MAP_W - 2, 1]];
   const clearAround = (q, r, rad) => {
     forEachHex((nq, nr) => {
       if (hexDistance(q, r, nq, nr) <= rad) state.terrain[idx(nq, nr)] = 'plains';
     });
   };
-  clearAround(s1[0], s1[1], 2);
-  clearAround(s2[0], s2[1], 2);
-  carveLine(state, s1[0], s1[1], s2[0], s2[1]);
+  for (const [q, r] of starts) clearAround(q, r, 2);
+  for (let i = 0; i < starts.length; i++) {
+    const a = starts[i], b = starts[(i + 1) % starts.length];
+    carveLine(state, a[0], a[1], b[0], b[1]);
+  }
+  if (count === 4) {
+    carveLine(state, starts[0][0], starts[0][1], starts[2][0], starts[2][1]);
+    carveLine(state, starts[1][0], starts[1][1], starts[3][0], starts[3][1]);
+  }
 
-  const reachable = floodReachable(state, s1[0], s1[1]);
+  const reachable = floodReachable(state, starts[0][0], starts[0][1]);
 
   const candidates = [];
   forEachHex((q, r) => {
@@ -392,44 +453,52 @@ export function createGame(seed = Date.now()) {
     return best;
   };
 
-  const c1 = nearest(s1[0], s1[1], 3, [s1, s2]) || candidates[0];
-  placeCity(c1[0], c1[1], 'player_1', BASE_CITY_POP);
-  const c2 = nearest(s2[0], s2[1], 3, [s1, s2]) || candidates[candidates.length - 1];
-  placeCity(c2[0], c2[1], 'player_2', BASE_CITY_POP);
+  const centerCities = [];
+  for (let k = 0; k < count; k++) {
+    const [sq, sr] = starts[k];
+    const owner = 'player_' + (k + 1);
+    const c = nearest(sq, sr, 3, starts) || candidates[listIndex(candidates, k)];
+    placeCity(c[0], c[1], owner, BASE_CITY_POP);
+    centerCities.push(c);
+  }
 
-  let placed = 2;
+  let placed = count;
+  const maxCities = 4 + count * 2;
   for (const [q, r] of candidates) {
-    if (placed >= 6) break;
+    if (placed >= maxCities) break;
     if (state.cities.some(c => c.q === q && c.r === r)) continue;
-    const minD = 4;
-    if (state.cities.some(c => hexDistance(q, r, c.q, c.r) < minD)) continue;
-    if (hexDistance(q, r, s1[0], s1[1]) < 3 || hexDistance(q, r, s2[0], s2[1]) < 3) continue;
+    if (state.cities.some(c => hexDistance(q, r, c.q, c.r) < 4)) continue;
+    if (starts.some(([sq, sr]) => hexDistance(q, r, sq, sr) < 3)) continue;
     placeCity(q, r, null, 1 + Math.floor(rand() * 3));
     placed++;
   }
 
-  const addWarrior = (owner, q, r) => {
+  const addUnit = (owner, type, q, r) => {
     state.units.push({
-      id: `${owner === 'player_1' ? 'a' : 'b'}_start_${state.units.length}`,
-      owner, type: 'warrior', q, r, hp: MAX_HP, mp: UNITS.warrior.move, acted: false
+      id: `${owner.replace('_', '')}_start_${state.units.length}`,
+      owner, type, q, r, hp: MAX_HP, mp: maxMove(state, owner, type), acted: false
     });
   };
   const spawnAround = (owner, city) => {
-    addWarrior(owner, city.q, city.r);
+    addUnit(owner, 'warrior', city.q, city.r);
     const opts = neighbors(city.q, city.r).filter(([nq, nr]) =>
       TERRAIN[terrainAt(state, nq, nr)].walkable &&
       !unitAt(state, nq, nr) &&
       !cityAt(state, nq, nr)
     );
-    if (opts.length) addWarrior(owner, opts[0][0], opts[0][1]);
+    if (opts.length) addUnit(owner, 'warrior', opts[0][0], opts[0][1]);
   };
-  spawnAround('player_1', state.cities.find(c => c.owner === 'player_1'));
-  spawnAround('player_2', state.cities.find(c => c.owner === 'player_2'));
+  for (let k = 0; k < count; k++) {
+    spawnAround('player_' + (k + 1), state.cities.find(c => c.owner === 'player_' + (k + 1)));
+  }
 
-  state.stars.player_1 = START_STARS;
-  state.stars.player_2 = START_STARS;
   startTurn(state);
   return state;
+}
+
+function listIndex(candidates, k) {
+  const used = candidates.length - 1 - k;
+  return Math.max(used, 0);
 }
 
 export function stateSummary(state, player) {

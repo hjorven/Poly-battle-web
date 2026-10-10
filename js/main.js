@@ -18,6 +18,10 @@ const app = {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+function needName(state, player) {
+  return R.tribeName(state, player) || NAMES[player];
+}
+
 function ctx() {
   return {
     mode: app.mode,
@@ -39,15 +43,15 @@ function myTurn() {
 function statusText() {
   const st = app.state;
   if (!st) return 'Lade Spiel…';
-  if (st.winner) return `${NAMES[st.winner]} hat alle Städte erobert und gewinnt.`;
+  if (st.winner) return `${needName(st, st.winner)} hat alle Städte erobert und gewinnt.`;
   if (app.mode === 'online') {
-    if (!app.myRole) return `Zuschauer · Am Zug: ${NAMES[st.turn]}`;
+    if (!app.myRole) return `Zuschauer · Am Zug: ${needName(st, st.turn)}`;
     if (!app.hasOpponent) return 'Warte auf Mitspieler – teile den Link (Menü → Link kopieren).';
-    if (myTurn()) return `Du bist am Zug (${NAMES[app.myRole]})`;
-    return `Gegner ist am Zug (${NAMES[st.turn]})`;
+    if (myTurn()) return `Du bist am Zug (${needName(st, app.myRole)})`;
+    return `Gegner ist am Zug (${needName(st, st.turn)})`;
   }
   if (app.mode === 'bot') return myTurn() ? 'Du bist am Zug' : 'Die KI denkt nach …';
-  return `Am Zug: ${NAMES[st.turn]}`;
+  return `Am Zug: ${needName(st, st.turn)}`;
 }
 
 function refresh() {
@@ -100,7 +104,7 @@ async function saveOnline() {
 async function afterAction(events = []) {
   for (const ev of events) {
     if (ev.kind === 'capture') {
-      ui.toast(ev.to ? `Stadt erobert! (${NAMES[ev.to]})` : 'Stadt neutralisiert', 'good');
+      ui.toast(ev.to ? `Stadt erobert! (${needName(app.state, ev.to)})` : 'Stadt neutralisiert', 'good');
     }
   }
   app.busy = false;
@@ -173,42 +177,49 @@ async function doEndTurn() {
   app.sel = null;
   R.endTurn(app.state);
   await render.syncBoard(app.state, viewer());
-  if (app.mode === 'hotseat') ui.toast(`Am Zug: ${NAMES[app.state.turn]}`);
+  if (app.mode === 'hotseat') ui.toast(`Am Zug: ${needName(app.state, app.state.turn)}`);
   await afterAction();
 }
 
 async function maybeBot() {
   if (app.mode !== 'bot' || app.busy || !app.state || app.state.winner) return;
-  if (app.state.turn !== 'player_2') return;
+  if (app.state.turn === 'player_1') return;
   app.busy = true;
   app.sel = null;
   refresh();
   await sleep(550);
-  while (app.state.turn === 'player_2' && !app.state.winner) {
-    const step = botStep(app.state, 'player_2');
-    if (!step) break;
-    if (step.kind === 'attack') {
-      const { events } = R.attack(app.state, step.attacker, step.defender);
-      render.syncBoard(app.state, viewer());
-      await render.playCombat(events);
-    } else if (step.kind === 'move') {
-      R.moveUnit(app.state, step.unit, step.q, step.r);
-      await render.syncBoard(app.state, viewer());
-    } else if (step.kind === 'train') {
-      R.trainUnit(app.state, step.city, step.type, 'player_2');
-      await render.syncBoard(app.state, viewer());
-    } else if (step.kind === 'buyPop') {
-      R.buyPop(app.state, step.city, 'player_2');
-      await render.syncBoard(app.state, viewer());
-    } else if (step.kind === 'research') {
-      R.research(app.state, step.tech, 'player_2');
+  while (app.state.turn !== 'player_1' && !app.state.winner) {
+    const player = app.state.turn;
+    let steps = 0;
+    while (app.state.turn === player && !app.state.winner) {
+      const step = botStep(app.state, player);
+      if (!step) break;
+      if (step.kind === 'attack') {
+        const { events } = R.attack(app.state, step.attacker, step.defender);
+        render.syncBoard(app.state, viewer());
+        await render.playCombat(events);
+      } else if (step.kind === 'move') {
+        R.moveUnit(app.state, step.unit, step.q, step.r);
+        await render.syncBoard(app.state, viewer());
+      } else if (step.kind === 'train') {
+        R.trainUnit(app.state, step.city, step.type, player);
+        await render.syncBoard(app.state, viewer());
+      } else if (step.kind === 'buyPop') {
+        R.buyPop(app.state, step.city, player);
+        await render.syncBoard(app.state, viewer());
+      } else if (step.kind === 'research') {
+        R.research(app.state, step.tech, player);
+      }
+      ui.updateStrip(app.state, ctx());
+      await sleep(430);
+      steps++;
+      if (steps > 220) break;
     }
-    ui.updateStrip(app.state, ctx());
-    await sleep(430);
-  }
-  if (!app.state.winner) {
-    R.endTurn(app.state);
-    await render.syncBoard(app.state, viewer());
+    if (app.state.turn === player && !app.state.winner) {
+      R.endTurn(app.state);
+      await render.syncBoard(app.state, viewer());
+      ui.updateStrip(app.state, ctx());
+    }
   }
   app.busy = false;
   refresh();
@@ -268,7 +279,9 @@ function startLocal(mode) {
   app.hasOpponent = true;
   app.sel = null;
   app.busy = false;
-  app.state = R.createGame(Math.floor(Math.random() * 2 ** 31));
+  const count = mode === 'bot' ? 4 : 2;
+  const tribe = mode === 'bot' ? ui.getTribe() : null;
+  app.state = R.createGame(Math.floor(Math.random() * 2 ** 31), count, tribe);
   history.replaceState(null, '', location.pathname);
   ui.hideMenu();
   ui.hideWinner();
@@ -296,7 +309,7 @@ async function startOnline() {
     refresh();
     if (!app.myRole) ui.toast('Spiel läuft bereits – du schaust zu.');
   } else {
-    const state = R.createGame(Math.floor(Math.random() * 2 ** 31));
+    const state = R.createGame(Math.floor(Math.random() * 2 ** 31), 2);
     const { match, error } = await net.createMatch(state);
     if (error) { ui.toast(error, 'warn'); ui.showMenu(); return; }
     app.state = match.game_state;

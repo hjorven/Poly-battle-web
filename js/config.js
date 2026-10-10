@@ -1,5 +1,5 @@
-export const MAP_W = 14;
-export const MAP_H = 11;
+export const MAP_W = 20;
+export const MAP_H = 14;
 export const HEX_SIZE = 1;
 export const MAX_HP = 10;
 export const MAX_POP = 5;
@@ -7,8 +7,19 @@ export const START_STARS = 3;
 export const BASE_CITY_POP = 2;
 export const VISION = { unit: 1, city: 2 };
 
-export const NAMES = { player_1: 'Blau', player_2: 'Rot' };
-export const COLORS = { player_1: 0x2563eb, player_2: 0xdc2626, neutral: 0xa1a1aa };
+export const NAMES = {
+  player_1: 'Blau',
+  player_2: 'Rot',
+  player_3: 'Orange',
+  player_4: 'Türkis'
+};
+export const COLORS = {
+  player_1: 0x2563eb,
+  player_2: 0xdc2626,
+  player_3: 0xd97706,
+  player_4: 0x0d9488,
+  neutral: 0xa1a1aa
+};
 
 export const TERRAIN = {
   plains: { name: 'Ebene', color: 0x74c043, height: 0.5, walkable: true, move: 1, def: 0 },
@@ -57,6 +68,16 @@ export const TECH_TIERS = [
 ];
 
 export const UNIT_ORDER = ['warrior', 'archer', 'rider', 'defender', 'swordsman', 'catapult', 'mind_bender'];
+
+export const TRIBES = {
+  imperius: { name: 'Imperius', startTechs: ['organisation'] },
+  bardur: { name: 'Bardur', startTechs: ['jagd'] },
+  xinxi: { name: 'Xin-Xi', startTechs: ['klettern'] },
+  kickoo: { name: 'Kickoo', startTechs: ['fischerei'] },
+  oumaji: { name: 'Oumaji', startTechs: ['reiten'] }
+};
+
+export const TRIBE_POOL = Object.keys(TRIBES);
 
 export function researchCost(tier, cityCount, hasPhilosophy = false) {
   let cost = tier * (1 + cityCount);
