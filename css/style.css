@@ -314,7 +314,7 @@ button:focus-visible {
 .tech .t-body { flex: 1; }
 .tech .t-cost { color: var(--accent); font-weight: 700; }
 .tech.done { opacity: 0.55; cursor: default; }
-.tech.done .t-cost::after { content: ' ✓'; color: var(--ok); }
+.tech.done .t-cost::after { content: ' · erforscht'; color: var(--ok); }
 .tech:disabled { opacity: 0.4; cursor: default; }
 
 #winner-title { color: var(--text); }
