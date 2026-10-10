@@ -331,9 +331,9 @@ function generateTerrain(rand) {
   const t = new Array(MAP_W * MAP_H);
   for (let i = 0; i < t.length; i++) {
     const roll = rand();
-    if (roll < 0.22) t[i] = 'water';
-    else if (roll < 0.40) t[i] = 'forest';
-    else if (roll < 0.52) t[i] = 'mountain';
+    if (roll < 0.20) t[i] = 'water';
+    else if (roll < 0.45) t[i] = 'forest';
+    else if (roll < 0.57) t[i] = 'mountain';
     else t[i] = 'plains';
   }
   return t;
@@ -355,13 +355,14 @@ function floodReachable(state, sq, sr) {
   return seen;
 }
 
-function carveLine(state, q1, r1, q2, r2, width = 1) {
-  const steps = Math.max(hexDistance(q1, r1, q2, r2) * 2, 2);
+function carveLine(state, q1, r1, q2, r2, wide = true) {
+  const steps = Math.max(hexDistance(q1, r1, q2, r2) * (wide ? 2 : 1), 2);
+  const offs = wide ? [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, -1]] : [[0, 0]];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const q = Math.round(q1 + (q2 - q1) * t);
     const r = Math.round(r1 + (r2 - r1) * t);
-    for (const [dq, dr] of [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, -1]]) {
+    for (const [dq, dr] of offs) {
       const nq = q + dq, nr = r + dr;
       if (inBounds(nq, nr)) state.terrain[idx(nq, nr)] = 'plains';
     }
@@ -413,13 +414,13 @@ export function createGame(seed = Date.now(), playerCount = 4, chosenTribe = nul
     });
   };
   for (const [q, r] of starts) clearAround(q, r, 2);
-  for (let i = 0; i < starts.length; i++) {
-    const a = starts[i], b = starts[(i + 1) % starts.length];
-    carveLine(state, a[0], a[1], b[0], b[1]);
-  }
   if (count === 4) {
-    carveLine(state, starts[0][0], starts[0][1], starts[2][0], starts[2][1]);
-    carveLine(state, starts[1][0], starts[1][1], starts[3][0], starts[3][1]);
+    for (let i = 0; i < starts.length; i++) {
+      const a = starts[i], b = starts[(i + 1) % starts.length];
+      carveLine(state, a[0], a[1], b[0], b[1], false);
+    }
+  } else {
+    carveLine(state, starts[0][0], starts[0][1], starts[1][0], starts[1][1]);
   }
 
   const reachable = floodReachable(state, starts[0][0], starts[0][1]);
