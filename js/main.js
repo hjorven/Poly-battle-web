@@ -38,15 +38,15 @@ function myTurn() {
 
 function statusText() {
   const st = app.state;
-  if (!st) return 'Lade Spiel...';
-  if (st.winner) return `${NAMES[st.winner]} hat das Spiel gewonnen.`;
+  if (!st) return 'Lade Spiel…';
+  if (st.winner) return `${NAMES[st.winner]} hat alle Städte erobert und gewinnt.`;
   if (app.mode === 'online') {
-    if (!app.myRole) return `Zuschauer - Am Zug: ${NAMES[st.turn]}`;
-    if (!app.hasOpponent) return 'Warte auf Mitspieler.';
+    if (!app.myRole) return `Zuschauer · Am Zug: ${NAMES[st.turn]}`;
+    if (!app.hasOpponent) return 'Warte auf Mitspieler – teile den Link (Menü → Link kopieren).';
     if (myTurn()) return `Du bist am Zug (${NAMES[app.myRole]})`;
     return `Gegner ist am Zug (${NAMES[st.turn]})`;
   }
-  if (app.mode === 'bot') return myTurn() ? 'Du bist am Zug' : 'KI berechnet Zug...';
+  if (app.mode === 'bot') return myTurn() ? 'Du bist am Zug' : 'Die KI denkt nach …';
   return `Am Zug: ${NAMES[st.turn]}`;
 }
 
@@ -55,21 +55,57 @@ function refresh() {
   ui.updateStrip(app.state, ctx());
   ui.setStatus(statusText());
   ui.setEndTurn(myTurn());
+  updateSelection();
   checkWinnerUI();
+}
+
+function updateSelection() {
+  const st = app.state;
+  if (!st) return;
+  if (app.sel) {
+    if (app.sel.kind === 'unit' && !R.findUnit(st, app.sel.id)) app.sel = null;
+    if (app.sel.kind === 'city' && !R.cityAt(st, app.sel.q, app.sel.r)) app.sel = null;
+  }
+  if (!app.sel) {
+    render.setHighlights({});
+    ui.hidePanel();
+    return;
+  }
+  if (app.sel.kind === 'unit') {
+    const u = R.findUnit(st, app.sel.id);
+    const canCommand = myTurn() && u.owner === ctx().actAs && !u.acted;
+    render.setHighlights({
+      selected: u.q + ',' + u.r,
+      move: canCommand && u.mp > 0 ? R.reachableMap(st, u) : null,
+      attack: canCommand ? R.attackTargets(st, u) : null
+    });
+    ui.showUnitPanel(st, u, ctx());
+  } else {
+    const city = R.cityAt(st, app.sel.q, app.sel.r);
+    render.setHighlights({ selected: city.q + ',' + city.r });
+    ui.showCityPanel(st, city, ctx());
+  }
 }
 
 function checkWinnerUI() {
   if (app.state && app.state.winner) ui.showWinner(app.state, ctx());
 }
 
+async function saveOnline() {
+  if (!app.online || !app.gameId) return;
+  const { error } = await net.saveMatch(app.gameId, app.state);
+  if (error) ui.toast(error, 'warn');
+}
+
 async function afterAction(events = []) {
   for (const ev of events) {
     if (ev.kind === 'capture') {
-      ui.toast(ev.to ? `Stadt erobert von ${NAMES[ev.to]}` : 'Stadt neutralisiert', 'good');
+      ui.toast(ev.to ? `Stadt erobert! (${NAMES[ev.to]})` : 'Stadt neutralisiert', 'good');
     }
   }
   app.busy = false;
   refresh();
+  await saveOnline();
   if (!app.state.winner) await maybeBot();
 }
 
@@ -81,6 +117,7 @@ async function doMove(unit, q, r) {
   app.busy = true;
   const res = R.moveUnit(app.state, unit, q, r);
   if (!res.ok) { app.busy = false; refresh(); return; }
+  app.sel = { kind: 'unit', id: unit.id };
   await render.syncBoard(app.state);
   await afterAction(res.events);
 }
@@ -89,6 +126,9 @@ async function doAttack(attacker, defender) {
   app.busy = true;
   const { events } = R.attack(app.state, attacker, defender);
   render.syncBoard(app.state);
+  await render.playCombat(events);
+  if (R.findUnit(app.state, attacker.id)) app.sel = { kind: 'unit', id: attacker.id };
+  else app.sel = null;
   await afterAction(events);
 }
 
@@ -97,6 +137,15 @@ async function doTrain(city, type) {
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
   ui.toast(`${UNITS[type].name} ausgebildet`, 'good');
+  await render.syncBoard(app.state);
+  await afterAction();
+}
+
+async function doBuyPop(city) {
+  const res = R.buyPop(app.state, city, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
+  app.busy = true;
+  ui.toast('Bevölkerung wächst', 'good');
   await render.syncBoard(app.state);
   await afterAction();
 }
@@ -124,25 +173,30 @@ async function maybeBot() {
   if (app.mode !== 'bot' || app.busy || !app.state || app.state.winner) return;
   if (app.state.turn !== 'player_2') return;
   app.busy = true;
+  app.sel = null;
   refresh();
-  await sleep(400);
+  await sleep(550);
   while (app.state.turn === 'player_2' && !app.state.winner) {
     const step = botStep(app.state, 'player_2');
     if (!step) break;
     if (step.kind === 'attack') {
-      R.attack(app.state, step.attacker, step.defender);
+      const { events } = R.attack(app.state, step.attacker, step.defender);
       render.syncBoard(app.state);
+      await render.playCombat(events);
     } else if (step.kind === 'move') {
       R.moveUnit(app.state, step.unit, step.q, step.r);
       await render.syncBoard(app.state);
     } else if (step.kind === 'train') {
       R.trainUnit(app.state, step.city, step.type, 'player_2');
       await render.syncBoard(app.state);
+    } else if (step.kind === 'buyPop') {
+      R.buyPop(app.state, step.city, 'player_2');
+      await render.syncBoard(app.state);
     } else if (step.kind === 'research') {
       R.research(app.state, step.tech, 'player_2');
     }
     ui.updateStrip(app.state, ctx());
-    await sleep(300);
+    await sleep(430);
   }
   if (!app.state.winner) {
     R.endTurn(app.state);
@@ -160,8 +214,8 @@ async function onHexPick(key) {
   const city = R.cityAt(st, q, r);
 
   if (!myTurn()) {
-    if (unit) ui.showUnitPanel(st, unit, ctx());
-    else if (city) ui.showCityPanel(st, city, ctx());
+    app.sel = unit ? { kind: 'unit', id: unit.id } : (city ? { kind: 'city', q, r } : null);
+    refresh();
     return;
   }
 
@@ -171,45 +225,112 @@ async function onHexPick(key) {
     if (me && me.owner === actAs() && !me.acted) {
       if (unit && unit.owner !== me.owner) {
         if (R.attackTargets(st, me).some(t => t.id === unit.id)) return doAttack(me, unit);
+        refresh();
+        return;
       } else if (!unit) {
         const reach = R.reachableMap(st, me);
         if (reach.has(key)) return doMove(me, q, r);
+      } else if (unit.owner === me.owner) {
+        app.sel = { kind: 'unit', id: unit.id };
+        refresh();
+        return;
+      } else if (city && city.owner === actAs()) {
+        app.sel = { kind: 'city', q, r };
+        refresh();
+        return;
       }
+    } else if (me && me.owner === actAs() && me.acted && unit && unit.owner === me.owner) {
+      app.sel = { kind: 'unit', id: unit.id };
+      refresh();
+      return;
     }
   }
 
-  if (unit) {
-    app.sel = { kind: 'unit', id: unit.id };
-    ui.showUnitPanel(st, unit, ctx());
-  } else if (city && city.owner === actAs()) {
-    app.sel = { kind: 'city', q, r };
-    ui.showCityPanel(st, city, ctx());
-  } else {
-    app.sel = null;
-    ui.hidePanel();
-  }
+  if (unit) app.sel = { kind: 'unit', id: unit.id };
+  else if (city && city.owner === actAs()) app.sel = { kind: 'city', q, r };
+  else app.sel = null;
   refresh();
 }
 
 function startLocal(mode) {
   app.mode = mode;
   app.online = false;
+  app.gameId = null;
   app.myRole = null;
   app.hasOpponent = true;
   app.sel = null;
   app.busy = false;
-  app.state = R.createGame(Math.floor(Math.random() * 2 ** 31), 'imperius', 'bardur');
+  app.state = R.createGame(Math.floor(Math.random() * 2 ** 31));
+  history.replaceState(null, '', location.pathname);
   ui.hideMenu();
   ui.hideWinner();
+  document.getElementById('copyLinkBtn').classList.add('hidden');
   render.syncBoard(app.state);
   refresh();
+}
+
+async function startOnline() {
+  app.mode = 'online';
+  app.online = true;
+  app.sel = null;
+  app.busy = false;
+  const hashId = location.hash.slice(1);
+
+  if (hashId) {
+    app.gameId = hashId;
+    const { match, role, error } = await net.joinMatch(hashId);
+    if (error) { ui.toast(error, 'warn'); ui.showMenu(); return; }
+    app.state = match.game_state;
+    app.myRole = role;
+    app.hasOpponent = !!match.player_2;
+    ui.hideMenu();
+    render.syncBoard(app.state);
+    refresh();
+    if (!app.myRole) ui.toast('Spiel läuft bereits – du schaust zu.');
+  } else {
+    const state = R.createGame(Math.floor(Math.random() * 2 ** 31));
+    const { match, error } = await net.createMatch(state);
+    if (error) { ui.toast(error, 'warn'); ui.showMenu(); return; }
+    app.state = match.game_state;
+    app.myRole = 'player_1';
+    app.hasOpponent = false;
+    app.gameId = match.id;
+    location.hash = match.id;
+    ui.hideMenu();
+    render.syncBoard(app.state);
+    refresh();
+    ui.toast('Spiel erstellt – teile den Link!', 'good');
+  }
+  document.getElementById('copyLinkBtn').classList.remove('hidden');
+
+  if (app.channel) {
+    try { net.unsubscribe(app.channel); } catch (e) { /* ignore */ }
+    app.channel = null;
+  }
+  app.channel = net.subscribe(app.gameId, match => {
+    if (!app.online) return;
+    app.state = match.game_state;
+    if (match.player_2) app.hasOpponent = true;
+    app.busy = false;
+    render.syncBoard(app.state);
+    refresh();
+  });
+}
+
+async function copyLink() {
+  try {
+    await navigator.clipboard.writeText(location.href);
+    ui.toast('Link kopiert!', 'good');
+  } catch (e) {
+    prompt('Link zum Teilen:', location.href);
+  }
 }
 
 function boot() {
   const canvas = document.getElementById('gameCanvas');
   const ok = render.initRender(canvas, { onPick: onHexPick });
   if (!ok) {
-    ui.setStatus('WebGL steht nicht zur Verfuegung.');
+    ui.setStatus('WebGL steht nicht zur Verfügung – 3D-Ansicht nicht möglich.');
     return;
   }
 
@@ -218,12 +339,19 @@ function boot() {
     onResearch: doResearch,
     onEndTurn: doEndTurn,
     onTrain: doTrain,
+    onBuyPop: doBuyPop,
     onMenu: () => ui.showMenu(),
     onRestart: () => { ui.hideWinner(); ui.showMenu(); },
-    onMode: mode => startLocal(mode)
+    onMode: mode => mode === 'online' ? startOnline() : startLocal(mode),
+    onCopyLink: copyLink
   });
 
-  ui.showMenu();
+  document.getElementById('copyLinkBtn').addEventListener('click', copyLink);
+
+  if (location.hash.length > 1) startOnline();
+  else ui.showMenu();
+
+  window.__pb = { app, project: render.project, R, botStep };
 }
 
 boot();
