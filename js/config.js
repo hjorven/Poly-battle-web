@@ -23,7 +23,7 @@ export const COLORS = {
 
 export const TERRAIN = {
   plains: { name: 'Ebene', color: 0x74c043, height: 0.5, walkable: true, move: 1, def: 0 },
-  forest: { name: 'Wald', color: 0x4c9a2a, height: 0.5, walkable: true, move: 2, def: 2 },
+  forest: { name: 'Wald', color: 0x4c9a2a, height: 0.7, walkable: true, move: 2, def: 2 },
   mountain: { name: 'Berg', color: 0x9b9b94, height: 1.15, walkable: false, move: 2, def: 4 },
   water: { name: 'Wasser', color: 0x3fa7e0, height: 0.3, walkable: false, move: 99, def: 0 }
 };
