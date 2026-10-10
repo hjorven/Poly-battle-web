@@ -1,57 +1,70 @@
 import {
   MAP_W, MAP_H, MAX_HP, MAX_POP, START_STARS, BASE_CITY_POP,
-  TERRAIN, UNITS, TECHS, TRIBES
+  TERRAIN, UNITS, TECHS, UNIT_ORDER, COLORS
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex } from './hex.js';
+
+export function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 const idx = (q, r) => r * MAP_W + q;
 const other = p => (p === 'player_1' ? 'player_2' : 'player_1');
 
-export function terrainAt(state, q, r) { return state.terrain[idx(q, r)]; }
-export function unitAt(state, q, r) { return state.units.find(u => u.q === q && u.r === r) || null; }
-export function cityAt(state, q, r) { return state.cities.find(c => c.q === q && c.r === r) || null; }
-export function findUnit(state, id) { return state.units.find(u => u.id === id) || null; }
+export function terrainAt(state, q, r) {
+  return state.terrain[idx(q, r)];
+}
 
-export function techCost(state, techId, player) {
-  const t = TECHS[techId];
-  if (!t) return 0;
-  const cities = state.cities.filter(c => c.owner === player).length || 1;
-  return t.baseCost + (cities - 1) * t.tier;
+export function unitAt(state, q, r) {
+  return state.units.find(u => u.q === q && u.r === r) || null;
+}
+
+export function cityAt(state, q, r) {
+  return state.cities.find(c => c.q === q && c.r === r) || null;
+}
+
+export function findUnit(state, id) {
+  return state.units.find(u => u.id === id) || null;
+}
+
+export function cityOwner(state, q, r) {
+  const c = cityAt(state, q, r);
+  return c ? c.owner : undefined;
 }
 
 export function incomeFor(state, player) {
   let s = 0;
-  for (const c of state.cities) {
-    if (c.owner === player) {
-      s += c.pop;
-      if (c.workshop) s += 1;
-    }
-  }
-  if (state.techs[player].includes('organisation')) {
-    s += state.cities.filter(c => c.owner === player).length;
-  }
+  for (const c of state.cities) if (c.owner === player) s += c.pop;
+  if (state.techs[player].includes('ackerbau')) s += state.cities.filter(c => c.owner === player).length;
   return s;
+}
+
+export function citiesFor(state, player) {
+  return state.cities.filter(c => c.owner === player);
+}
+
+export function canAct(state, player) {
+  return !state.winner && state.turn === player;
 }
 
 export function startTurn(state) {
   const p = state.turn;
   for (const u of state.units) {
     if (u.owner === p) {
-      const def = UNITS[u.type];
-      if (!u.acted && u.hp < (u.maxHp || MAX_HP)) {
-        const inCity = state.cities.some(c => c.q === u.q && c.r === u.r && c.owner === p);
-        u.hp = Math.min(u.maxHp || MAX_HP, u.hp + (inCity ? 4 : 2));
-      }
-      u.mp = def.move;
+      u.mp = UNITS[u.type].move;
       u.acted = false;
-      u.hasAttacked = false;
     }
   }
   for (const c of state.cities) {
     if (c.owner === p) c.trained = false;
   }
   state.stars[p] += incomeFor(state, p);
-  updateFogOfWar(state, p);
 }
 
 export function endTurn(state) {
@@ -60,36 +73,12 @@ export function endTurn(state) {
   startTurn(state);
 }
 
-export function updateFogOfWar(state, player) {
-  if (!state.explored) state.explored = { player_1: new Set(), player_2: new Set() };
-  const vis = state.explored[player];
-  
-  for (const c of state.cities) {
-    if (c.owner === player) {
-      forEachHex((nq, nr) => {
-        if (hexDistance(c.q, c.r, nq, nr) <= 1) vis.add(hk(nq, nr));
-      });
-    }
-  }
-
-  for (const u of state.units) {
-    if (u.owner === player) {
-      const terr = terrainAt(state, u.q, u.r);
-      const sight = terr === 'mountain' ? 2 : 1;
-      forEachHex((nq, nr) => {
-        if (hexDistance(u.q, u.r, nq, nr) <= sight) vis.add(hk(nq, nr));
-      });
-    }
-  }
-}
-
 export function reachableMap(state, unit) {
   const out = new Map();
   if (unit.acted || unit.mp <= 0) return out;
   const budget = unit.mp;
   const dist = new Map([[hk(unit.q, unit.r), 0]]);
   const queue = [[unit.q, unit.r, 0]];
-  
   while (queue.length) {
     queue.sort((a, b) => a[2] - b[2]);
     const [q, r, cost] = queue.shift();
@@ -113,7 +102,7 @@ export function reachableMap(state, unit) {
 }
 
 export function attackTargets(state, unit) {
-  if (unit.acted || unit.hasAttacked) return [];
+  if (unit.acted) return [];
   const range = UNITS[unit.type].range;
   return state.units.filter(u =>
     u.owner !== unit.owner &&
@@ -122,81 +111,47 @@ export function attackTargets(state, unit) {
 }
 
 export function combatDamage(attacker, defender, defTerrain) {
-  const aDef = UNITS[attacker.type];
-  const dDef = UNITS[defender.type];
-  const aMaxHp = attacker.maxHp || MAX_HP;
-  const dMaxHp = defender.maxHp || MAX_HP;
-  
-  const terrBonus = TERRAIN[defTerrain].def;
-  const attackForce = aDef.atk * (attacker.hp / aMaxHp);
-  const defenseForce = dDef.def * (defender.hp / dMaxHp) * (1 + terrBonus * 0.5);
-  const totalForce = attackForce + defenseForce;
-
-  if (totalForce === 0) return 0;
-  return Math.max(1, Math.round((attackForce / totalForce) * aDef.atk * 4.5));
+  const a = UNITS[attacker.type];
+  const d = UNITS[defender.type];
+  const hpF = attacker.hp / MAX_HP;
+  const terr = TERRAIN[defTerrain].def;
+  const base = a.atk * 2 * hpF;
+  const mit = 10 / (10 + d.def + terr);
+  return Math.max(1, Math.floor(base * mit));
 }
 
 export function attack(state, attacker, defender) {
   const events = [];
   const dist = hexDistance(attacker.q, attacker.r, defender.q, defender.r);
   const dmg = combatDamage(attacker, defender, terrainAt(state, defender.q, defender.r));
-  
   defender.hp -= dmg;
   events.push({ kind: 'damage', from: attacker.id, to: defender.id, dmg });
-
+  let killed = false;
   if (defender.hp <= 0) {
     state.units = state.units.filter(u => u !== defender);
+    killed = true;
     events.push({ kind: 'kill', unit: defender });
-    
-    attacker.kills = (attacker.kills || 0) + 1;
-    if (attacker.kills >= 3 && !attacker.isVeteran) {
-      attacker.isVeteran = true;
-      attacker.maxHp = (attacker.maxHp || MAX_HP) + 5;
-      attacker.hp = attacker.maxHp;
-      events.push({ kind: 'veteran', unit: attacker });
-    }
   } else if (dist === 1 && UNITS[defender.type].range === 1) {
-    const dDef = UNITS[defender.type];
-    const aDef = UNITS[attacker.type];
-    const aMaxHp = attacker.maxHp || MAX_HP;
-    const dMaxHp = defender.maxHp || MAX_HP;
-
-    const attackForce = aDef.atk * (attacker.hp / aMaxHp);
-    const defenseForce = dDef.def * (defender.hp / dMaxHp);
-    const totalForce = attackForce + defenseForce;
-    const backDmg = Math.max(1, Math.round((defenseForce / totalForce) * dDef.def * 4.5));
-    
-    attacker.hp -= backDmg;
-    events.push({ kind: 'retaliate', from: defender.id, to: attacker.id, dmg: backDmg });
-    
+    const back = Math.max(1, Math.round(0.5 * combatDamage(defender, attacker, terrainAt(state, attacker.q, attacker.r))));
+    attacker.hp -= back;
+    events.push({ kind: 'retaliate', from: defender.id, to: attacker.id, dmg: back });
     if (attacker.hp <= 0) {
       state.units = state.units.filter(u => u !== attacker);
       events.push({ kind: 'kill', unit: attacker });
     }
   }
-
-  attacker.hasAttacked = true;
-  if (UNITS[attacker.type].skill === 'escape' && attacker.mp > 0 && attacker.hp > 0) {
-    attacker.acted = false;
-  } else {
-    attacker.acted = true;
-    attacker.mp = 0;
-  }
-
-  updateFogOfWar(state, attacker.owner);
-  return { events };
+  attacker.acted = true;
+  attacker.mp = 0;
+  return { events, killed };
 }
 
 export function moveUnit(state, unit, q, r) {
   const reach = reachableMap(state, unit);
   const k = hk(q, r);
   if (!reach.has(k)) return { ok: false };
-  
   unit.mp -= reach.get(k);
   unit.q = q;
   unit.r = r;
-  if (unit.hasAttacked || unit.mp <= 0) unit.acted = true;
-
   const events = [];
   const city = cityAt(state, q, r);
   if (city && city.owner !== unit.owner) {
@@ -205,7 +160,6 @@ export function moveUnit(state, unit, q, r) {
     events.push({ kind: 'capture', city, from: prev, to: unit.owner });
     checkWinner(state);
   }
-  updateFogOfWar(state, unit.owner);
   return { ok: true, events };
 }
 
@@ -216,23 +170,8 @@ export function checkWinner(state) {
   else if (!p2) state.winner = 'player_1';
 }
 
-export function canResearch(state, techId, player) {
-  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
-  const t = TECHS[techId];
-  if (!t) return { ok: false, reason: 'Ungültige Technologie' };
-  if (state.techs[player].includes(techId)) return { ok: false, reason: 'Bereits erforscht' };
-  if (t.req && !state.techs[player].includes(t.req)) return { ok: false, reason: 'Voraussetzung fehlt' };
-  const cost = techCost(state, techId, player);
-  if (state.stars[player] < cost) return { ok: false, reason: 'Zu wenig Sterne' };
-  return { ok: true };
-}
-
-export function research(state, techId, player) {
-  const chk = canResearch(state, techId, player);
-  if (!chk.ok) return chk;
-  state.stars[player] -= techCost(state, techId, player);
-  state.techs[player].push(techId);
-  return { ok: true };
+export function unlockedUnits(state, player) {
+  return UNIT_ORDER.filter(t => !UNITS[t].tech || state.techs[player].includes(UNITS[t].tech));
 }
 
 export function canTrain(state, city, type, player) {
@@ -250,81 +189,204 @@ let unitSeq = 0;
 export function trainUnit(state, city, type, player) {
   const chk = canTrain(state, city, type, player);
   if (!chk.ok) return chk;
-  const def = UNITS[type];
-  state.stars[player] -= def.cost;
+  state.stars[player] -= UNITS[type].cost;
   city.trained = true;
   state.units.push({
-    id: `${player}_${Date.now().toString(36)}_${unitSeq++}`,
+    id: `${player[0]}${player === 'player_1' ? '1' : '2'}_${Date.now().toString(36)}_${unitSeq++}`,
     owner: player, type, q: city.q, r: city.r,
-    hp: def.maxHp, maxHp: def.maxHp, mp: def.move, acted: false, kills: 0
+    hp: MAX_HP, mp: UNITS[type].move, acted: false
   });
-  updateFogOfWar(state, player);
   return { ok: true };
 }
 
-export function createGame(seed = Date.now(), tribeP1 = 'imperius', tribeP2 = 'bardur') {
+export function popCost(city) {
+  return city.pop + 2;
+}
+
+export function canBuyPop(state, city, player) {
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (city.owner !== player) return { ok: false, reason: 'Fremde Stadt' };
+  if (city.pop >= MAX_POP) return { ok: false, reason: 'Maximale Bevölkerung' };
+  if (unitAt(state, city.q, city.r)) return { ok: false, reason: 'Stadt besetzt' };
+  if (state.stars[player] < popCost(city)) return { ok: false, reason: 'Zu wenig Sterne' };
+  return { ok: true };
+}
+
+export function buyPop(state, city, player) {
+  const chk = canBuyPop(state, city, player);
+  if (!chk.ok) return chk;
+  state.stars[player] -= popCost(city);
+  city.pop += 1;
+  return { ok: true };
+}
+
+export function canResearch(state, techId, player) {
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  const t = TECHS[techId];
+  if (state.techs[player].includes(techId)) return { ok: false, reason: 'Bereits erforscht' };
+  if (t.req && !state.techs[player].includes(t.req)) return { ok: false, reason: 'Voraussetzung fehlt' };
+  if (state.stars[player] < t.cost) return { ok: false, reason: 'Zu wenig Sterne' };
+  return { ok: true };
+}
+
+export function research(state, techId, player) {
+  const chk = canResearch(state, techId, player);
+  if (!chk.ok) return chk;
+  state.stars[player] -= TECHS[techId].cost;
+  state.techs[player].push(techId);
+  return { ok: true };
+}
+
+function generateTerrain(rand) {
+  let n = new Float32Array(MAP_W * MAP_H);
+  for (let i = 0; i < n.length; i++) n[i] = rand();
+  for (let pass = 0; pass < 2; pass++) {
+    const m = new Float32Array(n.length);
+    for (let r = 0; r < MAP_H; r++) {
+      for (let q = 0; q < MAP_W; q++) {
+        let sum = n[idx(q, r)], cnt = 1;
+        for (const [nq, nr] of neighbors(q, r)) { sum += n[idx(nq, nr)]; cnt++; }
+        m[idx(q, r)] = sum / cnt;
+      }
+    }
+    n = m;
+  }
+  const t = new Array(MAP_W * MAP_H);
+  for (let i = 0; i < n.length; i++) {
+    if (n[i] < 0.34) t[i] = 'water';
+    else if (n[i] > 0.87) t[i] = 'mountain';
+    else if (n[i] > 0.65) t[i] = 'forest';
+    else t[i] = 'plains';
+  }
+  return t;
+}
+
+function floodReachable(state, sq, sr) {
+  const seen = new Set([hk(sq, sr)]);
+  const queue = [[sq, sr]];
+  while (queue.length) {
+    const [q, r] = queue.shift();
+    for (const [nq, nr] of neighbors(q, r)) {
+      const k = hk(nq, nr);
+      if (seen.has(k)) continue;
+      if (!TERRAIN[terrainAt(state, nq, nr)].walkable) continue;
+      seen.add(k);
+      queue.push([nq, nr]);
+    }
+  }
+  return seen;
+}
+
+function carveLine(state, q1, r1, q2, r2, width = 1) {
+  const steps = Math.max(hexDistance(q1, r1, q2, r2) * 2, 2);
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const q = Math.round(q1 + (q2 - q1) * t);
+    const r = Math.round(r1 + (r2 - r1) * t);
+    for (const [dq, dr] of [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, -1]]) {
+      const nq = q + dq, nr = r + dr;
+      if (inBounds(nq, nr)) state.terrain[idx(nq, nr)] = 'plains';
+    }
+  }
+}
+
+export function createGame(seed = Date.now()) {
   const rand = mulberry32(seed);
-  
   const state = {
     terrain: generateTerrain(rand),
-    cities: [], 
-    units: [],
-    tribes: { player_1: tribeP1, player_2: tribeP2 },
-    stars: { player_1: START_STARS, player_2: START_STARS },
-    techs: { 
-      player_1: [TRIBES[tribeP1]?.tech || 'organisation'], 
-      player_2: [TRIBES[tribeP2]?.tech || 'jagd'] 
-    },
-    turn: 'player_1', 
-    round: 1, 
-    winner: null,
-    explored: { player_1: new Set(), player_2: new Set() }
+    cities: [], units: [],
+    stars: { player_1: 0, player_2: 0 },
+    techs: { player_1: [], player_2: [] },
+    turn: 'player_1', round: 1, winner: null
   };
 
   const s1 = [1, MAP_H - 2];
   const s2 = [MAP_W - 2, 1];
+  const clearAround = (q, r, rad) => {
+    forEachHex((nq, nr) => {
+      if (hexDistance(q, r, nq, nr) <= rad) state.terrain[idx(nq, nr)] = 'plains';
+    });
+  };
+  clearAround(s1[0], s1[1], 2);
+  clearAround(s2[0], s2[1], 2);
+  carveLine(state, s1[0], s1[1], s2[0], s2[1]);
 
-  placeCity(state, s1[0], s1[1], 'player_1', BASE_CITY_POP + 1);
-  placeCity(state, s2[0], s2[1], 'player_2', BASE_CITY_POP + 1);
+  const reachable = floodReachable(state, s1[0], s1[1]);
 
-  spawnWarrior(state, 'player_1', s1[0], s1[1]);
-  spawnWarrior(state, 'player_2', s2[0], s2[1]);
+  const candidates = [];
+  forEachHex((q, r) => {
+    const k = hk(q, r);
+    if (!reachable.has(k)) return;
+    if (state.terrain[idx(q, r)] === 'water' || state.terrain[idx(q, r)] === 'mountain') return;
+    candidates.push([q, r]);
+  });
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
 
+  const placeCity = (q, r, owner, pop) => {
+    state.terrain[idx(q, r)] = 'plains';
+    state.cities.push({ q, r, owner, pop, trained: false });
+  };
+
+  const nearest = (tq, tr, minDistFrom, centers) => {
+    let best = null, bd = Infinity;
+    for (const [q, r] of candidates) {
+      if (state.cities.some(c => c.q === q && c.r === r)) continue;
+      const dFrom = Math.min(...centers.map(([cq, cr]) => hexDistance(q, r, cq, cr)));
+      if (dFrom < minDistFrom) continue;
+      const d = hexDistance(q, r, tq, tr);
+      if (d < bd) { bd = d; best = [q, r]; }
+    }
+    return best;
+  };
+
+  const c1 = nearest(s1[0], s1[1], 3, [s1, s2]) || candidates[0];
+  placeCity(c1[0], c1[1], 'player_1', BASE_CITY_POP);
+  const c2 = nearest(s2[0], s2[1], 3, [s1, s2]) || candidates[candidates.length - 1];
+  placeCity(c2[0], c2[1], 'player_2', BASE_CITY_POP);
+
+  let placed = 2;
+  for (const [q, r] of candidates) {
+    if (placed >= 6) break;
+    if (state.cities.some(c => c.q === q && c.r === r)) continue;
+    const minD = 4;
+    if (state.cities.some(c => hexDistance(q, r, c.q, c.r) < minD)) continue;
+    if (hexDistance(q, r, s1[0], s1[1]) < 3 || hexDistance(q, r, s2[0], s2[1]) < 3) continue;
+    placeCity(q, r, null, 1 + Math.floor(rand() * 3));
+    placed++;
+  }
+
+  const addWarrior = (owner, q, r) => {
+    state.units.push({
+      id: `${owner === 'player_1' ? 'a' : 'b'}_start_${state.units.length}`,
+      owner, type: 'warrior', q, r, hp: MAX_HP, mp: UNITS.warrior.move, acted: false
+    });
+  };
+  const spawnAround = (owner, city) => {
+    addWarrior(owner, city.q, city.r);
+    const opts = neighbors(city.q, city.r).filter(([nq, nr]) =>
+      TERRAIN[terrainAt(state, nq, nr)].walkable &&
+      !unitAt(state, nq, nr) &&
+      !cityAt(state, nq, nr)
+    );
+    if (opts.length) addWarrior(owner, opts[0][0], opts[0][1]);
+  };
+  spawnAround('player_1', state.cities.find(c => c.owner === 'player_1'));
+  spawnAround('player_2', state.cities.find(c => c.owner === 'player_2'));
+
+  state.stars.player_1 = START_STARS;
+  state.stars.player_2 = START_STARS;
   startTurn(state);
   return state;
 }
 
-function placeCity(state, q, r, owner, pop) {
-  state.terrain[idx(q, r)] = 'plains';
-  state.cities.push({ q, r, owner, pop, trained: false });
-}
-
-function spawnWarrior(state, owner, q, r) {
-  state.units.push({
-    id: `${owner}_start_${Date.now().toString(36)}`,
-    owner, type: 'warrior', q, r, hp: MAX_HP, maxHp: MAX_HP, mp: UNITS.warrior.move, acted: false, kills: 0
-  });
-}
-
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+export function stateSummary(state, player) {
+  return {
+    cities: citiesFor(state, player).length,
+    units: state.units.filter(u => u.owner === player).length,
+    stars: state.stars[player],
+    techs: state.techs[player].length
   };
-}
-
-function generateTerrain(rand) {
-  const t = new Array(MAP_W * MAP_H);
-  for (let i = 0; i < t.length; i++) {
-    const r = rand();
-    if (r < 0.12) t[i] = 'ocean';
-    else if (r < 0.22) t[i] = 'water';
-    else if (r < 0.40) t[i] = 'forest';
-    else if (r < 0.52) t[i] = 'mountain';
-    else t[i] = 'plains';
-  }
-  return t;
 }

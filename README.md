@@ -6,7 +6,7 @@ Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im
 
 - **Hexagonale Karte** mit Ebenen, Wäldern (Verteidigungsbonus), Bergen (unpassierbar) und Wasser.
 - **Sterne-Wirtschaft**: Städte generieren pro Runde Einkommen basierend auf der Bevölkerung.
-- **Einheiten**: Krieger, Bogenschütze, Reiter, Verteidiger, Schwertkämpfer, Katapult – jede mit eigenen Werten für Angriff, Verteidigung, Bewegung und Reichweite.
+- **Einheiten**: Krieger, Schütze, Reiter, Verteidiger, Schwertkämpfer, Katapult – jede mit eigenen Werten für Angriff, Verteidigung, Bewegung und Reichweite.
 - **Technologiebaum**: Jagd, Ackerbau, Reitkunst, Bergbau, Handwerk, Mathematik schalten bessere Einheiten frei.
 - **Städte**: Bevölkerung kaufen, pro Stadt und Runde eine Einheit ausbilden, Städte erobern.
 - **Sieg**: Wer alle Städte des Gegners erobert, gewinnt.
@@ -22,10 +22,10 @@ Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im
 ## Starten
 
 ```bash
-npm run serve     # startet einen lokalen Webserver auf Port 8123
+npm run serve     # startet einen lokalen Webserver auf Port 8080
 ```
 
-Einfach `index.html` über einen beliebigen statischen Server ausliefern (GitHub Pages funktioniert direkt). Voraussetzung: Internetzugang für die Three.js-Importmap (jsDelivr). Für den Online-Modus werden die Supabase-Umgebungsvariablen in `js/net.js` benötigt.
+Einfach `index.html` über einen beliebigen statischen Server ausliefern (GitHub Pages funktioniert direkt). Voraussetzung: Internetzugang für die Three.js-Importmap (jsDelivr). Für den Online-Modus werden die Supabase-Zugangsdaten in `js/net.js` benötigt.
 
 ## Tests
 
