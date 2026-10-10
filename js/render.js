@@ -44,7 +44,7 @@ export function initRender(canvas, opts = {}) {
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x8fc9ea);
-  scene.fog = new THREE.Fog(0x8fc9ea, 55, 110);
+  scene.fog = new THREE.Fog(0x8fc9ea, 60, 150);
 
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, 300);
   raycaster = new THREE.Raycaster();
@@ -52,15 +52,15 @@ export function initRender(canvas, opts = {}) {
   const hemi = new THREE.HemisphereLight(0xffffff, 0x6e8f5c, 0.85);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff3dd, 1.2);
-  sun.position.set(24, 34, 14);
+  sun.position.set(28, 40, 16);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -34;
-  sun.shadow.camera.right = 34;
-  sun.shadow.camera.top = 30;
-  sun.shadow.camera.bottom = -30;
+  sun.shadow.camera.left = -44;
+  sun.shadow.camera.right = 44;
+  sun.shadow.camera.top = 40;
+  sun.shadow.camera.bottom = -40;
   sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 100;
+  sun.shadow.camera.far = 120;
   sun.shadow.bias = -0.0006;
   scene.add(sun);
 
@@ -78,7 +78,7 @@ export function initRender(canvas, opts = {}) {
   const bounds = mapBounds();
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cz = (bounds.minZ + bounds.maxZ) / 2;
-  camera.position.set(cx - 2, 19, cz + 17);
+  camera.position.set(cx - 2, 26, cz + 19);
   camera.lookAt(cx, 0, cz);
 
   controls = new OrbitControls(camera, canvas);
@@ -86,7 +86,7 @@ export function initRender(canvas, opts = {}) {
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.minDistance = 7;
-  controls.maxDistance = 46;
+  controls.maxDistance = 90;
   controls.minPolarAngle = 0.15;
   controls.maxPolarAngle = 1.25;
   controls.mouseButtons = {
@@ -177,7 +177,7 @@ function pick(clientX, clientY) {
   const h = hits[0].object.userData.hex;
   const key = hk(h.q, h.r);
   const t = tiles.get(key);
-  if (!t || !t.mesh.visible) return null;
+  if (!t || !t.seen) return null;
   return key;
 }
 
@@ -191,8 +191,16 @@ function buildTiles(state) {
   const snowGeo = geo('mountain_snow', () => new THREE.ConeGeometry(0.26, 0.32, 6));
   const peakMat = mat(0x6b7280);
   const snowMat = mat(0xf9fafb);
-  const fogGeo = geo('fog_tile', () => new THREE.CylinderGeometry(HEX_SIZE * TILE_GAP, HEX_SIZE * TILE_GAP, 0.1, 6));
-  const fogMat = new THREE.MeshBasicMaterial({ color: 0x16181d });
+  const darkMats = new Map();
+  const darkMatFor = t => {
+    if (!darkMats.has(t)) {
+      darkMats.set(t, new THREE.MeshLambertMaterial({
+        color: new THREE.Color(TERRAIN[t].color).multiplyScalar(0.3),
+        flatShading: true
+      }));
+    }
+    return darkMats.get(t);
+  };
 
   for (let r = 0; r < MAP_H; r++) {
     for (let q = 0; q < MAP_W; q++) {
@@ -203,7 +211,8 @@ function buildTiles(state) {
           HEX_SIZE * TILE_GAP, HEX_SIZE * TILE_GAP, def.height, 6
         ));
       }
-      const mesh = new THREE.Mesh(tileGeoCache.get(t), mat(def.color));
+      const baseMat = mat(def.color);
+      const mesh = new THREE.Mesh(tileGeoCache.get(t), baseMat);
       const p = toWorld(q, r);
       mesh.position.set(p.x, def.height / 2, p.z);
       mesh.receiveShadow = true;
@@ -212,12 +221,7 @@ function buildTiles(state) {
       scene.add(mesh);
       tileMeshes.push(mesh);
       const decor = [];
-      const fog = new THREE.Mesh(fogGeo, fogMat);
-      fog.position.set(p.x, def.height + 0.07, p.z);
-      fog.visible = false;
-      fog.renderOrder = 6;
-      scene.add(fog);
-      tiles.set(hk(q, r), { mesh, top: def.height, terrain: t, fog, decor });
+      tiles.set(hk(q, r), { mesh, baseMat, top: def.height, terrain: t, decor, seen: true });
 
       if (t === 'forest') {
         const spots = [
@@ -502,8 +506,8 @@ export function syncBoard(state, viewer = null) {
   const explored = exploredSet(state, viewer);
   for (const [key, t] of tiles) {
     const seen = !explored || explored.has(key);
-    t.mesh.visible = seen;
-    if (t.fog) t.fog.visible = !seen;
+    t.seen = seen;
+    t.mesh.material = seen ? t.baseMat : darkMatFor(t.terrain);
     if (t.decor) for (const d of t.decor) d.visible = seen;
   }
   for (const c of state.cities) placeCityNode(state, c);

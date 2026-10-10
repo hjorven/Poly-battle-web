@@ -41,19 +41,25 @@
       <h1>Poly Battle</h1>
       <p class="tagline">Rundenbasierte Eroberung im Stil von Battle of Polytopia</p>
       <div class="menu-buttons">
-        <button class="btn primary big" data-mode="bot">Gegen KI</button>
+        <button class="btn primary big" data-mode="bot">Gegen 3 KI (1 Spieler)</button>
         <button class="btn big" data-mode="hotseat">Hotseat (2 Spieler)</button>
         <button class="btn big" data-mode="online">Online (Link teilen)</button>
         <button id="copyLinkBtn" class="btn big hidden">Link zum Spiel kopieren</button>
       </div>
+      <div class="rules" id="tribe-box">
+        <h3>Dein Stamm (Gegen KI)</h3>
+        <div id="tribe-pick" class="tribe-pick"></div>
+      </div>
       <div class="rules">
         <h3>So wird gespielt</h3>
         <ul>
+          <li><b>4 Stämme</b> starten auf einer großen Welt: du gegen 3 KIs. Jeder Stamm beginnt mit eigener Technologie – erobere oder verliere Städte.</li>
           <li><b>Städte</b> bringen pro Bevölkerung 1 Stern pro Runde. Kaufe Bevölkerung oder bilde Einheiten aus.</li>
           <li><b>Einheiten</b> können sich bewegen und angreifen – nach einem Angriff ist der Zug vorbei.</li>
+          <li><b>Unentdecktes</b> Land ist abgedunkelt und wird durch deine Einheiten und Städte aufgedeckt.</li>
           <li><b>Wald</b> gibt Verteidigungsbonus, <b>Berge</b> werden mit der Tech <b>Klettern</b> begehbar, <b>Wasser</b> braucht Technologie (nicht verfügbar).</li>
           <li><b>Forschung</b> läuft in drei Stufen und schaltet Einheiten frei (Schütze, Reiter, Verteidiger, Schwertkämpfer, Katapult, Gedankenbeuger). Kosten steigen mit der Zahl deiner Städte.</li>
-          <li><b>Sieg:</b> Erbeute alle Städte des Gegners.</li>
+          <li><b>Sieg:</b> Erbeute alle Städte der Gegner.</li>
         </ul>
       </div>
       <p class="footnote">Karte ziehen: Ziehen · Zoomen: Rad/Zoom · Auswählen: Klick</p>
