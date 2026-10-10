@@ -1,4 +1,5 @@
 import { UNITS, TECHS, TECH_TIERS, NAMES, MAX_POP, MAX_HP, COLORS } from './config.js';
+import { incomeFor, techCost } from './rules.js';
 
 const $ = id => document.getElementById(id);
 let handlers = {};
@@ -101,7 +102,7 @@ export function showUnitPanel(state, unit, ctx) {
 export function showCityPanel(state, city, ctx) {
   const mine = city.owner === ctx.actAs && ctx.myTurn;
   const ownerName = city.owner ? NAMES[city.owner] : 'Neutral';
-  const income = city.pop + (city.owner && state.techs[city.owner].includes('ackerbau') ? 1 : 0);
+  const income = city.owner ? incomeFor(state, city.owner) : city.pop;
   const occupied = state.units.some(u => u.q === city.q && u.r === city.r);
   let actions = '';
   if (city.owner) {
@@ -183,13 +184,14 @@ export function openTech(state, ctx) {
     list.appendChild(label);
     for (const id of tier) {
       const t = TECHS[id];
+      const cost = techCost(state, id, ctx.actAs);
       const done = state.techs[ctx.actAs].includes(id);
       const locked = t.req && !state.techs[ctx.actAs].includes(t.req);
-      const poor = stars < t.cost;
+      const poor = stars < cost;
       const btn = document.createElement('button');
       btn.className = 'tech' + (done ? ' done' : '');
       btn.disabled = done || locked || !ctx.myTurn;
-      btn.innerHTML = `<span class="t-body"><span class="t-name">${t.name}</span><span class="t-desc">${t.desc}${locked ? ' · benötigt ' + TECHS[t.req].name : ''}</span></span><span class="t-cost">${t.cost} Sterne</span>`;
+      btn.innerHTML = `<span class="t-body"><span class="t-name">${t.name}</span><span class="t-desc">${t.desc}${locked ? ' · benötigt ' + TECHS[t.req].name : ''}</span></span><span class="t-cost">${cost} Sterne</span>`;
       if (!done && !locked && ctx.myTurn && !poor) {
         btn.addEventListener('click', () => handlers.onResearch(id));
       }

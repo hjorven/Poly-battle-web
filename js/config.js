@@ -12,33 +12,53 @@ export const COLORS = { player_1: 0x2563eb, player_2: 0xdc2626, neutral: 0xa1a1a
 export const TERRAIN = {
   plains: { name: 'Ebene', color: 0x74c043, height: 0.5, walkable: true, move: 1, def: 0 },
   forest: { name: 'Wald', color: 0x4c9a2a, height: 0.5, walkable: true, move: 2, def: 2 },
-  mountain: { name: 'Berg', color: 0x9b9b94, height: 1.15, walkable: false, move: 99, def: 4 },
+  mountain: { name: 'Berg', color: 0x9b9b94, height: 1.15, walkable: false, move: 2, def: 4 },
   water: { name: 'Wasser', color: 0x3fa7e0, height: 0.3, walkable: false, move: 99, def: 0 }
 };
 
 export const UNITS = {
   warrior: { name: 'Krieger', cost: 2, atk: 2, def: 2, move: 2, range: 1, tech: null },
-  archer: { name: 'Schütze', cost: 3, atk: 2, def: 1, move: 2, range: 2, tech: 'jagd' },
-  rider: { name: 'Reiter', cost: 3, atk: 2, def: 1, move: 3, range: 1, tech: 'reitkunst' },
-  defender: { name: 'Verteidiger', cost: 3, atk: 1, def: 4, move: 1, range: 1, tech: 'bergbau' },
-  swordsman: { name: 'Schwertkämpfer', cost: 5, atk: 4, def: 3, move: 2, range: 1, tech: 'handwerk' },
-  catapult: { name: 'Katapult', cost: 5, atk: 4, def: 1, move: 1, range: 2, tech: 'mathematik' }
+  archer: { name: 'Schütze', cost: 3, atk: 2, def: 1, move: 2, range: 2, tech: 'bogenschiessen' },
+  rider: { name: 'Reiter', cost: 3, atk: 2, def: 1, move: 3, range: 1, tech: 'reiten' },
+  defender: { name: 'Verteidiger', cost: 3, atk: 1, def: 4, move: 1, range: 1, tech: 'schildmacher' },
+  swordsman: { name: 'Schwertkämpfer', cost: 5, atk: 4, def: 3, move: 2, range: 1, tech: 'schmiedekunst' },
+  catapult: { name: 'Katapult', cost: 5, atk: 4, def: 1, move: 1, range: 3, tech: 'mathematik' },
+  mind_bender: { name: 'Gedankenbeuger', cost: 5, atk: 1, def: 2, move: 1, range: 1, tech: 'philosophie', heal: 2 }
 };
 
 export const TECHS = {
-  jagd: { name: 'Jagd', cost: 5, req: null, desc: 'Schütze freischalten' },
-  ackerbau: { name: 'Ackerbau', cost: 5, req: null, desc: '+1 Stern pro Stadt und Runde' },
-  reitkunst: { name: 'Reitkunst', cost: 8, req: 'jagd', desc: 'Reiter freischalten' },
-  bergbau: { name: 'Bergbau', cost: 8, req: 'ackerbau', desc: 'Verteidiger freischalten' },
-  handwerk: { name: 'Handwerk', cost: 12, req: 'bergbau', desc: 'Schwertkämpfer freischalten' },
-  mathematik: { name: 'Mathematik', cost: 15, req: 'handwerk', desc: 'Katapult freischalten' }
+  organisation: { name: 'Organisation', tier: 1, req: null, desc: '+1 Stern pro Stadt und Runde' },
+  jagd: { name: 'Jagd', tier: 1, req: null, desc: 'Zweig: Forstwirtschaft, Bogenschießen' },
+  klettern: { name: 'Klettern', tier: 1, req: null, desc: 'Einheiten können Berge betreten' },
+  reiten: { name: 'Reiten', tier: 1, req: null, desc: 'Reiter ausbilden' },
+  fischerei: { name: 'Fischerei', tier: 1, req: null, desc: 'Zweig: Segeln' },
+
+  landwirtschaft: { name: 'Landwirtschaft', tier: 2, req: 'organisation', desc: '+1 Stern pro Stadt und Runde' },
+  schildmacher: { name: 'Schildmacher', tier: 2, req: 'organisation', desc: 'Verteidiger ausbilden' },
+  forstwirtschaft: { name: 'Forstwirtschaft', tier: 2, req: 'jagd', desc: 'Zweig: Mathematik' },
+  bogenschiessen: { name: 'Bogenschießen', tier: 2, req: 'jagd', desc: 'Schützen ausbilden' },
+  bergbau: { name: 'Bergbau', tier: 2, req: 'klettern', desc: 'Zweig: Schmiedekunst' },
+  medaillen: { name: 'Freie Hände', tier: 2, req: 'klettern', desc: 'Ruinen erforschen' },
+  roesser: { name: 'Wege', tier: 2, req: 'reiten', desc: '+1 Bewegung für alle Einheiten' },
+  segeln: { name: 'Segeln', tier: 2, req: 'fischerei', desc: 'Zweig: Navigation' },
+
+  philosophie: { name: 'Philosophie', tier: 3, req: 'landwirtschaft', desc: 'Forschungskosten -20 %, Gedankenbeuger' },
+  diplomatie: { name: 'Diplomatie', tier: 3, req: 'schildmacher', desc: 'Botschaften und Bündnisse' },
+  mathematik: { name: 'Mathematik', tier: 3, req: 'forstwirtschaft', desc: 'Katapult ausbilden' },
+  schmiedekunst: { name: 'Schmiedekunst', tier: 3, req: 'bergbau', desc: 'Schwertkämpfer ausbilden' },
+  navigation: { name: 'Navigation', tier: 3, req: 'segeln', desc: 'Kriegsschiffe ausbilden' }
 };
 
 export const TECH_TIERS = [
-  ['jagd', 'ackerbau'],
-  ['reitkunst', 'bergbau'],
-  ['handwerk'],
-  ['mathematik']
+  ['organisation', 'jagd', 'klettern', 'reiten', 'fischerei'],
+  ['landwirtschaft', 'schildmacher', 'forstwirtschaft', 'bogenschiessen', 'bergbau', 'medaillen', 'roesser', 'segeln'],
+  ['philosophie', 'diplomatie', 'mathematik', 'schmiedekunst', 'navigation']
 ];
 
-export const UNIT_ORDER = ['warrior', 'archer', 'rider', 'defender', 'swordsman', 'catapult'];
+export const UNIT_ORDER = ['warrior', 'archer', 'rider', 'defender', 'swordsman', 'catapult', 'mind_bender'];
+
+export function researchCost(tier, cityCount, hasPhilosophy = false) {
+  let cost = tier * (1 + cityCount);
+  if (hasPhilosophy) cost = Math.ceil(cost * 0.8);
+  return cost;
+}

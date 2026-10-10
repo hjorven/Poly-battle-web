@@ -4,10 +4,10 @@ Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im
 
 ## Spielprinzip
 
-- **Hexagonale Karte** mit Ebenen, Wäldern (Verteidigungsbonus), Bergen (unpassierbar) und Wasser.
+- **Hexagonale Karte** mit Ebenen, Wäldern (Verteidigungsbonus), Bergen (mit „Klettern" begehbar) und Wasser.
 - **Sterne-Wirtschaft**: Städte generieren pro Runde Einkommen basierend auf der Bevölkerung.
-- **Einheiten**: Krieger, Schütze, Reiter, Verteidiger, Schwertkämpfer, Katapult – jede mit eigenen Werten für Angriff, Verteidigung, Bewegung und Reichweite.
-- **Technologiebaum**: Jagd, Ackerbau, Reitkunst, Bergbau, Handwerk, Mathematik schalten bessere Einheiten frei.
+- **Einheiten**: Krieger, Schütze, Reiter, Verteidiger, Schwertkämpfer, Katapult, Gedankenbeuger – jede mit eigenen Werten für Angriff, Verteidigung, Bewegung und Reichweite.
+- **Technologiebaum** in drei Stufen: Organisation, Jagd, Klettern, Reiten, Fischerei; Landwirtschaft, Schildmacher, Forstwirtschaft, Bogenschießen, Bergbau, Freie Hände, Wege, Segeln; Philosophie, Diplomatie, Mathematik, Schmiedekunst, Navigation. Die Kosten skalieren mit der Zahl eigener Städte.
 - **Städte**: Bevölkerung kaufen, pro Stadt und Runde eine Einheit ausbilden, Städte erobern.
 - **Sieg**: Wer alle Städte des Gegners erobert, gewinnt.
 

@@ -1,6 +1,6 @@
 import {
   MAP_W, MAP_H, MAX_HP, MAX_POP, START_STARS, BASE_CITY_POP,
-  TERRAIN, UNITS, TECHS, UNIT_ORDER, COLORS
+  TERRAIN, UNITS, TECHS, UNIT_ORDER, COLORS, researchCost
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex } from './hex.js';
 
@@ -40,9 +40,16 @@ export function cityOwner(state, q, r) {
 
 export function incomeFor(state, player) {
   let s = 0;
-  for (const c of state.cities) if (c.owner === player) s += c.pop;
-  if (state.techs[player].includes('ackerbau')) s += state.cities.filter(c => c.owner === player).length;
+  let cities = 0;
+  for (const c of state.cities) if (c.owner === player) { s += c.pop; cities += 1; }
+  if (state.techs[player].includes('organisation')) s += cities;
+  if (state.techs[player].includes('landwirtschaft')) s += cities;
   return s;
+}
+
+export function maxMove(state, owner, type) {
+  const base = UNITS[type].move;
+  return state.techs[owner] && state.techs[owner].includes('roesser') ? base + 1 : base;
 }
 
 export function citiesFor(state, player) {
@@ -57,8 +64,17 @@ export function startTurn(state) {
   const p = state.turn;
   for (const u of state.units) {
     if (u.owner === p) {
-      u.mp = UNITS[u.type].move;
+      u.mp = maxMove(state, p, u.type);
       u.acted = false;
+    }
+  }
+  for (const u of state.units) {
+    if (u.owner !== p || !UNITS[u.type].heal) continue;
+    for (const [nq, nr] of neighbors(u.q, u.r)) {
+      const ally = unitAt(state, nq, nr);
+      if (ally && ally.owner === p && ally !== u) {
+        ally.hp = Math.min(MAX_HP, ally.hp + UNITS[u.type].heal);
+      }
     }
   }
   for (const c of state.cities) {
@@ -77,6 +93,7 @@ export function reachableMap(state, unit) {
   const out = new Map();
   if (unit.acted || unit.mp <= 0) return out;
   const budget = unit.mp;
+  const climb = !!(state.techs[unit.owner] && state.techs[unit.owner].includes('klettern'));
   const dist = new Map([[hk(unit.q, unit.r), 0]]);
   const queue = [[unit.q, unit.r, 0]];
   while (queue.length) {
@@ -85,8 +102,9 @@ export function reachableMap(state, unit) {
     if (cost > (dist.get(hk(q, r)) ?? Infinity)) continue;
     for (const [nq, nr] of neighbors(q, r)) {
       if (unitAt(state, nq, nr)) continue;
-      const t = TERRAIN[terrainAt(state, nq, nr)];
-      if (!t.walkable) continue;
+      const tile = terrainAt(state, nq, nr);
+      const t = TERRAIN[tile];
+      if (!t.walkable && !(climb && tile === 'mountain')) continue;
       const nc = cost + t.move;
       if (nc > budget) continue;
       const k = hk(nq, nr);
@@ -194,7 +212,7 @@ export function trainUnit(state, city, type, player) {
   state.units.push({
     id: `${player[0]}${player === 'player_1' ? '1' : '2'}_${Date.now().toString(36)}_${unitSeq++}`,
     owner: player, type, q: city.q, r: city.r,
-    hp: MAX_HP, mp: UNITS[type].move, acted: false
+    hp: MAX_HP, mp: maxMove(state, player, type), acted: false
   });
   return { ok: true };
 }
@@ -220,19 +238,26 @@ export function buyPop(state, city, player) {
   return { ok: true };
 }
 
+export function techCost(state, techId, player) {
+  const t = TECHS[techId];
+  const cities = citiesFor(state, player).length;
+  const discount = state.techs[player].includes('philosophie');
+  return researchCost(t.tier, cities, discount);
+}
+
 export function canResearch(state, techId, player) {
   if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
   const t = TECHS[techId];
   if (state.techs[player].includes(techId)) return { ok: false, reason: 'Bereits erforscht' };
   if (t.req && !state.techs[player].includes(t.req)) return { ok: false, reason: 'Voraussetzung fehlt' };
-  if (state.stars[player] < t.cost) return { ok: false, reason: 'Zu wenig Sterne' };
+  if (state.stars[player] < techCost(state, techId, player)) return { ok: false, reason: 'Zu wenig Sterne' };
   return { ok: true };
 }
 
 export function research(state, techId, player) {
   const chk = canResearch(state, techId, player);
   if (!chk.ok) return chk;
-  state.stars[player] -= TECHS[techId].cost;
+  state.stars[player] -= techCost(state, techId, player);
   state.techs[player].push(techId);
   return { ok: true };
 }
