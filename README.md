@@ -9,6 +9,7 @@ Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im
 - **Einheiten**: Krieger, Schütze, Reiter, Verteidiger, Schwertkämpfer, Katapult, Gedankenbeuger – jede mit eigenen Werten für Angriff, Verteidigung, Bewegung und Reichweite.
 - **Technologiebaum** in drei Stufen: Organisation, Jagd, Klettern, Reiten, Fischerei; Landwirtschaft, Schildmacher, Forstwirtschaft, Bogenschießen, Bergbau, Freie Hände, Wege, Segeln; Philosophie, Diplomatie, Mathematik, Schmiedekunst, Navigation. Die Kosten skalieren mit der Zahl eigener Städte.
 - **Städte**: Bevölkerung kaufen, pro Stadt und Runde eine Einheit ausbilden, Städte erobern.
+- **Fog of War**: Die Karte ist zunächst verdeckt und wird durch Einheiten und Städte Schritt für Schritt aufgedeckt.
 - **Sieg**: Wer alle Städte des Gegners erobert, gewinnt.
 
 ## Spielmodi

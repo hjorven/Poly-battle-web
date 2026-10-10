@@ -1,6 +1,6 @@
 import {
   MAP_W, MAP_H, MAX_HP, MAX_POP, START_STARS, BASE_CITY_POP,
-  TERRAIN, UNITS, TECHS, UNIT_ORDER, COLORS, researchCost
+  TERRAIN, UNITS, TECHS, UNIT_ORDER, COLORS, VISION, researchCost
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex } from './hex.js';
 
@@ -56,6 +56,38 @@ export function citiesFor(state, player) {
   return state.cities.filter(c => c.owner === player);
 }
 
+export function visibleKeys(state, player) {
+  const keys = new Set();
+  const addArea = (q, r, rad) => {
+    forEachHex((nq, nr) => {
+      if (hexDistance(q, r, nq, nr) <= rad) keys.add(hk(nq, nr));
+    });
+  };
+  for (const u of state.units) {
+    if (u.owner === player) addArea(u.q, u.r, UNITS[u.type].sight ?? VISION.unit);
+  }
+  for (const c of state.cities) {
+    if (c.owner === player) addArea(c.q, c.r, VISION.city);
+  }
+  return keys;
+}
+
+export function updateExplored(state, player) {
+  if (!state.explored || !state.explored[player]) return false;
+  const visible = visibleKeys(state, player);
+  const known = new Set(state.explored[player]);
+  let changed = false;
+  for (const k of visible) {
+    if (!known.has(k)) { known.add(k); state.explored[player].push(k); changed = true; }
+  }
+  return changed;
+}
+
+export function isExplored(state, player, q, r) {
+  if (!player || !state.explored || !state.explored[player]) return true;
+  return state.explored[player].includes(hk(q, r));
+}
+
 export function canAct(state, player) {
   return !state.winner && state.turn === player;
 }
@@ -81,6 +113,7 @@ export function startTurn(state) {
     if (c.owner === p) c.trained = false;
   }
   state.stars[p] += incomeFor(state, p);
+  updateExplored(state, p);
 }
 
 export function endTurn(state) {
@@ -124,7 +157,8 @@ export function attackTargets(state, unit) {
   const range = UNITS[unit.type].range;
   return state.units.filter(u =>
     u.owner !== unit.owner &&
-    hexDistance(unit.q, unit.r, u.q, u.r) <= range
+    hexDistance(unit.q, unit.r, u.q, u.r) <= range &&
+    isExplored(state, unit.owner, u.q, u.r)
   );
 }
 
@@ -178,6 +212,7 @@ export function moveUnit(state, unit, q, r) {
     events.push({ kind: 'capture', city, from: prev, to: unit.owner });
     checkWinner(state);
   }
+  updateExplored(state, unit.owner);
   return { ok: true, events };
 }
 
@@ -214,6 +249,7 @@ export function trainUnit(state, city, type, player) {
     owner: player, type, q: city.q, r: city.r,
     hp: MAX_HP, mp: maxMove(state, player, type), acted: false
   });
+  updateExplored(state, player);
   return { ok: true };
 }
 
@@ -263,24 +299,12 @@ export function research(state, techId, player) {
 }
 
 function generateTerrain(rand) {
-  let n = new Float32Array(MAP_W * MAP_H);
-  for (let i = 0; i < n.length; i++) n[i] = rand();
-  for (let pass = 0; pass < 2; pass++) {
-    const m = new Float32Array(n.length);
-    for (let r = 0; r < MAP_H; r++) {
-      for (let q = 0; q < MAP_W; q++) {
-        let sum = n[idx(q, r)], cnt = 1;
-        for (const [nq, nr] of neighbors(q, r)) { sum += n[idx(nq, nr)]; cnt++; }
-        m[idx(q, r)] = sum / cnt;
-      }
-    }
-    n = m;
-  }
   const t = new Array(MAP_W * MAP_H);
-  for (let i = 0; i < n.length; i++) {
-    if (n[i] < 0.34) t[i] = 'water';
-    else if (n[i] > 0.87) t[i] = 'mountain';
-    else if (n[i] > 0.65) t[i] = 'forest';
+  for (let i = 0; i < t.length; i++) {
+    const roll = rand();
+    if (roll < 0.22) t[i] = 'water';
+    else if (roll < 0.40) t[i] = 'forest';
+    else if (roll < 0.52) t[i] = 'mountain';
     else t[i] = 'plains';
   }
   return t;
@@ -322,6 +346,7 @@ export function createGame(seed = Date.now()) {
     cities: [], units: [],
     stars: { player_1: 0, player_2: 0 },
     techs: { player_1: [], player_2: [] },
+    explored: { player_1: [], player_2: [] },
     turn: 'player_1', round: 1, winner: null
   };
 
