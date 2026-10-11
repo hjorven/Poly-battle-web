@@ -14,6 +14,7 @@ let selectedTribe = null;
 
 export function initUI(h) {
   handlers = h;
+  bindTechNav();
   $('techBtn').addEventListener('click', () => handlers.onOpenTech());
   $('techClose').addEventListener('click', () => closeTech());
   $('tech-overlay').addEventListener('click', e => {
@@ -302,6 +303,93 @@ const CHILDREN = (() => {
 const ANGLE = {};
 ROOTS.forEach((id, i) => { ANGLE[id] = (-90 + i * 72) * Math.PI / 180; });
 
+const techNav = { scale: 1, tx: 0, ty: 0, bound: false, lastDrag: 0 };
+function resetTechNav() {
+  techNav.scale = 1;
+  techNav.tx = 0;
+  techNav.ty = 0;
+  applyTechNav();
+}
+function applyTechNav() {
+  const vp = $('tech-viewport');
+  if (vp) vp.style.transform = `translate(${techNav.tx}px, ${techNav.ty}px) scale(${techNav.scale})`;
+}
+function bindTechNav() {
+  if (techNav.bound || !$('tech-tree')) return;
+  techNav.bound = true;
+  const tree = $('tech-tree');
+  const zoomAt = (factor, cx, cy) => {
+    const ns = Math.min(3.2, Math.max(0.4, techNav.scale * factor));
+    if (ns === techNav.scale) return;
+    const k = ns / techNav.scale;
+    techNav.tx = cx - (cx - techNav.tx) * k;
+    techNav.ty = cy - (cy - techNav.ty) * k;
+    techNav.scale = ns;
+    applyTechNav();
+  };
+  tree.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = tree.getBoundingClientRect();
+    zoomAt(e.deltaY < 0 ? 1.12 : 0.89, e.clientX - rect.left, e.clientY - rect.top);
+  }, { passive: false });
+  const pointers = new Map();
+  const pinch = { prevDist: 0, cx: 0, cy: 0 };
+  let dragAcc = 0;
+  tree.addEventListener('pointerdown', e => {
+    tree.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    dragAcc = 0;
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch.prevDist = Math.hypot(a.x - b.x, a.y - b.y);
+      pinch.cx = (a.x + b.x) / 2;
+      pinch.cy = (a.y + b.y) / 2;
+    }
+    tree.classList.add('grabbing');
+  });
+  tree.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    const cur = { x: e.clientX, y: e.clientY };
+    if (pointers.size === 1) {
+      const p = pointers.get(e.pointerId);
+      const dx = cur.x - p.x, dy = cur.y - p.y;
+      dragAcc += Math.abs(dx) + Math.abs(dy);
+      techNav.tx += dx;
+      techNav.ty += dy;
+      p.x = cur.x; p.y = cur.y;
+      applyTechNav();
+    } else if (pointers.size === 2) {
+      pointers.set(e.pointerId, cur);
+      const [a, b] = [...pointers.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch.prevDist > 0) {
+        const rect = tree.getBoundingClientRect();
+        zoomAt(dist / pinch.prevDist, (a.x + b.x) / 2 - rect.left, (a.y + b.y) / 2 - rect.top);
+      }
+      pinch.prevDist = dist;
+      pinch.cx = (a.x + b.x) / 2;
+      pinch.cy = (a.y + b.y) / 2;
+    }
+  });
+  const endPointer = e => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch.prevDist = 0;
+    if (pointers.size === 0) {
+      tree.classList.remove('grabbing');
+      if (dragAcc > 6) techNav.lastDrag = Date.now();
+    }
+  };
+  tree.addEventListener('pointerup', endPointer);
+  tree.addEventListener('pointercancel', endPointer);
+  window.addEventListener('pointerup', endPointer);
+  tree.addEventListener('click', e => {
+    if (Date.now() - techNav.lastDrag < 350) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }, true);
+}
+
 function layoutTechs(W, H) {
   const cx = W / 2, cy = H / 2;
   const m = Math.min(W, H);
@@ -328,6 +416,7 @@ function layoutTechs(W, H) {
 export function openTech(state, ctx) {
   const overlay = $('tech-overlay');
   overlay.classList.remove('hidden');
+  resetTechNav();
   const stars = state.stars[ctx.actAs];
   $('tech-stars').textContent = stars + ' Sterne';
   const tree = $('tech-tree');
