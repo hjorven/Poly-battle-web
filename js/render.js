@@ -198,6 +198,134 @@ function pick(clientX, clientY) {
   return key;
 }
 
+function resourceNode(type) {
+  const g = new THREE.Group();
+  const rnd = mulberry(7);
+  if (type === 'fruit') {
+    const trunk = new THREE.Mesh(geo('frTrunk', () => new THREE.CylinderGeometry(0.025, 0.035, 0.22, 5)), mat(0x6b4a2b));
+    trunk.position.y = 0.11;
+    g.add(trunk);
+    const crownGeo = () => new THREE.IcosahedronGeometry(0.16, 0);
+    const crown = new THREE.Mesh(geo('frCrown', crownGeo), mat(0x3e9140));
+    crown.position.y = 0.26;
+    g.add(crown);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + rnd() * 0.6;
+      const apple = new THREE.Mesh(geo('frApple', () => new THREE.SphereGeometry(0.045, 6, 5)), mat(i % 2 ? 0xe0503a : 0xd2373c));
+      apple.position.set(Math.cos(a) * 0.1, 0.26 + rnd() * 0.05, Math.sin(a) * 0.1);
+      g.add(apple);
+    }
+  } else if (type === 'animals') {
+    for (let i = 0; i < 2; i++) {
+      const body = new THREE.Mesh(geo('anBody', () => new THREE.BoxGeometry(0.14, 0.1, 0.07)), mat(0x8a5a33));
+      body.position.set(-0.06 + i * 0.14, 0.06 + rnd() * 0.02, (rnd() - 0.5) * 0.14);
+      body.rotation.y = rnd() * Math.PI * 2;
+      g.add(body);
+      const head = new THREE.Mesh(geo('anHead', () => new THREE.IcosahedronGeometry(0.04, 0)), mat(0x9c6b3a));
+      head.position.set(body.position.x + 0.09, body.position.y + 0.04, body.position.z + 0.02);
+      g.add(head);
+    }
+  } else if (type === 'fish') {
+    for (let i = 0; i < 3; i++) {
+      const a = i * 2.1;
+      const fish = new THREE.Mesh(geo('fiBody', () => new THREE.ConeGeometry(0.05, 0.17, 5)), mat(i === 1 ? 0xcfe9f5 : 0x9ccfe8));
+      fish.rotation.z = Math.PI / 2;
+      fish.rotation.y = a;
+      fish.position.set(Math.cos(a) * 0.12, 0.05, Math.sin(a) * 0.12);
+      fish.rotation.x = 0.4;
+      g.add(fish);
+    }
+  } else if (type === 'minerals') {
+    for (let i = 0; i < 4; i++) {
+      const c = new THREE.Mesh(geo('miCryst', () => new THREE.OctahedronGeometry(0.06 + rnd() * 0.04, 0)), mat(i % 2 ? 0xb7bdd1 : 0x8992ab));
+      c.position.set((rnd() - 0.5) * 0.3, 0.05 + rnd() * 0.05, (rnd() - 0.5) * 0.3);
+      c.scale.y = 1.6;
+      c.castShadow = true;
+      g.add(c);
+    }
+  }
+  for (const m of g.children) m.castShadow = true;
+  return g;
+}
+
+function improvementNode(type) {
+  const g = new THREE.Group();
+  if (type === 'farm') {
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 2; j++) {
+        const bed = new THREE.Mesh(geo('fmBed', () => new THREE.BoxGeometry(0.065, 0.02, 0.14)), mat(0x7a5230));
+        bed.position.set(-0.15 + i * 0.1, 0.01, -0.07 + j * 0.14);
+        g.add(bed);
+        const crop = new THREE.Mesh(geo('fmCrop', () => new THREE.ConeGeometry(0.022, 0.05, 4)), mat((i + j) % 2 ? 0x54a63a : 0x6fbf3f));
+        crop.position.set(bed.position.x, 0.045, bed.position.z);
+        g.add(crop);
+      }
+    }
+  } else if (type === 'sawmill') {
+    const base = new THREE.Mesh(geo('swBase', () => new THREE.BoxGeometry(0.3, 0.1, 0.22)), mat(0x6b4a2b));
+    base.position.y = 0.05;
+    g.add(base);
+    const roof = new THREE.Mesh(geo('swRoof', () => new THREE.BoxGeometry(0.34, 0.05, 0.26)), mat(0x8a5a33));
+    roof.position.y = 0.15;
+    g.add(roof);
+    const saw = new THREE.Mesh(geo('swBlade', () => new THREE.CylinderGeometry(0.08, 0.08, 0.02, 10)), mat(0xd9dee5));
+    saw.rotation.z = Math.PI / 2;
+    saw.position.set(0.2, 0.12, 0);
+    g.add(saw);
+  } else if (type === 'mine') {
+    const stone = mat(0x6b7280);
+    const gA = new THREE.Mesh(geo('mPillarL', () => new THREE.BoxGeometry(0.07, 0.2, 0.07)), stone);
+    gA.position.set(-0.12, 0.1, 0);
+    g.add(gA);
+    const gB = new THREE.Mesh(geo('mPillarR', () => new THREE.BoxGeometry(0.07, 0.2, 0.07)), stone);
+    gB.position.set(0.12, 0.1, 0);
+    g.add(gB);
+    const top = new THREE.Mesh(geo('mTop', () => new THREE.BoxGeometry(0.36, 0.05, 0.12)), stone);
+    top.position.y = 0.215;
+    g.add(top);
+    const ore = new THREE.Mesh(geo('mOre', () => new THREE.OctahedronGeometry(0.06, 0)), mat(0xd9a13b));
+    ore.position.set(0.12, 0.28, 0);
+    g.add(ore);
+    const dark = new THREE.Mesh(geo('mHole', () => new THREE.CylinderGeometry(0.09, 0.11, 0.05, 6)), mat(0x27272a));
+    dark.position.set(0, 0.03, 0);
+    g.add(dark);
+  } else if (type === 'port') {
+    const planks = new THREE.Mesh(geo('ptPlanks', () => new THREE.BoxGeometry(0.46, 0.07, 0.16)), mat(0x8a5a33));
+    planks.position.y = 0.035;
+    g.add(planks);
+    const shed = new THREE.Mesh(geo('ptShed', () => new THREE.BoxGeometry(0.16, 0.14, 0.12)), mat(0x6b4a2b));
+    shed.position.set(-0.14, 0.11, 0);
+    g.add(shed);
+    const roof = new THREE.Mesh(geo('ptRoof', () => new THREE.ConeGeometry(0.14, 0.08, 4)), mat(0x9c6b3a));
+    roof.rotation.y = Math.PI / 4;
+    roof.position.set(-0.14, 0.21, 0);
+    g.add(roof);
+  } else if (type === 'temple') {
+    const base = new THREE.Mesh(geo('tpBase', () => new THREE.BoxGeometry(0.2, 0.16, 0.2)), mat(0xf1ece1));
+    base.position.y = 0.08;
+    g.add(base);
+    const colGeo = () => new THREE.CylinderGeometry(0.012, 0.012, 0.14, 5);
+    for (const [cx, cz] of [[-0.09, -0.09], [0.09, -0.09], [-0.09, 0.09], [0.09, 0.09]]) {
+      const col = new THREE.Mesh(geo('tpCol', colGeo), mat(0xe6ddc8));
+      col.position.set(cx, 0.08, cz);
+      g.add(col);
+    }
+    const dome = new THREE.Mesh(geo('tpDome', () => new THREE.SphereGeometry(0.09, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2)), mat(0xe0b84d));
+    dome.position.y = 0.24;
+    g.add(dome);
+    const tip = new THREE.Mesh(geo('tpTip', () => new THREE.ConeGeometry(0.02, 0.07, 5)), mat(0xc8a64a));
+    tip.position.y = 0.32;
+    g.add(tip);
+  }
+  for (const m of g.children) m.castShadow = true;
+  return g;
+}
+
+function mulberry(seed) {
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
 function buildTiles(state) {
   const tileGeoCache = new Map();
   const trunkGeo = geo('tree_trunk', () => new THREE.CylinderGeometry(0.04, 0.05, 0.22, 5));
@@ -268,6 +396,20 @@ function buildTiles(state) {
         snow.castShadow = true;
         mesh.add(snow);
         decor.push(snow);
+      }
+      const res = state.resources ? state.resources[hk(q, r)] : null;
+      if (res) {
+        const rn = resourceNode(res);
+        rn.position.y = def.height / 2 + 0.02;
+        mesh.add(rn);
+        decor.push(rn);
+      }
+      const imp = state.improvements ? state.improvements[hk(q, r)] : null;
+      if (imp) {
+        const inode = improvementNode(imp);
+        inode.position.y = def.height / 2 + 0.02;
+        mesh.add(inode);
+        decor.push(inode);
       }
     }
   }
@@ -391,9 +533,53 @@ function unitBody(type, color) {
     add(new THREE.Mesh(geo('gArmL', () => new THREE.BoxGeometry(0.15, 0.6, 0.15)), teamMat()), -0.44, 0.45, 0);
     add(new THREE.Mesh(geo('gArmR', () => new THREE.BoxGeometry(0.15, 0.6, 0.15)), teamMat()), 0.44, 0.45, 0);
     add(new THREE.Mesh(geo('gClub', () => new THREE.CylinderGeometry(0.1, 0.14, 0.55, 6)), mat(0x6b4a2b)), 0.52, 0.85, 0);
+  } else if (type === 'boat') {
+    const hull = add(new THREE.Mesh(geo('bHull', () => boatHullGeo(0.34, 0.17)), mat(0x8a5a33)), 0, 0.14, 0);
+    add(new THREE.Mesh(geo('bMast', () => new THREE.CylinderGeometry(0.02, 0.02, 0.4, 5)), mat(0x5b4126)), 0, 0.48, 0);
+    const sail = add(new THREE.Mesh(geo('bSail', () => new THREE.BoxGeometry(0.02, 0.28, 0.24)), teamMat()), 0, 0.42, 0);
+    sail.rotation.y = Math.PI / 2;
+  } else if (type === 'ship') {
+    const hull = add(new THREE.Mesh(geo('sHull', () => boatHullGeo(0.46, 0.22)), mat(0x6b4a2b)), 0, 0.17, 0);
+    add(new THREE.Mesh(geo('sMast', () => new THREE.CylinderGeometry(0.025, 0.025, 0.52, 5)), mat(0x5b4126)), 0, 0.6, 0);
+    const sail = add(new THREE.Mesh(geo('sSail', () => new THREE.BoxGeometry(0.02, 0.34, 0.3)), teamMat()), 0, 0.52, 0);
+    sail.rotation.y = Math.PI / 2;
+    const rail = add(new THREE.Mesh(geo('sRail', () => new THREE.CylinderGeometry(0.2, 0.22, 0.14, 6, 1, true, 0, Math.PI * 1.35)), mat(0x9c6b3a)), 0, 0.24, 0);
+    rail.rotation.y = 0.9;
+    add(new THREE.Mesh(geo('sDeck', () => new THREE.CylinderGeometry(0.2, 0.2, 0.03, 6)), mat(0x8a5a33)), 0, 0.31, 0);
+  } else if (type === 'battleship') {
+    add(new THREE.Mesh(geo('bsHull', () => boatHullGeo(0.6, 0.3)), mat(0x4a555e)), 0, 0.2, 0);
+    add(new THREE.Mesh(geo('bsDeck', () => new THREE.BoxGeometry(0.58, 0.07, 0.2)), mat(0x5c6670)), 0, 0.33, 0);
+    add(new THREE.Mesh(geo('bsTurret', () => new THREE.CylinderGeometry(0.09, 0.1, 0.1, 6)), mat(0x6b7580)), 0, 0.42, 0);
+    for (const sx of [-0.06, 0.06]) {
+      const cannon = add(new THREE.Mesh(geo('bsCannon', () => new THREE.CylinderGeometry(0.025, 0.025, 0.26, 6)), mat(0x333b42)), sx, 0.46, 0);
+      cannon.rotation.x = Math.PI / 2;
+    }
+    add(new THREE.Mesh(geo('bsBridge', () => new THREE.BoxGeometry(0.16, 0.16, 0.14)), mat(0x5c6670)), 0.18, 0.44, 0);
+    add(new THREE.Mesh(geo('bsPole', () => new THREE.CylinderGeometry(0.012, 0.012, 0.32, 5)), mat(0x333b42)), -0.24, 0.5, 0);
+    add(new THREE.Mesh(geo('bsFlag', () => new THREE.BoxGeometry(0.12, 0.08, 0.02)), teamMat()), -0.19, 0.65, 0);
   }
 
   g.userData.teamMats = teamMats;
+  return g;
+}
+
+function boatHullGeo(width, depth) {
+  const h = depth / 2;
+  const shape = new THREE.Shape();
+  shape.moveTo(-h, 0);
+  shape.lineTo(-h * 0.4, h);
+  shape.quadraticCurveTo(0, h * 1.2, h * 0.4, h);
+  shape.lineTo(h, 0);
+  shape.quadraticCurveTo(0, -h * 0.35, -h, 0);
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth: width * 0.4,
+    bevelEnabled: true,
+    bevelThickness: width * 0.1,
+    bevelSize: width * 0.07,
+    bevelSegments: 2
+  });
+  g.rotateY(Math.PI / 2);
+  g.center();
   return g;
 }
 
