@@ -395,6 +395,7 @@ export function canTrain(state, city, type, player) {
   if (unitAt(state, city.q, city.r)) return { ok: false, reason: 'Stadt besetzt' };
   const u = UNITS[type];
   if (!u) return { ok: false, reason: 'Unbekannte Einheit' };
+  if (u.capital && !city.isCapital) return { ok: false, reason: 'Nur in der Hauptstadt' };
   if (u.tech && !state.techs[player].includes(u.tech)) return { ok: false, reason: 'Technologie fehlt' };
   if (hasAbility(type, 'water') && !coastal(state, city)) return { ok: false, reason: 'Küstenstadt nötig' };
   if (state.stars[player] < u.cost) return { ok: false, reason: 'Zu wenig Sterne' };
@@ -471,6 +472,30 @@ export function attackPreview(state, attacker) {
     const { damage, retaliation } = battleResults(state, attacker, target);
     return { target, damage, retaliation };
   });
+}
+
+// --- Siedeln (Stadtgründung) ------------------------------------------------
+
+export function canFound(state, unit, player) {
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (!unit || unit.owner !== player) return { ok: false, reason: 'Nicht deine Einheit' };
+  if (unit.type !== 'settler') return { ok: false, reason: 'Kein Siedler' };
+  if (terrainAt(state, unit.q, unit.r) !== 'field') return { ok: false, reason: 'Nur auf Feldgründen' };
+  if (resourceAt(state, unit.q, unit.r)) return { ok: false, reason: 'Ressourcenfeld' };
+  if (improvementAt(state, unit.q, unit.r)) return { ok: false, reason: 'Bebautes Feld' };
+  if (cityAt(state, unit.q, unit.r)) return { ok: false, reason: 'Stadt vorhanden' };
+  const tooClose = state.cities.some(c => hexDistance(unit.q, unit.r, c.q, c.r) < 2);
+  if (tooClose) return { ok: false, reason: 'Zu nah an einer Stadt' };
+  return { ok: true };
+}
+
+export function foundCity(state, unit, player) {
+  const chk = canFound(state, unit, player);
+  if (!chk.ok) return chk;
+  state.cities.push({ q: unit.q, r: unit.r, owner: player, pop: BASE_CITY_POP, trained: false, isCapital: false });
+  state.units = state.units.filter(u => u !== unit);
+  updateExplored(state, player);
+  return { ok: true };
 }
 
 export function techCost(state, techId, player) {
@@ -621,10 +646,12 @@ function generateResources(state, rand, centers) {
 }
 
 let startSeq = 0;
-export function createGame(seed = Date.now(), playerCount = 4, chosenTribe = null) {
+export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
+  const tribe = opts && typeof opts === 'object' ? opts.tribe : opts;
+  const starStart = opts && typeof opts === 'object' && opts.stars != null ? opts.stars : START_STARS;
   const rand = mulberry32(seed);
-  const count = Math.min(Math.max(playerCount, 2), 4);
-  const tribes = assignTribes(seed, count, chosenTribe);
+  const count = Math.min(Math.max(playerCount, 2), 5);
+  const tribes = assignTribes(seed, count, tribe);
   const state = {
     terrain: generateTerrain(rand),
     cities: [], units: [], resources: {}, improvements: {},
@@ -635,30 +662,27 @@ export function createGame(seed = Date.now(), playerCount = 4, chosenTribe = nul
   };
   for (const p of state.players) {
     const tr = TRIBES[tribes[p]];
-    state.stars[p] = START_STARS + (tr ? tr.bonusStars : 0);
+    state.stars[p] = starStart + (tr ? tr.bonusStars : 0);
     state.techs[p] = tr ? ['basic', ...tr.startTechs] : ['basic'];
     state.explored[p] = [];
   }
 
-  const starts = count === 4
-    ? [[1, MAP_H - 2], [MAP_W - 2, MAP_H - 2], [MAP_W - 2, 1], [1, 1]]
-    : [[1, MAP_H - 2], [MAP_W - 2, 1]];
+  const corner = [[1, 1], [MAP_W - 2, 1], [MAP_W - 2, MAP_H - 2], [1, MAP_H - 2]];
+  const starts = count === 2 ? [corner[3], corner[1]]
+    : count === 3 ? [corner[0], corner[1], corner[3]]
+    : count === 4 ? corner
+    : [corner[0], corner[1], corner[2], corner[3], [Math.floor(MAP_W / 2), Math.floor(MAP_H / 2)]];
   const clearAround = (q, r, rad) => {
     forEachHex((nq, nr) => {
       if (hexDistance(q, r, nq, nr) <= rad) state.terrain[idx(nq, nr)] = 'field';
     });
   };
   for (const [q, r] of starts) clearAround(q, r, 2);
-  if (count === 4) {
-    for (let i = 0; i < starts.length; i++) {
-      const a = starts[i], b = starts[(i + 1) % starts.length];
-      carveLine(state, a[0], a[1], b[0], b[1], false);
-    }
-    carveLine(state, starts[0][0], starts[0][1], starts[2][0], starts[2][1], false);
-    carveLine(state, starts[1][0], starts[1][1], starts[3][0], starts[3][1], false);
-  } else {
-    carveLine(state, starts[0][0], starts[0][1], starts[1][0], starts[1][1]);
+  for (let i = 0; i < starts.length; i++) {
+    const a = starts[i], b = starts[(i + 1) % starts.length];
+    carveLine(state, a[0], a[1], b[0], b[1], count === 2);
   }
+  carveLine(state, starts[0][0], starts[0][1], starts[2 % starts.length][0], starts[2 % starts.length][1], false);
 
   const reachable = floodReachable(state, starts[0][0], starts[0][1]);
 
@@ -675,9 +699,9 @@ export function createGame(seed = Date.now(), playerCount = 4, chosenTribe = nul
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
   }
 
-  const placeCity = (q, r, owner, pop) => {
+  const placeCity = (q, r, owner, pop, isCapital = false) => {
     state.terrain[idx(q, r)] = 'field';
-    state.cities.push({ q, r, owner, pop, trained: false });
+    state.cities.push({ q, r, owner, pop, trained: false, isCapital });
   };
 
   const nearest = (tq, tr, minDistFrom, centers) => {
@@ -697,7 +721,7 @@ export function createGame(seed = Date.now(), playerCount = 4, chosenTribe = nul
     const [sq, sr] = starts[k];
     const owner = 'player_' + (k + 1);
     const c = nearest(sq, sr, 3, starts) || candidates[k % candidates.length];
-    placeCity(c[0], c[1], owner, BASE_CITY_POP);
+    placeCity(c[0], c[1], owner, BASE_CITY_POP, true);
     centerCities.push(c);
   }
 

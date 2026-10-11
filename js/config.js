@@ -8,6 +8,11 @@ export const HEX_SIZE = 1;
 export const MAX_POP = 5;
 export const START_STARS = 5;
 export const BASE_CITY_POP = 1;
+export const STARS_OPTIONS = {
+  knapp: { label: 'Knapp', stars: 2 },
+  normal: { label: 'Normal', stars: 5 },
+  reich: { label: 'Reich', stars: 10 }
+};
 export const VISION = { unit: 1, city: 2 };
 
 // Kampfformel-Konstante (siehe BattleHelpers / Wiki).
@@ -18,7 +23,8 @@ export const NAMES = {
   player_1: 'Spieler 1',
   player_2: 'Spieler 2',
   player_3: 'Spieler 3',
-  player_4: 'Spieler 4'
+  player_4: 'Spieler 4',
+  player_5: 'Spieler 5'
 };
 
 // Fallback-Farben, falls kein Stamm zugeordnet ist.
@@ -27,6 +33,7 @@ export const COLORS = {
   player_2: 0xdc2626,
   player_3: 0xd97706,
   player_4: 0x0d9488,
+  player_5: 0x7c3aed,
   neutral: 0xa1a1aa
 };
 
@@ -53,7 +60,8 @@ export const ABILITY_INFO = {
   heal: { name: 'Heilen', desc: 'Heilt benachbarte Verbündete zu Rundenbeginn um 4.' },
   convert: { name: 'Bekehren', desc: 'Übernimmt eine benachbarte feindliche Einheit.' },
   land: { name: 'Land', desc: 'Kann auf Land stehen.' },
-  water: { name: 'Wasser', desc: 'Kann sich ausschließlich auf Wasser und Ozean bewegen.' }
+  water: { name: 'Wasser', desc: 'Kann sich ausschließlich auf Wasser und Ozean bewegen.' },
+  settle: { name: 'Siedeln', desc: 'Gründet auf einem freien Feld eine neue Stadt (mind. 2 Felder von anderen Städten entfernt).' }
 };
 
 export function hasAbility(type, name) {
@@ -109,13 +117,17 @@ export const UNITS = {
   battleship: {
     name: 'Kriegsschiff', icon: '🚤', hp: 18, atk: 4, def: 2, move: 3, range: 1, cost: 8, sight: 2,
     tech: 'navigation', abilities: ['dash', 'fortify', 'water']
+  },
+  settler: {
+    name: 'Siedler', icon: '🧑‍🌾', hp: 10, atk: 0, def: 0, move: 1, range: 1, cost: 5, sight: 1,
+    tech: null, abilities: ['static', 'land', 'settle'], capital: true
   }
 };
 
 export const UNIT_ORDER = [
   'warrior', 'archer', 'rider', 'defender', 'swordsman',
   'catapult', 'mindbender', 'knight', 'giant',
-  'boat', 'ship', 'battleship'
+  'boat', 'ship', 'battleship', 'settler'
 ];
 
 // Echter Technologiebaum (Basis-Äste; `req` = Voraussetzung, `tier` = Stufe/Kosten).

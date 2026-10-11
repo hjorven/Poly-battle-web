@@ -1,14 +1,15 @@
 import {
   UNITS, UNIT_ORDER, TECHS, NAMES, MAX_POP,
-  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS
+  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS
 } from './config.js';
 import {
   cityIncome, techCost, tribeName, playerColor, maxHp, maxMove,
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, territory,
-  canAttackNow
+  canAttackNow, canFound, canTrain
 } from './rules.js';
 
 const $ = id => document.getElementById(id);
+const settings = { bots: 3, stars: 'normal' };
 let handlers = {};
 let selectedTribe = null;
 
@@ -29,14 +30,50 @@ export function initUI(h) {
   $('endTurnBtn').addEventListener('click', () => handlers.onEndTurn());
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
+  $('overviewBtn').addEventListener('click', () => handlers.onOpenOverview());
+  $('overviewClose').addEventListener('click', () => handlers.onCloseOverview());
+  $('overview-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) handlers.onCloseOverview();
+  });
+  $('confirmYes').addEventListener('click', () => {
+    const yes = handlers._confirmYes;
+    hideConfirm();
+    if (yes) yes();
+  });
+  $('confirmNo').addEventListener('click', hideConfirm);
+  $('confirm-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) hideConfirm();
+  });
   document.querySelectorAll('[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onMode(btn.dataset.mode));
   });
   buildTribePicker(h.onTribe || (() => {}));
+  buildSettings();
+}
+
+export function getSettings() {
+  return { bots: settings.bots, stars: STARS_OPTIONS[settings.stars].stars };
 }
 
 export function getTribe() {
   return selectedTribe;
+}
+
+function buildSettings() {
+  const wrap = $('settings-box');
+  if (!wrap) return;
+  const bots = wrap.querySelectorAll('[data-bots]');
+  bots.forEach(b => b.addEventListener('click', () => {
+    settings.bots = Number(b.dataset.bots);
+    bots.forEach(x => x.classList.toggle('active', x === b));
+  }));
+  const stars = wrap.querySelectorAll('[data-stars]');
+  stars.forEach(b => b.addEventListener('click', () => {
+    settings.stars = b.dataset.stars;
+    stars.forEach(x => x.classList.toggle('active', x === b));
+  }));
+  bots.forEach(x => x.classList.toggle('active', Number(x.dataset.bots) === settings.bots));
+  stars.forEach(x => x.classList.toggle('active', x.dataset.stars === settings.stars));
 }
 
 function hex(c) {
@@ -124,8 +161,21 @@ function abilityChips(type) {
   const list = UNITS[type].abilities || [];
   return list
     .filter(a => a !== 'land')
-    .map(a => ABILITY_INFO[a] ? `<span class="ability" title="${ABILITY_INFO[a].desc}">${ABILITY_INFO[a].name}</span>` : '')
+    .map(a => ABILITY_INFO[a]
+      ? `<span class="ability" role="button" tabindex="0" data-desc="${ABILITY_INFO[a].desc}">${ABILITY_INFO[a].name}</span>`
+      : '')
     .join('');
+}
+
+function wirePanel(p) {
+  p.querySelectorAll('.ability').forEach(el => {
+    const show = () => toast(el.dataset.desc || '');
+    el.addEventListener('click', show);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(); } });
+  });
+  p.querySelectorAll('[data-close]').forEach(el => {
+    el.addEventListener('click', () => handlers.onClosePanel());
+  });
 }
 
 export function showUnitPanel(state, unit, ctx) {
@@ -159,13 +209,24 @@ export function showUnitPanel(state, unit, ctx) {
     }
   }
 
+  let found = '';
+  if (mine && ctx.myTurn && unit.type === 'settler') {
+    const f = canFound(state, unit, ctx.actAs);
+    found = `<div class="action-list"><button class="btn action" data-found ${f.ok ? '' : 'disabled'}>
+      <span>🏙️ Stadt gründen<span class="sub">${f.ok ? 'Gründet auf diesem Feld eine neue Stadt' : f.reason}</span></span>
+    </button></div>`;
+  }
+
   panel(`
     <div class="panel-head">
       <div>
         <div class="panel-title">${def.icon} ${def.name}</div>
         <div class="panel-sub" style="color:${hex(playerColor(state, unit.owner))}">${owner}${mine ? ' (deine Einheit)' : ''}</div>
       </div>
-      <span class="panel-sub">${unit.acted && unit.mp <= 0 ? 'erledigt' : 'bereit'}</span>
+      <div class="panel-head-right">
+        <span class="panel-sub">${unit.acted && unit.mp <= 0 ? 'erledigt' : 'bereit'}</span>
+        <button class="btn icon-btn panel-close" data-close>Schließen</button>
+      </div>
     </div>
     <div class="hp-bar ${unit.hp / cap <= 0.35 ? 'low' : ''}"><div style="width:${hpPct}%"></div></div>
     <div class="stat-row">
@@ -177,9 +238,13 @@ export function showUnitPanel(state, unit, ctx) {
     </div>
     <div class="ability-row">${abilityChips(unit.type)}</div>
     <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ×${tb}</div>
+    ${found}
     ${forecast}
     <div class="hint">${hint}</div>
   `);
+  wirePanel($('panel'));
+  const foundBtn = $('panel').querySelector('[data-found]');
+  if (foundBtn) foundBtn.addEventListener('click', () => handlers.onFound(unit));
 }
 
 export function showCityPanel(state, city, ctx) {
@@ -210,7 +275,7 @@ export function showCityPanel(state, city, ctx) {
       const u = UNITS[t];
       const reason = trainReason(state, city, t, ctx);
       actions += `<button class="btn action" data-train="${t}" ${reason ? 'disabled' : ''}>
-        <span>${u.icon} ${u.name}<span class="sub">Angriff ${u.atk} · Verteidigung ${u.def} · Bewegung ${u.move} · Reichweite ${u.range} · Leben ${u.hp}</span></span>
+        <span>${u.icon} ${u.name}<span class="sub">${reason || `Angriff ${u.atk} · Verteidigung ${u.def} · Bewegung ${u.move} · Reichweite ${u.range} · Leben ${u.hp}`}</span></span>
         <span class="cost">${u.cost} Sterne</span>
       </button>`;
     }
@@ -228,10 +293,13 @@ export function showCityPanel(state, city, ctx) {
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">🏙️ Stadt</div>
+        <div class="panel-title">🏙️ Stadt${city.isCapital ? ' · Hauptstadt' : ''}</div>
         <div class="panel-sub" style="color:${city.owner ? hex(playerColor(state, city.owner)) : '#71717a'}">${ownerName}</div>
       </div>
-      <span class="panel-sub">${city.pop >= MAX_POP ? 'max. Bev.' : ''}</span>
+      <div class="panel-head-right">
+        <span class="panel-sub">${city.pop >= MAX_POP ? 'max. Bev.' : ''}</span>
+        <button class="btn icon-btn panel-close" data-close>Schließen</button>
+      </div>
     </div>
     <div class="stat-row">
       <div class="stat">Bevölkerung<b>${city.pop}/${MAX_POP}</b></div>
@@ -241,7 +309,7 @@ export function showCityPanel(state, city, ctx) {
     <div class="tile-grid">${cells}</div>
     ${actions || (!city.owner ? '<div class="hint">Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.</div>' : '<div class="hint">Nicht dein Zug.</div>')}
   `);
-
+  wirePanel($('panel'));
   $('panel').querySelectorAll('[data-train]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onTrain(city, btn.dataset.train));
   });
@@ -276,10 +344,9 @@ function buildRows(state, city, ctx) {
 }
 
 function trainReason(state, city, type, ctx) {
+  const chk = canTrain(state, city, type, ctx.actAs);
+  if (!chk.ok) return chk.reason;
   if (!ctx.myTurn) return 'Nicht dein Zug';
-  if (state.stars[ctx.actAs] < UNITS[type].cost) return 'Zu wenig Sterne';
-  if (city.trained) return 'Bereits ausgebildet';
-  if (state.units.some(u => u.q === city.q && u.r === city.r)) return 'Stadt besetzt';
   return '';
 }
 
@@ -382,10 +449,21 @@ function bindTechNav() {
   tree.addEventListener('pointerup', endPointer);
   tree.addEventListener('pointercancel', endPointer);
   window.addEventListener('pointerup', endPointer);
+  let lastTap = 0;
   tree.addEventListener('click', e => {
     if (Date.now() - techNav.lastDrag < 350) {
       e.stopPropagation();
       e.preventDefault();
+      return;
+    }
+    if (e.target.closest('.tech-node')) return;
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      e.preventDefault();
+      lastTap = 0;
+      resetTechNav();
+    } else {
+      lastTap = now;
     }
   }, true);
 }
@@ -451,11 +529,14 @@ export function openTech(state, ctx) {
     btn.className = 'tech-node' + (done ? ' done' : locked ? ' locked' : '');
     btn.style.left = p.x + 'px';
     btn.style.top = p.y + 'px';
-    btn.disabled = !!(done || locked || !ctx.myTurn || poor);
-    btn.title = `${t.name} · ${done ? 'erforscht' : cost + ' Sterne'}\n${t.desc}`
-      + (locked ? `\nBenötigt: ${TECHS[t.req].name}` : (poor && !done ? '\nZu wenig Sterne' : ''));
     btn.innerHTML = `<span class="tn-icon">${t.icon || '•'}</span><span class="tn-name">${t.name}</span><span class="tn-cost">${done ? '✓' : cost}</span>`;
-    if (!btn.disabled) btn.addEventListener('click', () => handlers.onResearch(id));
+    btn.addEventListener('click', () => {
+      if (!ctx.myTurn) { toast('Nicht dein Zug'); return; }
+      if (done) { toast(`${t.name} bereits erforscht`); return; }
+      if (locked) { toast(`Benötigt zuerst: ${TECHS[t.req].name}`); return; }
+      if (poor) { toast('Zu wenig Sterne für ' + t.name); return; }
+      handlers.onResearch(id);
+    });
     nodes.appendChild(btn);
   }
 }
@@ -488,4 +569,82 @@ export function showWinner(state, ctx) {
 
 export function hideWinner() {
   $('winner-overlay').classList.add('hidden');
+}
+
+export function showConfirm(text, onYes) {
+  $('confirm-text').textContent = text;
+  handlers._confirmYes = onYes;
+  $('confirm-overlay').classList.remove('hidden');
+}
+
+export function hideConfirm() {
+  handlers._confirmYes = null;
+  $('confirm-overlay').classList.add('hidden');
+}
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function unitStatus(u, actAs) {
+  if (u.owner !== actAs) return 'fremd';
+  if (u.acted && u.mp <= 0) return 'erledigt';
+  return 'aktiv';
+}
+
+export function showOverview(state, ctx) {
+  const actAs = ctx.actAs;
+  const menu = $('overview-list');
+  menu.innerHTML = '';
+  const myCities = state.cities.filter(c => c.owner === actAs);
+  const myUnits = state.units.filter(u => u.owner === actAs);
+
+  const stat = document.createElement('div');
+  stat.className = 'overview-stat';
+  stat.innerHTML = `<div class="panel-head"><div class="panel-title">Übersicht</div></div>
+    <div class="stat-row">
+      <div class="stat">Städte<b>${myCities.length}</b></div>
+      <div class="stat">Einheiten<b>${myUnits.length}</b></div>
+      <div class="stat">Sterne<b>${state.stars[actAs]}</b></div>
+      <div class="stat">Runde<b>${state.round}</b></div>
+    </div>`;
+  menu.appendChild(stat);
+
+  if (myCities.length) {
+    const head = document.createElement('div');
+    head.className = 'panel-head';
+    head.innerHTML = `<div class="panel-sub">Städte (${myCities.length})</div>`;
+    menu.appendChild(head);
+    for (const c of myCities) {
+      const row = document.createElement('button');
+      row.className = 'btn action overview-row';
+      row.innerHTML = `<span>🏙️ ${c.isCapital ? 'Hauptstadt' : 'Stadt'} (${territory(c).length} Gebiete)<span class="sub">Bevölkerung ${c.pop} · +${cityIncome(state, c)}/Runde</span></span>`;
+      row.addEventListener('click', () => handlers.onFocusCity(c.q, c.r));
+      menu.appendChild(row);
+    }
+  }
+
+  if (myUnits.length) {
+    const head = document.createElement('div');
+    head.className = 'panel-head';
+    head.innerHTML = `<div class="panel-sub">Einheiten (${myUnits.length})</div>`;
+    menu.appendChild(head);
+    for (const u of myUnits) {
+      const def = UNITS[u.type];
+      const st = unitStatus(u, actAs);
+      const cap = maxHp(u.type);
+      const row = document.createElement('button');
+      row.className = 'btn action overview-row' + (st === 'aktiv' ? '' : ' dimmed');
+      row.innerHTML = `<span>${def.icon} ${def.name}<span class="sub">${st === 'aktiv' ? 'bereit' : st} · Leben ${u.hp}/${cap}</span></span>`;
+      row.addEventListener('click', () => handlers.onFocusUnit(u.id));
+      menu.appendChild(row);
+    }
+  }
+
+  if (!myCities.length && !myUnits.length) {
+    menu.innerHTML += `<div class="hint">Du besitzt keine Städte oder Einheiten.</div>`;
+  }
+  $('overview-overlay').classList.remove('hidden');
+}
+
+export function hideOverview() {
+  $('overview-overlay').classList.add('hidden');
 }

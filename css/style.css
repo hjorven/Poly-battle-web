@@ -106,9 +106,11 @@ button:focus-visible {
   font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
+  min-height: 38px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
   font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
 .btn:hover:not(:disabled) { background: var(--hover); border-color: var(--border-strong); }
 .btn:active:not(:disabled) { background: var(--border); }
@@ -146,6 +148,13 @@ button:focus-visible {
   color: var(--danger);
 }
 .btn.danger:hover { background: #fef2f2; border-color: #fca5a5; }
+
+@media (hover: none) {
+  .btn { min-height: 44px; }
+  .btn:hover:not(:disabled) { background: var(--panel); border-color: var(--border); }
+  .btn.primary:hover:not(:disabled) { background: var(--text); border-color: var(--text); }
+  .btn.ghost:hover { background: transparent; border-color: transparent; }
+}
 
 #stage {
   position: fixed;
@@ -458,6 +467,50 @@ button:focus-visible {
 
 #winner-title { color: var(--text); }
 #winner-text { color: var(--muted); margin: 10px 0 24px; }
+
+/* Touch & neue Panels */
+.panel-head-right { display: flex; align-items: center; gap: 10px; }
+.panel-close { min-height: 30px; padding: 4px 10px; font-size: 12px; }
+.ability {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  min-height: 30px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ability:active { background: var(--border); }
+.ability { color: var(--muted); }
+
+@media (hover: none) {
+  .ability { min-height: 36px; }
+  .tech-node:hover:not(:disabled) { background: var(--panel); border-color: var(--border); }
+  .btn.chip-btn { min-height: 40px; }
+  .action { min-height: 48px; }
+  .tech-node { min-width: 74px; min-height: 74px; }
+  #techBtn, #overviewBtn, #menuBtn { min-height: 44px; }
+}
+
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.setting-label { font-size: 14px; color: var(--muted); font-weight: 600; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg .chip-btn { border: 1px solid var(--border); padding: 6px 11px; font-size: 12px; }
+.seg .chip-btn.active { border-color: var(--text); background: var(--hover); color: var(--text); }
+
+#overview-overlay .card { max-width: 520px; max-height: 86vh; overflow-y: auto; }
+#confirm-overlay .card.narrow { text-align: center; }
+.confirm-text { margin: 6px 0 18px; font-size: 15px; color: var(--text); line-height: 1.45; }
+.overview-row { display: flex; align-items: center; width: 100%; text-align: left; }
+.overview-row.dimmed { opacity: 0.55; }
+.overview-stat { margin-bottom: 4px; }
+.overview-stat .panel-head { margin-bottom: 8px; }
+
+#tech-overlay .card { max-height: 92vh; overflow-y: auto; }
 
 @media (max-width: 760px) {
   #status, #round-label { display: none; }

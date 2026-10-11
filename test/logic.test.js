@@ -63,7 +63,7 @@ function assertInvariants(state) {
 function makeState() {
   return {
     terrain: Array(MAP_W * MAP_H).fill('field'),
-    cities: [], units: [],
+    cities: [], units: [], resources: {}, improvements: {},
     players: ['player_1', 'player_2', 'player_3', 'player_4'],
     stars: { player_1: 20, player_2: 20, player_3: 20, player_4: 20 },
     techs: {
@@ -627,6 +627,7 @@ test('4 Bots: 30 Runden ohne Verletzungen', () => {
         else if (step.kind === 'train') res = R.trainUnit(st, step.city, step.type, player);
         else if (step.kind === 'buyPop') res = R.buyPop(st, step.city, player);
         else if (step.kind === 'improve') res = R.improve(st, step.city, step.type, step.q, step.r, player);
+        else if (step.kind === 'settle') res = R.foundCity(st, step.unit, player);
         else if (step.kind === 'research') res = R.research(st, step.tech, player);
         else throw new Error('unknown step ' + step.kind);
         if (res && res.ok === false) throw new Error(`${step.kind} fehlgeschlagen: ${res.reason}`);
@@ -645,6 +646,84 @@ test('4 Bots: 30 Runden ohne Verletzungen', () => {
     const aliveCount = st.players.filter(p => st.cities.some(c => c.owner === p)).length;
     console.log('      (nach ' + st.round + ' Runden offen, aktive Spieler: ' + aliveCount + ')');
   }
+});
+
+console.log('\n-- Siedler & Stadtgründung --');
+
+test('canTrain: Siedler nur in der Hauptstadt', () => {
+  const st = R.createGame(4242);
+  const cap = st.cities.find(c => c.owner === 'player_1' && c.isCapital);
+  const other = st.cities.find(c => c.owner === 'player_1' && !c.isCapital);
+  st.stars['player_1'] = 20;
+  if (other) {
+    const chk = R.canTrain(st, other, 'settler', 'player_1');
+    assert.strictEqual(chk.ok, false);
+    assert.ok(chk.reason.includes('Hauptstadt'), 'Grund = Hauptstadt, war: ' + chk.reason);
+  }
+  cap.trained = false;
+  st.units = st.units.filter(u => !(u.q === cap.q && u.r === cap.r));
+  const ok = R.canTrain(st, cap, 'settler', 'player_1');
+  assert.ok(ok.ok, 'Siedler in Hauptstadt trainierbar: ' + ok.reason);
+  const res = R.trainUnit(st, cap, 'settler', 'player_1');
+  assert.ok(res.ok, 'Siedler ausgebildet');
+  assert.ok(st.units.some(u => u.type === 'settler' && u.owner === 'player_1'), 'Siedler vorhanden');
+});
+
+test('createGame: erste Stadt jedes Spielers ist Hauptstadt', () => {
+  for (let i = 0; i < 8; i++) {
+    const st = R.createGame(900 + i);
+    for (const p of st.players) {
+      const owned = st.cities.filter(c => c.owner === p);
+      assert.ok(owned.length >= 1, 'Spieler hat Stadt');
+      assert.strictEqual(owned[0].isCapital, true, p + ' hat Hauptstadt');
+    }
+  }
+});
+
+test('canFound/foundCity: Regeln und Gründung', () => {
+  const st = makeState();
+  st.stars.player_1 = 20;
+  st.cities = [{ q: 1, r: 1, owner: 'player_1', pop: 1, trained: false, isCapital: true }];
+  const s = unit(1, 'player_1', 'settler', 3, 3);
+  st.units = [s];
+  const chk = R.canFound(st, s, 'player_1');
+  assert.ok(chk.ok, 'freies Feld gründbar: ' + chk.reason);
+  st.units.push(unit(2, 'player_1', 'settler', 1, 0));
+  const near = st.units[1];
+  const chk2 = R.canFound(st, near, 'player_1');
+  assert.strictEqual(chk2.ok, false, 'zu nah an Stadt verboten');
+  st.units[1].q = 10; st.units[1].r = 8;
+  const s3 = unit(3, 'player_1', 'settler', 12, 12);
+  st.units[1] = s3;
+  st.resources[hk(12, 12)] = 'fruit';
+  const chk3 = R.canFound(st, s3, 'player_1');
+  assert.strictEqual(chk3.ok, false, 'Ressourcenfeld verboten');
+  delete st.resources[hk(12, 12)];
+  const res = R.foundCity(st, s3, 'player_1');
+  assert.ok(res.ok, 'Gründung klappt: ' + res.reason);
+  assert.ok(st.cities.some(c => c.q === 12 && c.r === 12 && c.owner === 'player_1'), 'neue Stadt da');
+  assert.ok(!st.units.includes(s3), 'Siedler verbraucht');
+  const s4 = unit(4, 'player_1', 'settler', 13, 12);
+  const chk4 = R.canFound(st, s4, 'player_1');
+  assert.strictEqual(chk4.ok, false, 'nahe neuer Stadt verboten');
+});
+
+console.log('\n-- Spieleinstellungen --');
+
+test('createGame: 5 Spieler, mehrere Seeds', () => {
+  for (let i = 0; i < 6; i++) {
+    const st = R.createGame(4000 + i, 5);
+    assert.strictEqual(st.players.length, 5);
+    assertInvariants(st);
+  }
+});
+
+test('createGame: Start-Sterne-Option', () => {
+  const normal = R.createGame(4321, 4, { tribe: 'vengir', stars: 10 });
+  const tr = R.tribeName(normal, 'player_1'); // nur um Zugriff zu zeigen
+  assert.ok(normal.stars['player_1'] >= 10, 'reich: >= 10 Sterne');
+  const knapp = R.createGame(4321, 4, { stars: 2 });
+  assert.ok(knapp.stars['player_1'] >= 2 && knapp.stars['player_1'] < 10, 'knapp: wenige Sterne');
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
