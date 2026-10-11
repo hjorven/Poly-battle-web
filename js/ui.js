@@ -371,6 +371,8 @@ const ANGLE = {};
 ROOTS.forEach((id, i) => { ANGLE[id] = (-90 + i * 72) * Math.PI / 180; });
 
 const techNav = { scale: 1, tx: 0, ty: 0, bound: false, lastDrag: 0 };
+let lastTechClick = null;
+let lastTechTarget = null;
 function resetTechNav() {
   techNav.scale = 1;
   techNav.tx = 0;
@@ -403,6 +405,7 @@ function bindTechNav() {
   const pinch = { prevDist: 0, cx: 0, cy: 0 };
   let dragAcc = 0;
   tree.addEventListener('pointerdown', e => {
+    lastTechTarget = e.target.closest('.tech-node') || null;
     tree.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     dragAcc = 0;
@@ -456,7 +459,13 @@ function bindTechNav() {
       e.preventDefault();
       return;
     }
-    if (e.target.closest('.tech-node')) return;
+    if (lastTechTarget && lastTechTarget.isConnected && lastTechClick) {
+      e.stopPropagation();
+      e.preventDefault();
+      lastTechClick(lastTechTarget);
+      lastTechTarget = null;
+      return;
+    }
     const now = Date.now();
     if (now - lastTap < 300) {
       e.preventDefault();
@@ -518,30 +527,41 @@ export function openTech(state, ctx) {
   svg.setAttribute('height', H);
   svg.innerHTML = lines;
 
+  lastTechIds = new Set(state.techs[ctx.actAs]);
   for (const id in TECHS) {
     const t = TECHS[id];
     const p = pos[id];
-    const done = state.techs[ctx.actAs].includes(id);
+    const done = lastTechIds.has(id);
     const locked = t.req && !state.techs[ctx.actAs].includes(t.req);
     const cost = techCost(state, id, ctx.actAs);
-    const poor = stars < cost;
     const btn = document.createElement('button');
     btn.className = 'tech-node' + (done ? ' done' : locked ? ' locked' : '');
     btn.style.left = p.x + 'px';
     btn.style.top = p.y + 'px';
+    btn.dataset.tech = id;
     btn.innerHTML = `<span class="tn-icon">${t.icon || '•'}</span><span class="tn-name">${t.name}</span><span class="tn-cost">${done ? '✓' : cost}</span>`;
-    btn.addEventListener('click', () => {
-      if (!ctx.myTurn) { toast('Nicht dein Zug'); return; }
-      if (done) { toast(`${t.name} bereits erforscht`); return; }
-      if (locked) { toast(`Benötigt zuerst: ${TECHS[t.req].name}`); return; }
-      if (poor) { toast('Zu wenig Sterne für ' + t.name); return; }
-      handlers.onResearch(id);
-    });
     nodes.appendChild(btn);
   }
+  lastTechClick = node => {
+    const id = node.dataset.tech;
+    const t = TECHS[id];
+    if (!ctx.myTurn) { toast('Nicht dein Zug'); return; }
+    if (doneFor(id)) { toast(`${t.name} bereits erforscht`); return; }
+    if (t.req && !state.techs[ctx.actAs].includes(t.req)) { toast(`Benötigt zuerst: ${TECHS[t.req].name}`); return; }
+    if (state.stars[ctx.actAs] < techCost(state, id, ctx.actAs)) { toast('Zu wenig Sterne für ' + t.name); return; }
+    handlers.onResearch(id);
+  };
 }
 
+function doneFor(id) {
+  return lastTechIds.has(id);
+}
+
+let lastTechIds = new Set();
+
 export function closeTech() {
+  lastTechClick = null;
+  lastTechTarget = null;
   $('tech-overlay').classList.add('hidden');
 }
 

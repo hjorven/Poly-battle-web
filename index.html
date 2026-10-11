@@ -47,35 +47,40 @@
         <button class="btn big" data-mode="online">Online (Link teilen)</button>
         <button id="copyLinkBtn" class="btn big hidden">Link zum Spiel kopieren</button>
       </div>
-      <div id="settings-box" class="rules">
-        <h3>Spieleinstellungen (Gegen KI)</h3>
-        <div class="setting-row">
-          <span class="setting-label">Gegner</span>
-          <div class="seg">
-            <button data-bots="1" class="chip-btn">1</button>
-            <button data-bots="2" class="chip-btn">2</button>
-            <button data-bots="3" class="chip-btn">3</button>
-            <button data-bots="4" class="chip-btn">4</button>
-            <button data-bots="5" class="chip-btn">5</button>
+      <details class="menu-section" open id="tribe-box">
+        <summary>Dein Stamm (Gegen KI)</summary>
+        <div class="menu-body">
+          <div id="tribe-pick" class="tribe-pick"></div>
+        </div>
+      </details>
+      <details class="menu-section" id="settings-box">
+        <summary>Spieleinstellungen (Gegen KI)</summary>
+        <div class="menu-body">
+          <div class="setting-row">
+            <span class="setting-label">Gegner</span>
+            <div class="seg">
+              <button data-bots="1" class="chip-btn">1</button>
+              <button data-bots="2" class="chip-btn">2</button>
+              <button data-bots="3" class="chip-btn">3</button>
+              <button data-bots="4" class="chip-btn">4</button>
+              <button data-bots="5" class="chip-btn">5</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Start-Sterne</span>
+            <div class="seg">
+              <button data-stars="knapp" class="chip-btn">Knapp (2)</button>
+              <button data-stars="normal" class="chip-btn">Standard (5)</button>
+              <button data-stars="reich" class="chip-btn">Reich (10)</button>
+            </div>
           </div>
         </div>
-        <div class="setting-row">
-          <span class="setting-label">Start-Sterne</span>
-          <div class="seg">
-            <button data-stars="knapp" class="chip-btn">Knapp (2)</button>
-            <button data-stars="normal" class="chip-btn">Standard (5)</button>
-            <button data-stars="reich" class="chip-btn">Reich (10)</button>
-          </div>
-        </div>
-      </div>
-      <div class="rules" id="tribe-box">
-        <h3>Dein Stamm (Gegen KI)</h3>
-        <div id="tribe-pick" class="tribe-pick"></div>
-      </div>
-      <div class="rules">
-        <h3>So wird gespielt</h3>
-        <ul>
-          <li><b>4 Stämme</b> starten auf einer prozedural erzeugten Welt (Feld, Wald, Berg, Wasser, Ozean, Eis). Jeder Stamm beginnt mit eigener Technologie und Einheit – nach den echten Polytopia-Werten.</li>
+      </details>
+      <details class="menu-section">
+        <summary>So wird gespielt</summary>
+        <div class="menu-body">
+          <ul>
+          <li><b>1–5 Stämme</b> starten auf einer großen prozedural erzeugten Welt (26×18: Feld, Wald, Berg, Wasser, Ozean, Eis). Jeder Stamm beginnt mit eigener Technologie und Einheit – nach den echten Polytopia-Werten.</li>
           <li><b>Städte</b> liefern Einkommen aus Bevölkerung, Ressourcen und Gebäuden im Stadtgebiet. Kaufe Bevölkerung, bilde Einheiten aus und baue Farmen, Sägewerke, Minen, Häfen und Tempel.</li>
           <li><b>Kampf</b> nach der echten Formel: Schaden hängt von Angriff, Leben und Verteidigungsbonus ab; ohne passende Tech kein Wald-/Berg-Bonus. Die <b>Kampfprognose</b> zeigt Schaden und Vergeltung vor dem Angriff.</li>
           <li><b>Fähigkeiten</b>: Verschanzen (heilt), Rückzug/Durchhalten (nach dem Angriff weiterziehen), Starr (Katapult/Gedankenbeuger: kein Zurückschlagen), Heilen/Bekehren (Gedankenbeuger).</li>
@@ -85,7 +90,8 @@
           <li><b>Siedler</b>: In der Hauptstadt ausbildbar; gründet auf freiem Feld (mind. 2 Felder von anderen Städten) eine neue Stadt.</li>
           <li><b>Sieg:</b> Erbeute alle Städte der Gegner.</li>
         </ul>
-      </div>
+        </div>
+      </details>
       <p class="footnote">Karte ziehen: Ziehen · Zoomen: Rad/Zoom · Auswählen: Klick · Tech-Baum: Doppeltipp setzt die Ansicht zurück</p>
     </div>
   </div>
