@@ -366,8 +366,12 @@ button:focus-visible {
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0) 40%, var(--bg) 80%),
     var(--bg);
   border: 1px solid var(--border);
+  cursor: grab;
+  touch-action: none;
 }
-#tech-lines { position: absolute; inset: 0; }
+#tech-tree.grabbing { cursor: grabbing; }
+#tech-viewport { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+#tech-lines { position: absolute; inset: 0; pointer-events: none; }
 #tech-nodes { position: absolute; inset: 0; }
 .tech-node {
   position: absolute;
