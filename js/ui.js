@@ -1,8 +1,12 @@
 import {
-  UNITS, UNIT_ORDER, TECHS, TECH_TIERS, NAMES, MAX_POP,
-  TRIBES, TRIBE_POOL, ABILITY_INFO
+  UNITS, UNIT_ORDER, TECHS, NAMES, MAX_POP,
+  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS
 } from './config.js';
-import { incomeFor, techCost, tribeName, playerColor, maxHp, maxMove } from './rules.js';
+import {
+  cityIncome, techCost, tribeName, playerColor, maxHp, maxMove,
+  terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, territory,
+  canAttackNow
+} from './rules.js';
 
 const $ = id => document.getElementById(id);
 let handlers = {};
@@ -129,19 +133,35 @@ export function showUnitPanel(state, unit, ctx) {
   const owner = tribeName(state, unit.owner) || NAMES[unit.owner];
   const mine = unit.owner === ctx.actAs;
   const hpPct = Math.max(0, (unit.hp / cap) * 100);
+  const tile = TERRAIN[terrainAt(state, unit.q, unit.r)];
+  const tb = defenceBonus(state, unit);
   let hint = '';
   if (state.winner) hint = 'Spiel vorbei.';
   else if (!mine || !ctx.myTurn) hint = 'Nicht am Zug – nur beobachten.';
   else if (unit.acted && unit.mp <= 0) hint = 'Einheit hat gehandelt. Zug beenden, um sie nächste Runde zu aktivieren.';
   else {
-    const hasTargets = state.units.some(u => u.owner !== unit.owner && dist(unit, u) <= def.range);
     hint = unit.mp > 0 ? 'Helle Felder = Bewegung' : 'Bewegung aufgebraucht';
-    if (hasTargets) hint += ' · Rote Felder = Angriffsziel';
+    if (attackPreview(state, unit).length) hint += ' · Rote Felder = Angriffsziel';
   }
+
+  let forecast = '';
+  if (mine && ctx.myTurn && canAttackNow(state, unit)) {
+    const preview = attackPreview(state, unit);
+    if (preview.length) {
+      forecast = `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Kampfprognose</div></div>
+        <div class="forecast-list">${preview.map(p => {
+          const t = UNITS[p.target.type];
+          const lethal = p.damage >= p.target.hp;
+          const back = p.retaliation > 0 ? `· Vergeltung −${p.retaliation}` : '· keine Vergeltung';
+          return `<div class="forecast"><span>${t.icon} ${t.name} <span class="fc-hp">${p.target.hp} LP</span></span><b class="${lethal ? 'lethal' : ''}">${lethal ? 'Besiegt' : '−' + p.damage} ${back}</b></div>`;
+        }).join('')}</div>`;
+    }
+  }
+
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">${def.name}</div>
+        <div class="panel-title">${def.icon} ${def.name}</div>
         <div class="panel-sub" style="color:${hex(playerColor(state, unit.owner))}">${owner}${mine ? ' (deine Einheit)' : ''}</div>
       </div>
       <span class="panel-sub">${unit.acted && unit.mp <= 0 ? 'erledigt' : 'bereit'}</span>
@@ -155,6 +175,8 @@ export function showUnitPanel(state, unit, ctx) {
       <div class="stat">Reichweite<b>${def.range}</b></div>
     </div>
     <div class="ability-row">${abilityChips(unit.type)}</div>
+    <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ×${tb}</div>
+    ${forecast}
     <div class="hint">${hint}</div>
   `);
 }
@@ -162,35 +184,50 @@ export function showUnitPanel(state, unit, ctx) {
 export function showCityPanel(state, city, ctx) {
   const mine = city.owner === ctx.actAs && ctx.myTurn;
   const ownerName = city.owner ? (tribeName(state, city.owner) || NAMES[city.owner]) : 'Neutral';
-  const income = city.owner ? incomeFor(state, city.owner) : city.pop;
+  const income = city.owner ? cityIncome(state, city) : 0;
   const occupied = state.units.some(u => u.q === city.q && u.r === city.r);
+
+  const cells = territory(city).map(([q, r]) => {
+    const tdef = TERRAIN[terrainAt(state, q, r)];
+    const imp = improvementAt(state, q, r);
+    const res = resourceAt(state, q, r);
+    let tag = tdef.name, cls = '';
+    if (imp) { tag = `${IMPROVEMENTS[imp].icon} ${IMPROVEMENTS[imp].name}`; cls = 'built'; }
+    else if (res) { tag = `${RESOURCES[res].icon} ${RESOURCES[res].name}`; cls = 'res'; }
+    return `<span class="tile-chip ${cls}">${tag}</span>`;
+  }).join('');
+
   let actions = '';
-  if (city.owner) {
-    const unlocked = UNIT_ORDER.filter(t => !UNITS[t].tech || state.techs[city.owner].includes(UNITS[t].tech));
-    if (city.owner === ctx.actAs) {
-      actions += `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Einheiten ausbilden</div></div><div class="action-list">`;
-      for (const t of unlocked) {
-        const u = UNITS[t];
-        const reason = trainReason(state, city, t, ctx);
-        actions += `<button class="btn action" data-train="${t}" ${reason ? 'disabled' : ''}>
-          <span>${u.name}<span class="sub">Angriff ${u.atk} · Verteidigung ${u.def} · Bewegung ${u.move} · Reichweite ${u.range} · Leben ${u.hp}</span></span>
-          <span class="cost">${u.cost} Sterne</span>
-        </button>`;
-      }
-      actions += `</div>`;
-      const popReason = popReasonFor(state, city, ctx);
-      actions += `<div class="action-list"><button class="btn action ghost" data-buypop ${popReason ? 'disabled' : ''}>
-        <span>Bevölkerung +1<span class="sub">Mehr Sterne pro Runde (max ${MAX_POP})</span></span>
-        <span class="cost">${city.pop + 2} Sterne</span>
-      </button></div>`;
-      if (city.trained) actions += `<div class="hint">Diese Stadt hat bereits diese Runde ausgebildet.</div>`;
-      if (occupied) actions += `<div class="hint">Einheit in der Stadt – zuerst wegziehen.</div>`;
+  if (city.owner && city.owner === ctx.actAs) {
+    const unlocked = UNIT_ORDER.filter(t => {
+      const u = UNITS[t];
+      if (u.tech && !state.techs[city.owner].includes(u.tech)) return false;
+      return true;
+    });
+    actions += `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Einheiten ausbilden</div></div><div class="action-list">`;
+    for (const t of unlocked) {
+      const u = UNITS[t];
+      const reason = trainReason(state, city, t, ctx);
+      actions += `<button class="btn action" data-train="${t}" ${reason ? 'disabled' : ''}>
+        <span>${u.icon} ${u.name}<span class="sub">Angriff ${u.atk} · Verteidigung ${u.def} · Bewegung ${u.move} · Reichweite ${u.range} · Leben ${u.hp}</span></span>
+        <span class="cost">${u.cost} Sterne</span>
+      </button>`;
     }
+    actions += `</div>`;
+    const popReason = popReasonFor(state, city, ctx);
+    actions += `<div class="action-list"><button class="btn action ghost" data-buypop ${popReason ? 'disabled' : ''}>
+      <span>Bevölkerung +1<span class="sub">Mehr Sterne pro Runde (max ${MAX_POP})</span></span>
+      <span class="cost">${city.pop + 2} Sterne</span>
+    </button></div>`;
+    if (city.trained) actions += `<div class="hint">Diese Stadt hat bereits diese Runde ausgebildet.</div>`;
+    if (occupied) actions += `<div class="hint">Einheit in der Stadt – zuerst wegziehen.</div>`;
+    actions += buildRows(state, city, ctx);
   }
+
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">Stadt</div>
+        <div class="panel-title">🏙️ Stadt</div>
         <div class="panel-sub" style="color:${city.owner ? hex(playerColor(state, city.owner)) : '#71717a'}">${ownerName}</div>
       </div>
       <span class="panel-sub">${city.pop >= MAX_POP ? 'max. Bev.' : ''}</span>
@@ -198,8 +235,9 @@ export function showCityPanel(state, city, ctx) {
     <div class="stat-row">
       <div class="stat">Bevölkerung<b>${city.pop}/${MAX_POP}</b></div>
       <div class="stat">Einkommen<b>${income}/Runde</b></div>
-      <div class="stat">Ausbildung<b>${city.trained ? 'nein' : 'ja'}</b></div>
+      <div class="stat">Gebiete<b>${territory(city).length}</b></div>
     </div>
+    <div class="tile-grid">${cells}</div>
     ${actions || (!city.owner ? '<div class="hint">Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.</div>' : '<div class="hint">Nicht dein Zug.</div>')}
   `);
 
@@ -208,11 +246,32 @@ export function showCityPanel(state, city, ctx) {
   });
   const popBtn = $('panel').querySelector('[data-buypop]');
   if (popBtn) popBtn.addEventListener('click', () => handlers.onBuyPop(city));
+  $('panel').querySelectorAll('[data-improve]').forEach(btn => {
+    btn.addEventListener('click', () => handlers.onImprove(city, btn.dataset.improve, Number(btn.dataset.q), Number(btn.dataset.r)));
+  });
 }
 
-function dist(a, b) {
-  const dq = a.q - b.q, dr = a.r - b.r;
-  return (Math.abs(dq) + Math.abs(dq + dr) + Math.abs(dr)) / 2;
+function buildRows(state, city, ctx) {
+  const rows = [];
+  for (const [q, r] of territory(city)) {
+    if (improvementAt(state, q, r) || resourceAt(state, q, r)) continue;
+    const tile = terrainAt(state, q, r);
+    const types = Object.keys(IMPROVEMENTS).filter(k => IMPROVEMENTS[k].terrain.includes(tile));
+    if (!types.length) continue;
+    const cellName = TERRAIN[tile].name;
+    const btns = types.map(t => {
+      const d = IMPROVEMENTS[t];
+      let reason = '';
+      const chk = canImprove(state, city, t, q, r);
+      if (!chk.ok) reason = chk.reason;
+      else if (d.tech && !state.techs[city.owner].includes(d.tech)) reason = 'Technologie fehlt';
+      else if (state.stars[city.owner] < d.cost) reason = 'Zu wenig Sterne';
+      return `<button class="btn chip-btn" data-improve="${t}" data-q="${q}" data-r="${r}" ${reason ? 'disabled' : ''} title="${reason || d.name}">${d.icon} ${d.name} <span class="cost">${d.cost}</span></button>`;
+    }).join('');
+    rows.push(`<div class="build-row"><span class="build-tile">${cellName}</span><span class="build-btns">${btns}</span></div>`);
+  }
+  if (!rows.length) return '';
+  return `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Gebäude im Stadtgebiet</div></div>${rows.join('')}`;
 }
 
 function trainReason(state, city, type, ctx) {
@@ -231,34 +290,85 @@ function popReasonFor(state, city, ctx) {
   return '';
 }
 
+const ROOTS = ['organization', 'climbing', 'fishing', 'hunting', 'riding'];
+const CHILDREN = (() => {
+  const map = {};
+  for (const id in TECHS) {
+    const req = TECHS[id].req;
+    if (req) (map[req] || (map[req] = [])).push(id);
+  }
+  return map;
+})();
+const ANGLE = {};
+ROOTS.forEach((id, i) => { ANGLE[id] = (-90 + i * 72) * Math.PI / 180; });
+
+function layoutTechs(W, H) {
+  const cx = W / 2, cy = H / 2;
+  const m = Math.min(W, H);
+  const radius = { 1: m * 0.20, 2: m * 0.38, 3: m * 0.52 };
+  const pos = {};
+  const polar = (r, a) => ({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+  const place = id => {
+    const t = TECHS[id];
+    if (t.req) {
+      const sibs = CHILDREN[t.req] || [id];
+      const i = sibs.indexOf(id);
+      const spread = t.tier === 2 ? 0.26 : 0.17;
+      const off = sibs.length > 1 ? (i - (sibs.length - 1) / 2) * spread : 0;
+      ANGLE[id] = ANGLE[t.req] + off;
+    }
+    pos[id] = polar(radius[t.tier], ANGLE[id]);
+  };
+  ROOTS.forEach(place);
+  for (const id in TECHS) if (TECHS[id].tier === 2) place(id);
+  for (const id in TECHS) if (TECHS[id].tier === 3) place(id);
+  return pos;
+}
+
 export function openTech(state, ctx) {
   const overlay = $('tech-overlay');
+  overlay.classList.remove('hidden');
   const stars = state.stars[ctx.actAs];
   $('tech-stars').textContent = stars + ' Sterne';
-  const list = $('tech-list');
-  list.innerHTML = '';
-  TECH_TIERS.forEach((tier, i) => {
-    const label = document.createElement('div');
-    label.className = 'tech-tier';
-    label.textContent = 'Stufe ' + (i + 1);
-    list.appendChild(label);
-    for (const id of tier) {
-      const t = TECHS[id];
-      const cost = techCost(state, id, ctx.actAs);
-      const done = state.techs[ctx.actAs].includes(id);
-      const locked = t.req && !state.techs[ctx.actAs].includes(t.req);
-      const poor = stars < cost;
-      const btn = document.createElement('button');
-      btn.className = 'tech' + (done ? ' done' : '');
-      btn.disabled = done || locked || !ctx.myTurn;
-      btn.innerHTML = `<span class="t-body"><span class="t-name">${t.name}</span><span class="t-desc">${t.desc}${locked ? ' · benötigt ' + TECHS[t.req].name : ''}</span></span><span class="t-cost">${cost} Sterne</span>`;
-      if (!done && !locked && ctx.myTurn && !poor) {
-        btn.addEventListener('click', () => handlers.onResearch(id));
-      }
-      list.appendChild(btn);
-    }
-  });
-  overlay.classList.remove('hidden');
+  const tree = $('tech-tree');
+  const svg = $('tech-lines');
+  const nodes = $('tech-nodes');
+  nodes.innerHTML = '';
+  const W = tree.clientWidth || 560;
+  const H = tree.clientHeight || 420;
+  const pos = layoutTechs(W, H);
+
+  let lines = '';
+  for (const id in TECHS) {
+    const t = TECHS[id];
+    if (!t.req) continue;
+    const a = pos[t.req], b = pos[id];
+    const done = state.techs[ctx.actAs].includes(id);
+    lines += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${done ? '#16a34a' : '#d4d4d8'}" stroke-width="2" />`;
+  }
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.innerHTML = lines;
+
+  for (const id in TECHS) {
+    const t = TECHS[id];
+    const p = pos[id];
+    const done = state.techs[ctx.actAs].includes(id);
+    const locked = t.req && !state.techs[ctx.actAs].includes(t.req);
+    const cost = techCost(state, id, ctx.actAs);
+    const poor = stars < cost;
+    const btn = document.createElement('button');
+    btn.className = 'tech-node' + (done ? ' done' : locked ? ' locked' : '');
+    btn.style.left = p.x + 'px';
+    btn.style.top = p.y + 'px';
+    btn.disabled = !!(done || locked || !ctx.myTurn || poor);
+    btn.title = `${t.name} · ${done ? 'erforscht' : cost + ' Sterne'}\n${t.desc}`
+      + (locked ? `\nBenötigt: ${TECHS[t.req].name}` : (poor && !done ? '\nZu wenig Sterne' : ''));
+    btn.innerHTML = `<span class="tn-icon">${t.icon || '•'}</span><span class="tn-name">${t.name}</span><span class="tn-cost">${done ? '✓' : cost}</span>`;
+    if (!btn.disabled) btn.addEventListener('click', () => handlers.onResearch(id));
+    nodes.appendChild(btn);
+  }
 }
 
 export function closeTech() {

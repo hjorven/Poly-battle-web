@@ -3,7 +3,7 @@ import * as render from './render.js';
 import * as ui from './ui.js';
 import * as net from './net.js';
 import { botStep } from './ai.js';
-import { NAMES, UNITS, TECHS } from './config.js';
+import { NAMES, UNITS, TECHS, IMPROVEMENTS } from './config.js';
 
 const app = {
   mode: null,
@@ -162,6 +162,16 @@ async function doBuyPop(city) {
   await afterAction();
 }
 
+async function doImprove(city, type, q, r) {
+  const res = R.improve(app.state, city, type, q, r, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
+  app.busy = true;
+  const def = IMPROVEMENTS[type];
+  ui.toast(`${def ? def.name + ' gebaut' : 'Gebäude gebaut'}`, 'good');
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
 async function doResearch(techId) {
   const res = R.research(app.state, techId, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
@@ -206,6 +216,9 @@ async function maybeBot() {
         await render.syncBoard(app.state, viewer());
       } else if (step.kind === 'buyPop') {
         R.buyPop(app.state, step.city, player);
+        await render.syncBoard(app.state, viewer());
+      } else if (step.kind === 'improve') {
+        R.improve(app.state, step.city, step.type, step.q, step.r, player);
         await render.syncBoard(app.state, viewer());
       } else if (step.kind === 'research') {
         R.research(app.state, step.tech, player);
@@ -361,6 +374,7 @@ function boot() {
     onEndTurn: doEndTurn,
     onTrain: doTrain,
     onBuyPop: doBuyPop,
+    onImprove: doImprove,
     onMenu: () => ui.showMenu(),
     onRestart: () => { ui.hideWinner(); ui.showMenu(); },
     onMode: mode => mode === 'online' ? startOnline() : startLocal(mode),

@@ -54,11 +54,12 @@
         <h3>So wird gespielt</h3>
         <ul>
           <li><b>4 Stämme</b> starten auf einer prozedural erzeugten Welt (Feld, Wald, Berg, Wasser, Ozean, Eis). Jeder Stamm beginnt mit eigener Technologie und Einheit – nach den echten Polytopia-Werten.</li>
-          <li><b>Städte</b> liefern pro Bevölkerung 1 Stern pro Runde. Kaufe Bevölkerung oder bilde Einheiten aus.</li>
-          <li><b>Kampf</b> nach der echten Formel: Schaden hängt von Angriff, Leben und Verteidigungsbonus ab; ohne passende Tech kein Wald-/Berg-Bonus. Einheiten mit „Sturm“ dürfen erst ziehen, dann angreifen.</li>
+          <li><b>Städte</b> liefern Einkommen aus Bevölkerung, Ressourcen und Gebäuden im Stadtgebiet. Kaufe Bevölkerung, bilde Einheiten aus und baue Farmen, Sägewerke, Minen, Häfen und Tempel.</li>
+          <li><b>Kampf</b> nach der echten Formel: Schaden hängt von Angriff, Leben und Verteidigungsbonus ab; ohne passende Tech kein Wald-/Berg-Bonus. Die <b>Kampfprognose</b> zeigt Schaden und Vergeltung vor dem Angriff.</li>
           <li><b>Fähigkeiten</b>: Verschanzen (heilt), Rückzug/Durchhalten (nach dem Angriff weiterziehen), Starr (Katapult/Gedankenbeuger: kein Zurückschlagen), Heilen/Bekehren (Gedankenbeuger).</li>
           <li><b>Unentdecktes</b> Land ist abgedunkelt und wird durch Einheiten und Städte aufgedeckt (Berge geben mehr Sicht).</li>
-          <li><b>Forschung</b> läuft in drei Stufen mit echtem Technologiebaum und schaltet Einheiten frei (Bogenschütze, Reiter, Verteidiger, Schwertkämpfer, Katapult, Gedankenbeuger, Ritter, Riese). Kosten steigen mit der Zahl deiner Städte.</li>
+          <li><b>Forschung</b> im sternförmigen Technologiebaum: drei Stufen, echte Voraussetzungen und Einheitenfreischaltungen. Kosten steigen mit der Zahl deiner Städte.</li>
+          <li><b>Marine</b>: Mit <b>Segeln</b> baust du Boote und Schiffe in Küstenstädten, mit <b>Navigation</b> Kriegsschiffe; <b>Aquatismus</b> gibt Verteidigungsbonus auf Wasser.</li>
           <li><b>Sieg:</b> Erbeute alle Städte der Gegner.</li>
         </ul>
       </div>
@@ -73,7 +74,12 @@
         <span id="tech-stars" class="stars">0 Sterne</span>
         <button id="techClose" class="btn ghost small">Schließen</button>
       </div>
-      <div id="tech-list"></div>
+      <div id="tech-list">
+        <div id="tech-tree">
+          <svg id="tech-lines" xmlns="http://www.w3.org/2000/svg"></svg>
+          <div id="tech-nodes"></div>
+        </div>
+      </div>
     </div>
   </div>
 

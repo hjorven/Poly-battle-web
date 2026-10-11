@@ -1,7 +1,8 @@
 import assert from 'node:assert';
 import * as R from '../js/rules.js';
 import {
-  UNITS, TERRAIN, MAP_W, MAP_H, START_STARS, MAX_POP, TRIBES
+  UNITS, TERRAIN, MAP_W, MAP_H, START_STARS, MAX_POP, TRIBES,
+  RESOURCES, IMPROVEMENTS
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds } from '../js/hex.js';
 import { botStep } from '../js/ai.js';
@@ -494,6 +495,121 @@ test('Fog of War: Sicht von Einheiten und Städten deckt Karte auf', () => {
   assert.ok(!R.isExplored(st, 'player_2', 5, 5), 'P2 sieht nichts');
 });
 
+console.log('\n-- Ressourcen & Gebäude --');
+
+test('createGame erzeugt Ressourcen nahe der Startstädte', () => {
+  for (let i = 0; i < 6; i++) {
+    const st = R.createGame(3000 + i);
+    assert.ok(Object.keys(st.resources).length > 0, 'Ressourcen vorhanden');
+    for (const c of st.cities.filter(c => c.owner)) {
+      const near = R.territory(c).some(([q, r]) => R.resourceAt(st, q, r));
+      assert.ok(near, 'Startstadt hat Ressourcen in Reichweite');
+    }
+  }
+});
+
+test('Ressourcen im Stadtgebiet erhöhen das Einkommen', () => {
+  const st = makeState();
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1, trained: false }];
+  st.resources = { '5,6': 'fruit', '6,5': 'animals' };
+  assert.strictEqual(R.cityIncome(st, st.cities[0]), 3);
+  assert.strictEqual(R.incomeFor(st, 'player_1'), 3);
+});
+
+test('Gebäude: Gelände-, Voraussetzungs- und Ressourcen-Regeln', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1, trained: false };
+  st.cities = [city];
+  st.stars.player_1 = 50;
+  st.turn = 'player_1';
+  st.terrain[6 * MAP_W + 5] = 'forest';
+  st.resources = { '6,5': 'fruit' };
+  assert.ok(!R.canImprove(st, city, 'farm', 6, 5).ok, 'Ressourcenfeld gesperrt');
+  assert.ok(!R.canImprove(st, city, 'farm', 6, 6).ok, 'außerhalb Stadtgebiet');
+  assert.ok(R.canImprove(st, city, 'sawmill', 5, 6).ok, 'Wald für Sägewerk');
+  assert.ok(!R.canImprove(st, city, 'farm', 5, 6).ok, 'Farm nur auf Feld');
+
+  let res = R.improve(st, city, 'sawmill', 5, 6, 'player_1');
+  assert.strictEqual(res.reason, 'Technologie fehlt');
+  st.techs.player_1.push('forestry');
+  const before = R.incomeFor(st, 'player_1');
+  res = R.improve(st, city, 'sawmill', 5, 6, 'player_1');
+  assert.ok(res.ok);
+  assert.strictEqual(R.improvementAt(st, 5, 6), 'sawmill');
+  assert.strictEqual(R.incomeFor(st, 'player_1'), before + 1, 'Sägewerk +1 Einkommen');
+  assert.ok(!R.canImprove(st, city, 'sawmill', 5, 6).ok, 'bereits bebaut');
+});
+
+test('Tempel bringt +2 Einkommen und nutzt Meditation', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1, trained: false };
+  st.cities = [city];
+  st.stars.player_1 = 50;
+  st.turn = 'player_1';
+  assert.strictEqual(R.improve(st, city, 'temple', 6, 5, 'player_1').reason, 'Technologie fehlt');
+  st.techs.player_1.push('climbing', 'meditation');
+  const before = R.incomeFor(st, 'player_1');
+  assert.ok(R.improve(st, city, 'temple', 6, 5, 'player_1').ok);
+  assert.strictEqual(R.incomeFor(st, 'player_1'), before + 2);
+});
+
+console.log('\n-- Marine --');
+
+test('Marine: nur auf Wasser, Küstenstadt nötig', () => {
+  const st = makeState();
+  st.terrain[5 * MAP_W + 6] = 'water';
+  const boat = unit('b', 'player_1', 'boat', 5, 5);
+  st.units = [boat];
+  const reach = R.reachableMap(st, boat);
+  assert.ok(reach.has('6,5'), 'Boot fährt auf Wasser');
+  assert.ok(!reach.has('4,5'), 'Boot betritt kein Land');
+  st.units = [unit('w', 'player_1', 'warrior', 5, 5)];
+  assert.ok(!R.reachableMap(st, st.units[0]).has('6,5'), 'Landeinheit betritt kein Wasser');
+  st.units = [];
+
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1, trained: false };
+  st.cities = [city];
+  st.turn = 'player_1';
+  st.stars.player_1 = 50;
+  st.techs.player_1.push('fishing', 'sailing');
+  assert.ok(R.canTrain(st, city, 'boat', 'player_1').ok, 'Küstenstadt erlaubt Boote');
+  const inland = { q: 2, r: 2, owner: 'player_1', pop: 1, trained: false };
+  st.cities = [inland];
+  assert.strictEqual(R.canTrain(st, inland, 'boat', 'player_1').reason, 'Küstenstadt nötig');
+});
+
+test('Aquatismus gibt Verteidigungsbonus auf Wasser', () => {
+  const st = makeState();
+  st.terrain[6 * MAP_W + 5] = 'water';
+  const boat = unit('b', 'player_2', 'boat', 5, 6);
+  st.units = [boat];
+  assert.strictEqual(R.defenceBonus(st, boat), 1, 'ohne Aquatismus');
+  st.techs.player_2.push('fishing', 'ramming', 'aquatism');
+  assert.strictEqual(R.defenceBonus(st, boat), 1.5);
+});
+
+test('Segeln/Navigation schalten Boote und Kriegsschiffe frei', () => {
+  const st = makeState();
+  assert.ok(!R.unlockedUnits(st, 'player_1').includes('boat'));
+  st.techs.player_1.push('sailing');
+  assert.ok(R.unlockedUnits(st, 'player_1').includes('boat'));
+  assert.ok(R.unlockedUnits(st, 'player_1').includes('ship'));
+  assert.ok(!R.unlockedUnits(st, 'player_1').includes('battleship'));
+  st.techs.player_1.push('navigation');
+  assert.ok(R.unlockedUnits(st, 'player_1').includes('battleship'));
+});
+
+test('Kampfprognose liefert Schaden und Vergeltung', () => {
+  const st = makeState();
+  const a = unit('a', 'player_1', 'warrior', 5, 5);
+  st.units = [a, unit('b', 'player_2', 'archer', 5, 6), unit('c', 'player_2', 'warrior', 6, 5)];
+  const preview = R.attackPreview(st, a);
+  assert.strictEqual(preview.length, 2);
+  const archer = preview.find(x => x.target.type === 'archer');
+  assert.strictEqual(archer.damage, 6);
+  assert.strictEqual(archer.retaliation, 2);
+});
+
 console.log('\n-- KI-Simulation --');
 
 test('4 Bots: 30 Runden ohne Verletzungen', () => {
@@ -510,6 +626,7 @@ test('4 Bots: 30 Runden ohne Verletzungen', () => {
         else if (step.kind === 'move') res = R.moveUnit(st, step.unit, step.q, step.r);
         else if (step.kind === 'train') res = R.trainUnit(st, step.city, step.type, player);
         else if (step.kind === 'buyPop') res = R.buyPop(st, step.city, player);
+        else if (step.kind === 'improve') res = R.improve(st, step.city, step.type, step.q, step.r, player);
         else if (step.kind === 'research') res = R.research(st, step.tech, player);
         else throw new Error('unknown step ' + step.kind);
         if (res && res.ok === false) throw new Error(`${step.kind} fehlgeschlagen: ${res.reason}`);

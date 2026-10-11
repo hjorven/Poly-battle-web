@@ -1,10 +1,11 @@
 import * as R from './rules.js';
-import { UNITS } from './config.js';
+import { UNITS, IMPROVEMENTS } from './config.js';
 import { hexDistance, hk } from './hex.js';
 
 const UNIT_VALUE = {
   warrior: 2, archer: 3, rider: 3, defender: 3, swordsman: 5,
-  catapult: 5, mindbender: 4, knight: 6, giant: 7
+  catapult: 5, mindbender: 4, knight: 6, giant: 7,
+  boat: 3, ship: 5, battleship: 7
 };
 
 function attackScore(state, attacker, defender) {
@@ -21,6 +22,26 @@ function attackScore(state, attacker, defender) {
 
 function targetCities(state, player) {
   return state.cities.filter(c => c.owner !== player);
+}
+
+function bestBuilding(state, player) {
+  const stars = state.stars[player];
+  let best = null;
+  for (const city of R.citiesFor(state, player)) {
+    for (const [q, r] of R.territory(city)) {
+      if (R.improvementAt(state, q, r) || R.resourceAt(state, q, r)) continue;
+      if (state.units.some(u => u.q === q && u.r === r)) continue;
+      for (const type of Object.keys(IMPROVEMENTS)) {
+        const def = IMPROVEMENTS[type];
+        if (def.tech && !state.techs[player].includes(def.tech)) continue;
+        if (stars < def.cost + 2) continue;
+        if (!R.canImprove(state, city, type, q, r).ok) continue;
+        const score = def.pop / def.cost;
+        if (!best || score > best.score) best = { kind: 'improve', city, type, q, r, score };
+      }
+    }
+  }
+  return best;
 }
 
 function bestMove(state, unit, player) {
@@ -73,7 +94,10 @@ export function botStep(state, player) {
   for (const c of R.citiesFor(state, player)) {
     const unlocked = R.unlockedUnits(state, player);
     const stars = state.stars[player];
-    const order = ['giant', 'knight', 'swordsman', 'catapult', 'mindbender', 'archer', 'defender', 'rider', 'warrior'];
+    const order = [
+      'giant', 'knight', 'battleship', 'ship', 'swordsman', 'catapult',
+      'boat', 'mindbender', 'archer', 'defender', 'rider', 'warrior'
+    ];
     let type = null;
     for (const t of order) {
       if (!unlocked.includes(t)) continue;
@@ -97,6 +121,9 @@ export function botStep(state, player) {
       return { kind: 'buyPop', city: c };
     }
   }
+
+  const build = bestBuilding(state, player);
+  if (build) return build;
 
   const techOrder = [
     'organization', 'hunting', 'archery', 'farming', 'riding', 'roads',

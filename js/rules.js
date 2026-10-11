@@ -1,7 +1,8 @@
 import {
   MAP_W, MAP_H, MAX_POP, START_STARS, BASE_CITY_POP,
   TERRAIN, UNITS, TECHS, UNIT_ORDER, COLORS, VISION, ACCELERATOR,
-  DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility
+  DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
+  RESOURCES, IMPROVEMENTS
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex } from './hex.js';
 
@@ -66,10 +67,43 @@ export function citiesFor(state, player) {
   return state.cities.filter(c => c.owner === player);
 }
 
+export function coastal(state, city) {
+  return neighbors(city.q, city.r).some(([nq, nr]) => {
+    const t = terrainAt(state, nq, nr);
+    return t === 'water' || t === 'ocean';
+  });
+}
+
+export function resourceAt(state, q, r) {
+  return (state.resources && state.resources[hk(q, r)]) || null;
+}
+
+export function improvementAt(state, q, r) {
+  return (state.improvements && state.improvements[hk(q, r)]) || null;
+}
+
+export function territory(city) {
+  return neighbors(city.q, city.r);
+}
+
+// Einkommen einer Stadt: Bevölkerung + gesammelte Ressourcen + Gebäude
+// im umliegenden Stadtterritorium.
+export function cityIncome(state, city) {
+  let s = city.pop;
+  for (const [nq, nr] of territory(city)) {
+    if (resourceAt(state, nq, nr)) s += 1;
+    else {
+      const imp = improvementAt(state, nq, nr);
+      if (imp && IMPROVEMENTS[imp]) s += IMPROVEMENTS[imp].pop;
+    }
+  }
+  return s;
+}
+
 export function incomeFor(state, player) {
   let s = 0;
   let cities = 0;
-  for (const c of state.cities) if (c.owner === player) { s += c.pop; cities += 1; }
+  for (const c of state.cities) if (c.owner === player) { s += cityIncome(state, c); cities += 1; }
   const techs = state.techs[player] || [];
   if (techs.includes('construction')) s += cities;
   if (techs.includes('trade')) s += cities;
@@ -85,10 +119,14 @@ function hasTech(state, owner, tech) {
   return !!tech && !!state.techs[owner] && state.techs[owner].includes(tech);
 }
 
-export function canEnter(state, owner, tile) {
+export function canEnter(state, unit, tile) {
   const t = TERRAIN[tile];
-  if (!t || !t.walkable) return false;
-  if (t.enterTech) return hasTech(state, owner, t.enterTech);
+  if (!t) return false;
+  if (hasAbility(unit.type, 'water')) {
+    return tile === 'water' || tile === 'ocean';
+  }
+  if (!t.walkable) return false;
+  if (t.enterTech) return hasTech(state, unit.owner, t.enterTech);
   return true;
 }
 
@@ -231,7 +269,7 @@ export function reachableMap(state, unit) {
     for (const [nq, nr] of neighbors(q, r)) {
       if (unitAt(state, nq, nr)) continue;
       const tile = terrainAt(state, nq, nr);
-      if (!canEnter(state, unit.owner, tile)) continue;
+      if (!canEnter(state, unit, tile)) continue;
       const nc = cost + TERRAIN[tile].move;
       if (nc > budget) continue;
       const k = hk(nq, nr);
@@ -292,7 +330,7 @@ export function attack(state, attacker, defender) {
     events.push({ kind: 'kill', unit: defender });
     if (UNITS[attacker.type].range === 1) {
       const tile = terrainAt(state, defender.q, defender.r);
-      if (canEnter(state, attacker.owner, tile) && !unitAt(state, defender.q, defender.r)) {
+      if (canEnter(state, attacker, tile) && !unitAt(state, defender.q, defender.r)) {
         attacker.q = defender.q;
         attacker.r = defender.r;
         const city = cityAt(state, attacker.q, attacker.r);
@@ -358,6 +396,7 @@ export function canTrain(state, city, type, player) {
   const u = UNITS[type];
   if (!u) return { ok: false, reason: 'Unbekannte Einheit' };
   if (u.tech && !state.techs[player].includes(u.tech)) return { ok: false, reason: 'Technologie fehlt' };
+  if (hasAbility(type, 'water') && !coastal(state, city)) return { ok: false, reason: 'Küstenstadt nötig' };
   if (state.stars[player] < u.cost) return { ok: false, reason: 'Zu wenig Sterne' };
   return { ok: true };
 }
@@ -396,6 +435,42 @@ export function buyPop(state, city, player) {
   state.stars[player] -= popCost(city);
   city.pop += 1;
   return { ok: true };
+}
+
+// --- Gebäude (Improvements) ------------------------------------------------
+
+export function canImprove(state, city, type, q, r) {
+  const def = IMPROVEMENTS[type];
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (!def) return { ok: false, reason: 'Unbekanntes Gebäude' };
+  const dq = q - city.q, dr = r - city.r;
+  const adjacent = (Math.abs(dq) + Math.abs(dq + dr) + Math.abs(dr)) / 2 === 1;
+  if (!adjacent) return { ok: false, reason: 'Nicht im Stadtgebiet' };
+  if (!def.terrain.includes(terrainAt(state, q, r))) return { ok: false, reason: 'Falsches Gelände' };
+  if (improvementAt(state, q, r)) return { ok: false, reason: 'Bereits bebaut' };
+  if (resourceAt(state, q, r)) return { ok: false, reason: 'Ressource wird genutzt' };
+  if (unitAt(state, q, r)) return { ok: false, reason: 'Einheit im Weg' };
+  return { ok: true };
+}
+
+export function improve(state, city, type, q, r, player) {
+  const chk = canImprove(state, city, type, q, r);
+  if (!chk.ok) return chk;
+  if (city.owner !== player) return { ok: false, reason: 'Fremde Stadt' };
+  const def = IMPROVEMENTS[type];
+  if (def.tech && !state.techs[player].includes(def.tech)) return { ok: false, reason: 'Technologie fehlt' };
+  if (state.stars[player] < def.cost) return { ok: false, reason: 'Zu wenig Sterne' };
+  state.stars[player] -= def.cost;
+  if (!state.improvements) state.improvements = {};
+  state.improvements[hk(q, r)] = type;
+  return { ok: true };
+}
+
+export function attackPreview(state, attacker) {
+  return attackTargets(state, attacker).map(target => {
+    const { damage, retaliation } = battleResults(state, attacker, target);
+    return { target, damage, retaliation };
+  });
 }
 
 export function techCost(state, techId, player) {
@@ -518,6 +593,33 @@ export function assignTribes(seed, count, chosenTribe = null) {
   return out;
 }
 
+function generateResources(state, rand, centers) {
+  const place = (q, r, type) => { state.resources[hk(q, r)] = type; };
+  const typesFor = tile => Object.keys(RESOURCES).filter(k => RESOURCES[k].terrain.includes(tile));
+  forEachHex((q, r) => {
+    const tile = state.terrain[idx(q, r)];
+    const opts = typesFor(tile);
+    if (!opts.length) return;
+    const chance = tile === 'water' ? 0.16 : tile === 'ocean' ? 0.05 : 0.09;
+    if (rand() < chance) place(q, r, opts[Math.floor(rand() * opts.length)]);
+  });
+  for (const [sq, sr] of centers) {
+    const tiles = neighbors(sq, sr).filter(([q, r]) =>
+      !state.cities.some(c => c.q === q && c.r === r) && typesFor(state.terrain[idx(q, r)]).length
+    );
+    for (let i = tiles.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+    }
+    let made = 0;
+    for (const [q, r] of tiles) {
+      if (made >= 2) break;
+      place(q, r, typesFor(state.terrain[idx(q, r)])[0]);
+      made++;
+    }
+  }
+}
+
 let startSeq = 0;
 export function createGame(seed = Date.now(), playerCount = 4, chosenTribe = null) {
   const rand = mulberry32(seed);
@@ -525,7 +627,7 @@ export function createGame(seed = Date.now(), playerCount = 4, chosenTribe = nul
   const tribes = assignTribes(seed, count, chosenTribe);
   const state = {
     terrain: generateTerrain(rand),
-    cities: [], units: [],
+    cities: [], units: [], resources: {}, improvements: {},
     players: Array.from({ length: count }, (_, k) => 'player_' + (k + 1)),
     tribes,
     stars: {}, techs: {}, explored: {},
@@ -627,7 +729,7 @@ export function createGame(seed = Date.now(), playerCount = 4, chosenTribe = nul
       let q = city.q, r = city.r;
       if (!first || unitAt(state, q, r)) {
         const opts = neighbors(city.q, city.r).filter(([nq, nr]) =>
-          canEnter(state, owner, terrainAt(state, nq, nr)) && !unitAt(state, nq, nr) && !cityAt(state, nq, nr)
+          canEnter(state, { owner, type }, terrainAt(state, nq, nr)) && !unitAt(state, nq, nr) && !cityAt(state, nq, nr)
         );
         if (!opts.length) continue;
         [q, r] = opts[0];
@@ -637,6 +739,7 @@ export function createGame(seed = Date.now(), playerCount = 4, chosenTribe = nul
     }
   }
 
+  generateResources(state, rand, centerCities);
   startTurn(state);
   return state;
 }
