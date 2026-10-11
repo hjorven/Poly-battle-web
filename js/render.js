@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { HEX_SIZE, TERRAIN, UNITS, COLORS, MAP_W, MAP_H, MAX_HP } from './config.js';
-import { toWorld, fromWorld, forEachHex, hk } from './hex.js';
+import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H } from './config.js';
+import { playerColor } from './rules.js';
+import { toWorld, forEachHex, hk } from './hex.js';
+
+let colorMap = {};
+function ownerColor(owner) {
+  return colorMap[owner] ?? COLORS[owner] ?? 0xffffff;
+}
 
 const TILE_GAP = 0.94;
 const DIESE_DUR = 260;
@@ -316,9 +322,9 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function unitBody(type, owner) {
+function unitBody(type, color) {
   const g = new THREE.Group();
-  const team = COLORS[owner];
+  const team = color;
   const teamMats = [];
   const add = (mesh, x, y, z) => {
     mesh.position.set(x, y, z);
@@ -369,19 +375,30 @@ function unitBody(type, owner) {
     arm.rotation.z = 0.85;
     add(new THREE.Mesh(geo('stone', () => new THREE.IcosahedronGeometry(0.08, 0)), mat(0x9b9b94)), 0.24, 0.46, 0);
     add(new THREE.Mesh(geo('flagBox', () => new THREE.BoxGeometry(0.1, 0.1, 0.1)), teamMat()), -0.2, 0.2, 0);
-  } else if (type === 'mind_bender') {
+  } else if (type === 'mindbender') {
     add(new THREE.Mesh(geo('robe', () => new THREE.ConeGeometry(0.2, 0.5, 6)), teamMat()), 0, 0.25, 0);
     add(new THREE.Mesh(geo('ico11', () => new THREE.IcosahedronGeometry(0.1, 0)), mat(0xe8c39a)), 0, 0.52, 0);
     add(new THREE.Mesh(geo('orb', () => new THREE.IcosahedronGeometry(0.07, 0)), mat(0xe0b84d)), 0.2, 0.42, 0);
+  } else if (type === 'knight') {
+    add(new THREE.Mesh(geo('kHorse', () => new THREE.BoxGeometry(0.52, 0.22, 0.24)), mat(0x5b4636)), 0, 0.19, 0);
+    add(new THREE.Mesh(geo('kBody', () => new THREE.CylinderGeometry(0.14, 0.17, 0.36, 6)), teamMat()), 0, 0.44, 0);
+    add(new THREE.Mesh(geo('kHelm', () => new THREE.ConeGeometry(0.15, 0.22, 6)), mat(0xd9dee5)), 0, 0.7, 0);
+    const kl = add(new THREE.Mesh(geo('kLance', () => new THREE.BoxGeometry(0.05, 0.7, 0.05)), mat(0xf0f3f7)), 0.3, 0.45, 0);
+    kl.rotation.z = -0.9;
+  } else if (type === 'giant') {
+    add(new THREE.Mesh(geo('gBody', () => new THREE.CylinderGeometry(0.34, 0.42, 0.7, 7)), teamMat()), 0, 0.42, 0);
+    add(new THREE.Mesh(geo('gHead', () => new THREE.IcosahedronGeometry(0.2, 0)), mat(0xe8c39a)), 0, 0.9, 0);
+    add(new THREE.Mesh(geo('gArmL', () => new THREE.BoxGeometry(0.15, 0.6, 0.15)), teamMat()), -0.44, 0.45, 0);
+    add(new THREE.Mesh(geo('gArmR', () => new THREE.BoxGeometry(0.15, 0.6, 0.15)), teamMat()), 0.44, 0.45, 0);
+    add(new THREE.Mesh(geo('gClub', () => new THREE.CylinderGeometry(0.1, 0.14, 0.55, 6)), mat(0x6b4a2b)), 0.52, 0.85, 0);
   }
 
   g.userData.teamMats = teamMats;
   return g;
 }
 
-function buildCity(city) {
+function buildCity(city, color) {
   const g = new THREE.Group();
-  const color = city.owner ? COLORS[city.owner] : 0xb9bdc6;
   const base = new THREE.Mesh(
     geo('cityBase', () => new THREE.CylinderGeometry(0.62, 0.66, 0.12, 6)),
     mat(color)
@@ -431,7 +448,7 @@ function placeCityNode(state, city) {
     scene.remove(existing.group);
     cityNodes.delete(key);
   }
-  const group = buildCity(city);
+  const group = buildCity(city, city.owner ? ownerColor(city.owner) : 0xb9bdc6);
   const p = toWorld(city.q, city.r);
   group.position.set(p.x, hexTop(key), p.z);
   scene.add(group);
@@ -439,7 +456,8 @@ function placeCityNode(state, city) {
 }
 
 function placeUnitNode(state, unit) {
-  const group = unitBody(unit.type, unit.owner);
+  const color = ownerColor(unit.owner);
+  const group = unitBody(unit.type, color);
   const p = toWorld(unit.q, unit.r);
   const key = hk(unit.q, unit.r);
   group.position.set(p.x, hexTop(key), p.z);
@@ -448,7 +466,7 @@ function placeUnitNode(state, unit) {
   sprite.position.y = 0.95;
   group.add(sprite);
   scene.add(group);
-  const node = { group, sprite, hp: unit.hp, acted: unit.acted, dying: false };
+  const node = { group, sprite, hp: unit.hp, acted: unit.acted, dying: false, baseColor: color };
   unitNodes.set(unit.id, node);
   if (unit.acted) {
     for (const m of node.group.userData.teamMats) m.color.multiplyScalar(0.55);
@@ -509,6 +527,8 @@ function stepEffects(now) {
 
 export function syncBoard(state, viewer = null) {
   if (!initialized) return Promise.resolve();
+  colorMap = {};
+  for (const p of state.players || []) colorMap[p] = playerColor(state, p);
   if (!tiles.size) buildTiles(state);
   const explored = exploredSet(state, viewer);
   for (const [key, t] of tiles) {
@@ -536,7 +556,7 @@ export function syncBoard(state, viewer = null) {
       node.acted = u.acted;
       const f = u.acted ? 0.55 : 1;
       for (const m of node.group.userData.teamMats) {
-        m.color.setHex(COLORS[u.owner]).multiplyScalar(f);
+        m.color.setHex(node.baseColor).multiplyScalar(f);
       }
     }
     const target = new THREE.Vector3();

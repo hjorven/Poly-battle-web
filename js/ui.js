@@ -1,5 +1,8 @@
-import { UNITS, TECHS, TECH_TIERS, NAMES, MAX_POP, MAX_HP, COLORS, TRIBES, TRIBE_POOL } from './config.js';
-import { incomeFor, techCost, tribeName } from './rules.js';
+import {
+  UNITS, UNIT_ORDER, TECHS, TECH_TIERS, NAMES, MAX_POP,
+  TRIBES, TRIBE_POOL, ABILITY_INFO
+} from './config.js';
+import { incomeFor, techCost, tribeName, playerColor, maxHp, maxMove } from './rules.js';
 
 const $ = id => document.getElementById(id);
 let handlers = {};
@@ -31,17 +34,26 @@ export function getTribe() {
   return selectedTribe;
 }
 
-function buildTribePicker(onPick) {
+function hex(c) {
+  return '#' + c.toString(16).padStart(6, '0');
+}
+
+function buildTribePicker() {
   const wrap = $('tribe-pick');
   if (!wrap) return;
   wrap.innerHTML = '';
   for (const id of TRIBE_POOL) {
     const t = TRIBES[id];
+    const startTech = t.startTechs.length
+      ? t.startTechs.map(x => TECHS[x].name).join(', ')
+      : `keine Tech (+${t.bonusStars} Sterne)`;
+    const startUnits = t.startUnits.map(u => UNITS[u].name).join(', ');
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'tribe-opt';
     btn.dataset.tribe = id;
-    btn.innerHTML = `<span class="tribe-name">${t.name}</span><span class="tribe-tech">Start: ${t.startTechs.map(x => TECHS[x].name).join(', ')}</span>`;
+    btn.innerHTML = `<span class="tribe-name"><span class="dot" style="background:${hex(t.color)}"></span>${t.name}</span>
+      <span class="tribe-tech">Start: ${startTech} · ${startUnits}</span>`;
     btn.addEventListener('click', () => {
       selectedTribe = selectedTribe === id ? null : id;
       wrap.querySelectorAll('.tribe-opt').forEach(b => b.classList.toggle('active', b.dataset.tribe === selectedTribe));
@@ -76,7 +88,7 @@ function chip(player, state, ctx) {
   const me = ctx.mode !== 'online' || ctx.myRole === player;
   const name = tribeName(state, player) || NAMES[player];
   return `<div class="chip ${active ? 'active' : ''} ${cities === 0 ? 'dead' : ''}">
-    <span class="dot" style="background:#${COLORS[player].toString(16).padStart(6, '0')}"></span>
+    <span class="dot" style="background:${hex(playerColor(state, player))}"></span>
     <span>${name}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
     <span class="stars">${s} Sterne</span>
     <span class="meta">${cities} Städte · ${units} Einheiten</span>
@@ -103,18 +115,26 @@ function panel(html) {
   p.classList.remove('hidden');
 }
 
+function abilityChips(type) {
+  const list = UNITS[type].abilities || [];
+  return list
+    .filter(a => a !== 'land')
+    .map(a => ABILITY_INFO[a] ? `<span class="ability" title="${ABILITY_INFO[a].desc}">${ABILITY_INFO[a].name}</span>` : '')
+    .join('');
+}
+
 export function showUnitPanel(state, unit, ctx) {
   const def = UNITS[unit.type];
+  const cap = maxHp(unit.type);
   const owner = tribeName(state, unit.owner) || NAMES[unit.owner];
   const mine = unit.owner === ctx.actAs;
-  const hpPct = Math.max(0, (unit.hp / MAX_HP) * 100);
+  const hpPct = Math.max(0, (unit.hp / cap) * 100);
   let hint = '';
   if (state.winner) hint = 'Spiel vorbei.';
   else if (!mine || !ctx.myTurn) hint = 'Nicht am Zug – nur beobachten.';
-  else if (unit.acted) hint = 'Einheit hat gehandelt. Zug beenden, um sie nächste Runde zu aktivieren.';
+  else if (unit.acted && unit.mp <= 0) hint = 'Einheit hat gehandelt. Zug beenden, um sie nächste Runde zu aktivieren.';
   else {
-    const hasTargets = state.units.some(u => u.owner !== unit.owner &&
-      dist(unit, u) <= def.range);
+    const hasTargets = state.units.some(u => u.owner !== unit.owner && dist(unit, u) <= def.range);
     hint = unit.mp > 0 ? 'Helle Felder = Bewegung' : 'Bewegung aufgebraucht';
     if (hasTargets) hint += ' · Rote Felder = Angriffsziel';
   }
@@ -122,18 +142,19 @@ export function showUnitPanel(state, unit, ctx) {
     <div class="panel-head">
       <div>
         <div class="panel-title">${def.name}</div>
-        <div class="panel-sub" style="color:#${COLORS[unit.owner].toString(16).padStart(6, '0')}">${owner}${mine ? ' (deine Einheit)' : ''}</div>
+        <div class="panel-sub" style="color:${hex(playerColor(state, unit.owner))}">${owner}${mine ? ' (deine Einheit)' : ''}</div>
       </div>
-      <span class="panel-sub">${unit.acted ? 'erledigt' : 'bereit'}</span>
+      <span class="panel-sub">${unit.acted && unit.mp <= 0 ? 'erledigt' : 'bereit'}</span>
     </div>
-    <div class="hp-bar ${unit.hp <= 3 ? 'low' : ''}"><div style="width:${hpPct}%"></div></div>
+    <div class="hp-bar ${unit.hp / cap <= 0.35 ? 'low' : ''}"><div style="width:${hpPct}%"></div></div>
     <div class="stat-row">
-      <div class="stat">Leben<b>${unit.hp}/${MAX_HP}</b></div>
+      <div class="stat">Leben<b>${unit.hp}/${cap}</b></div>
       <div class="stat">Angriff<b>${def.atk}</b></div>
       <div class="stat">Verteidigung<b>${def.def}</b></div>
-      <div class="stat">Bewegung<b>${unit.mp}/${def.move}</b></div>
+      <div class="stat">Bewegung<b>${unit.mp}/${maxMove(state, unit.owner, unit.type)}</b></div>
       <div class="stat">Reichweite<b>${def.range}</b></div>
     </div>
+    <div class="ability-row">${abilityChips(unit.type)}</div>
     <div class="hint">${hint}</div>
   `);
 }
@@ -145,14 +166,14 @@ export function showCityPanel(state, city, ctx) {
   const occupied = state.units.some(u => u.q === city.q && u.r === city.r);
   let actions = '';
   if (city.owner) {
-    const unlocked = Object.keys(UNITS).filter(t => !UNITS[t].tech || state.techs[city.owner].includes(UNITS[t].tech));
+    const unlocked = UNIT_ORDER.filter(t => !UNITS[t].tech || state.techs[city.owner].includes(UNITS[t].tech));
     if (city.owner === ctx.actAs) {
       actions += `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Einheiten ausbilden</div></div><div class="action-list">`;
       for (const t of unlocked) {
         const u = UNITS[t];
         const reason = trainReason(state, city, t, ctx);
         actions += `<button class="btn action" data-train="${t}" ${reason ? 'disabled' : ''}>
-          <span>${u.name}<span class="sub">Angriff ${u.atk} · Verteidigung ${u.def} · Bewegung ${u.move} · Reichweite ${u.range}</span></span>
+          <span>${u.name}<span class="sub">Angriff ${u.atk} · Verteidigung ${u.def} · Bewegung ${u.move} · Reichweite ${u.range} · Leben ${u.hp}</span></span>
           <span class="cost">${u.cost} Sterne</span>
         </button>`;
       }
@@ -170,7 +191,7 @@ export function showCityPanel(state, city, ctx) {
     <div class="panel-head">
       <div>
         <div class="panel-title">Stadt</div>
-        <div class="panel-sub" style="color:${city.owner ? '#' + COLORS[city.owner].toString(16).padStart(6, '0') : '#71717a'}">${ownerName}</div>
+        <div class="panel-sub" style="color:${city.owner ? hex(playerColor(state, city.owner)) : '#71717a'}">${ownerName}</div>
       </div>
       <span class="panel-sub">${city.pop >= MAX_POP ? 'max. Bev.' : ''}</span>
     </div>

@@ -227,6 +227,16 @@ button:focus-visible {
 }
 .stat b { display: block; font-size: 15px; color: var(--text); margin-top: 2px; }
 
+.ability-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
+.ability {
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  cursor: help;
+}
+
 .hp-bar {
   height: 8px;
   background: var(--border);
@@ -309,6 +319,7 @@ button:focus-visible {
 .tribe-opt:hover { background: var(--hover); border-color: var(--border-strong); }
 .tribe-opt.active { border-color: var(--text); background: var(--hover); }
 .tribe-opt .tribe-name { font-weight: 700; }
+.tribe-opt .tribe-name .dot { display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: middle; }
 .tribe-opt .tribe-tech { font-size: 12px; color: var(--muted); line-height: 1.4; }
 
 .rules {

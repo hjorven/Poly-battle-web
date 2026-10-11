@@ -1,13 +1,19 @@
 import * as R from './rules.js';
 import { UNITS } from './config.js';
-import { hexDistance, hk, inBounds } from './hex.js';
+import { hexDistance, hk } from './hex.js';
 
-const UNIT_VALUE = { warrior: 2, archer: 3, rider: 3, defender: 3, swordsman: 5, catapult: 5, mind_bender: 4 };
+const UNIT_VALUE = {
+  warrior: 2, archer: 3, rider: 3, defender: 3, swordsman: 5,
+  catapult: 5, mindbender: 4, knight: 6, giant: 7
+};
 
 function attackScore(state, attacker, defender) {
-  const dmg = R.combatDamage(attacker, defender, R.terrainAt(state, defender.q, defender.r));
-  let score = dmg;
-  if (dmg >= defender.hp) score += 20 + UNIT_VALUE[defender.type] * 2;
+  if (UNITS[attacker.type].abilities.includes('convert')) {
+    return 30 + UNIT_VALUE[defender.type] * 3;
+  }
+  const { damage } = R.battleResults(state, attacker, defender);
+  let score = damage;
+  if (damage >= defender.hp) score += 20 + UNIT_VALUE[defender.type] * 2;
   score += UNIT_VALUE[defender.type];
   if (attacker.hp <= 2) score -= 6;
   return score;
@@ -65,25 +71,27 @@ export function botStep(state, player) {
   if (bestAttack) return bestAttack;
 
   for (const c of R.citiesFor(state, player)) {
-    const chk = R.canTrain(state, c, 'warrior', player);
-    if (!chk.ok) continue;
-    const stars = state.stars[player];
     const unlocked = R.unlockedUnits(state, player);
-    let type = 'warrior';
-    if (stars >= 10 && unlocked.includes('swordsman')) type = 'swordsman';
-    else if (stars >= 8 && unlocked.includes('catapult') && !unlocked.includes('swordsman')) type = 'catapult';
-    const train = R.canTrain(state, c, type, player);
-    if (train.ok) return { kind: 'train', city: c, type };
+    const stars = state.stars[player];
+    const order = ['giant', 'knight', 'swordsman', 'catapult', 'mindbender', 'archer', 'defender', 'rider', 'warrior'];
+    let type = null;
+    for (const t of order) {
+      if (!unlocked.includes(t)) continue;
+      if (UNITS[t].cost > stars) continue;
+      if (t === 'giant' && stars < 10) continue;
+      type = t;
+      break;
+    }
+    if (type && R.canTrain(state, c, type, player).ok) return { kind: 'train', city: c, type };
   }
 
   for (const u of mine) {
-    if (u.acted || u.mp <= 0) continue;
+    if (u.acted && u.mp <= 0) continue;
     const mv = bestMove(state, u, player);
     if (mv) return { kind: 'move', unit: mv.unit, q: mv.q, r: mv.r };
   }
 
-  const playerCities = R.citiesFor(state, player);
-  for (const c of playerCities) {
+  for (const c of R.citiesFor(state, player)) {
     const cost = R.popCost(c);
     if (c.pop < 5 && state.stars[player] >= cost + 3 && R.canBuyPop(state, c, player).ok) {
       return { kind: 'buyPop', city: c };
@@ -91,10 +99,10 @@ export function botStep(state, player) {
   }
 
   const techOrder = [
-    'organisation', 'jagd', 'klettern', 'reiten', 'fischerei',
-    'bogenschiessen', 'schildmacher', 'forstwirtschaft', 'bergbau', 'landwirtschaft',
-    'roesser', 'segeln', 'schmiedekunst', 'mathematik', 'philosophie',
-    'diplomatie', 'navigation', 'medaillen'
+    'organization', 'hunting', 'archery', 'farming', 'riding', 'roads',
+    'climbing', 'mining', 'shields', 'forestry', 'mathematics', 'meditation',
+    'philosophy', 'smithery', 'construction', 'freespirit', 'chivalry',
+    'trade', 'spiritualism', 'fishing', 'sailing', 'ramming', 'navigation', 'aquatism', 'diplomacy'
   ];
   for (const t of techOrder) {
     if (R.canResearch(state, t, player).ok && state.stars[player] >= R.techCost(state, t, player) + 5) {
