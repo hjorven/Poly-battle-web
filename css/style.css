@@ -306,12 +306,17 @@ button:focus-visible {
 .menu-buttons { display: flex; flex-direction: column; gap: 10px; }
 
 .tribe-pick {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  display: flex;
   gap: 8px;
-  margin-top: 4px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
 }
 .tribe-opt {
+  flex: 0 0 auto;
+  min-width: 168px;
+  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -324,6 +329,7 @@ button:focus-visible {
   font-size: 13px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
 }
 .tribe-opt:hover { background: var(--hover); border-color: var(--border-strong); }
 .tribe-opt.active { border-color: var(--text); background: var(--hover); }
@@ -351,6 +357,41 @@ button:focus-visible {
 .rules li { margin-bottom: 5px; padding-left: 14px; position: relative; }
 .rules li::before { content: '▸'; position: absolute; left: 0; color: var(--faint); }
 .rules b { color: var(--text); }
+
+.menu-section {
+  margin-top: 18px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.menu-section > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  min-height: 46px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  -webkit-tap-highlight-color: transparent;
+}
+.menu-section > summary::-webkit-details-marker { display: none; }
+.menu-section > summary::after {
+  content: '▾';
+  margin-left: auto;
+  color: var(--faint);
+  transition: transform 0.15s;
+}
+.menu-section[open] > summary::after { transform: rotate(180deg); }
+.menu-section > .menu-body { padding: 2px 14px 16px; }
+.menu-section .menu-body > ul { list-style: none; margin: 0; }
+.menu-section .menu-body li { margin-bottom: 6px; padding-left: 14px; position: relative; }
+.menu-section .menu-body li::before { content: '▸'; position: absolute; left: 0; color: var(--faint); }
+.menu-section .menu-body b { color: var(--text); }
+.menu-section .menu-body { font-size: 13px; line-height: 1.55; color: var(--muted); }
 
 .card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .card-head h2 { flex: 1; }
@@ -511,6 +552,15 @@ button:focus-visible {
 .overview-stat .panel-head { margin-bottom: 8px; }
 
 #tech-overlay .card { max-height: 92vh; overflow-y: auto; }
+
+@media (max-width: 750px) {
+  .card { padding: 18px 14px; }
+  .card h1 { font-size: 24px; }
+  .tagline { margin-bottom: 14px; font-size: 13px; }
+  .menu-section > summary { padding: 11px 12px; }
+  .menu-section > .menu-body { padding: 2px 12px 14px; }
+  #menu-overlay .card { min-height: 0; }
+}
 
 @media (max-width: 760px) {
   #status, #round-label { display: none; }

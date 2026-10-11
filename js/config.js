@@ -1,8 +1,8 @@
 // Datenmodell orientiert an den echten Polytopia-Spieldaten
 // (GameLogicData28.txt) – Werte in Anzeigeeinheiten (Rohwert / 10).
 
-export const MAP_W = 20;
-export const MAP_H = 14;
+export const MAP_W = 26;
+export const MAP_H = 18;
 export const HEX_SIZE = 1;
 
 export const MAX_POP = 5;
