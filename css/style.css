@@ -237,15 +237,6 @@ button:focus-visible {
 .stat b { display: block; font-size: 15px; color: var(--text); margin-top: 2px; }
 
 .ability-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
-.ability {
-  font-size: 11px;
-  color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  padding: 3px 8px;
-  cursor: help;
-}
-
 .hp-bar {
   height: 8px;
   background: var(--border);
@@ -306,22 +297,18 @@ button:focus-visible {
 .menu-buttons { display: flex; flex-direction: column; gap: 10px; }
 
 .tribe-pick {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   gap: 8px;
-  overflow-x: auto;
   padding: 2px 2px 10px;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
 }
 .tribe-opt {
-  flex: 0 0 auto;
-  min-width: 168px;
-  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   gap: 2px;
   align-items: flex-start;
-  padding: 10px 12px;
+  min-height: 48px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
@@ -330,33 +317,13 @@ button:focus-visible {
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
   -webkit-tap-highlight-color: transparent;
+  text-align: left;
 }
 .tribe-opt:hover { background: var(--hover); border-color: var(--border-strong); }
 .tribe-opt.active { border-color: var(--text); background: var(--hover); }
 .tribe-opt .tribe-name { font-weight: 700; }
 .tribe-opt .tribe-name .dot { display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: middle; }
 .tribe-opt .tribe-tech { font-size: 12px; color: var(--muted); line-height: 1.4; }
-
-.rules {
-  margin-top: 24px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  padding: 14px 16px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-.rules h3 {
-  color: var(--text);
-  font-size: 13px;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.rules ul { list-style: none; }
-.rules li { margin-bottom: 5px; padding-left: 14px; position: relative; }
-.rules li::before { content: '▸'; position: absolute; left: 0; color: var(--faint); }
-.rules b { color: var(--text); }
 
 .menu-section {
   margin-top: 18px;
@@ -504,6 +471,7 @@ button:focus-visible {
 .build-tile { font-size: 12px; color: var(--muted); min-width: 88px; }
 .build-btns { display: flex; flex-wrap: wrap; gap: 6px; }
 .btn.chip-btn { padding: 5px 10px; font-size: 12px; }
+.btn.chip-btn.disabled { opacity: 0.45; }
 .btn.chip-btn .cost { color: var(--accent); font-weight: 700; }
 
 #winner-title { color: var(--text); }
@@ -529,7 +497,7 @@ button:focus-visible {
 .ability { color: var(--muted); }
 
 @media (hover: none) {
-  .ability { min-height: 36px; }
+  .ability { min-height: 44px; }
   .tech-node:hover:not(:disabled) { background: var(--panel); border-color: var(--border); }
   .btn.chip-btn { min-height: 40px; }
   .action { min-height: 48px; }
@@ -566,7 +534,9 @@ button:focus-visible {
   #status, #round-label { display: none; }
   .brand { font-size: 14px; }
   #topbar { gap: 8px; padding: 0 8px; }
-  .chip { padding: 4px 8px; font-size: 12px; }
+  #player-strip { flex-wrap: nowrap; overflow-x: auto; min-width: 0; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  #player-strip::-webkit-scrollbar { display: none; }
+  .chip { padding: 4px 8px; font-size: 12px; flex: none; }
   .chip .meta { display: none; }
   .btn { padding: 8px 10px; font-size: 13px; }
   #panel {

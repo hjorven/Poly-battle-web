@@ -335,7 +335,9 @@ function buildRows(state, city, ctx) {
       if (!chk.ok) reason = chk.reason;
       else if (d.tech && !state.techs[city.owner].includes(d.tech)) reason = 'Technologie fehlt';
       else if (state.stars[city.owner] < d.cost) reason = 'Zu wenig Sterne';
-      return `<button class="btn chip-btn" data-improve="${t}" data-q="${q}" data-r="${r}" ${reason ? 'disabled' : ''} title="${reason || d.name}">${d.icon} ${d.name} <span class="cost">${d.cost}</span></button>`;
+      if (!ctx.myTurn && !reason) reason = 'Nicht dein Zug';
+      const locked = !ctx.myTurn;
+      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.icon} ${d.name} <span class="cost">${d.cost}</span></button>`;
     }).join('');
     rows.push(`<div class="build-row"><span class="build-tile">${cellName}</span><span class="build-btns">${btns}</span></div>`);
   }
@@ -454,13 +456,12 @@ function bindTechNav() {
   window.addEventListener('pointerup', endPointer);
   let lastTap = 0;
   tree.addEventListener('click', e => {
+    e.stopPropagation();
     if (Date.now() - techNav.lastDrag < 350) {
-      e.stopPropagation();
       e.preventDefault();
       return;
     }
     if (lastTechTarget && lastTechTarget.isConnected && lastTechClick) {
-      e.stopPropagation();
       e.preventDefault();
       lastTechClick(lastTechTarget);
       lastTechTarget = null;
