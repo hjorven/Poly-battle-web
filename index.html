@@ -25,6 +25,7 @@
     <div class="top-actions">
       <span id="round-label">Runde 1</span>
       <button id="techBtn" class="btn ghost">Forschung</button>
+      <button id="overviewBtn" class="btn ghost">Übersicht</button>
       <button id="endTurnBtn" class="btn primary" disabled>Zug beenden</button>
     </div>
   </header>
@@ -41,10 +42,31 @@
       <h1>Poly Battle</h1>
       <p class="tagline">Rundenbasierte Eroberung im Stil von Battle of Polytopia</p>
       <div class="menu-buttons">
-        <button class="btn primary big" data-mode="bot">Gegen 3 KI (1 Spieler)</button>
+        <button class="btn primary big" data-mode="bot">Gegen KI (1 Spieler)</button>
         <button class="btn big" data-mode="hotseat">Hotseat (2 Spieler)</button>
         <button class="btn big" data-mode="online">Online (Link teilen)</button>
         <button id="copyLinkBtn" class="btn big hidden">Link zum Spiel kopieren</button>
+      </div>
+      <div id="settings-box" class="rules">
+        <h3>Spieleinstellungen (Gegen KI)</h3>
+        <div class="setting-row">
+          <span class="setting-label">Gegner</span>
+          <div class="seg">
+            <button data-bots="1" class="chip-btn">1</button>
+            <button data-bots="2" class="chip-btn">2</button>
+            <button data-bots="3" class="chip-btn">3</button>
+            <button data-bots="4" class="chip-btn">4</button>
+            <button data-bots="5" class="chip-btn">5</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Start-Sterne</span>
+          <div class="seg">
+            <button data-stars="knapp" class="chip-btn">Knapp (2)</button>
+            <button data-stars="normal" class="chip-btn">Standard (5)</button>
+            <button data-stars="reich" class="chip-btn">Reich (10)</button>
+          </div>
+        </div>
       </div>
       <div class="rules" id="tribe-box">
         <h3>Dein Stamm (Gegen KI)</h3>
@@ -60,10 +82,11 @@
           <li><b>Unentdecktes</b> Land ist abgedunkelt und wird durch Einheiten und Städte aufgedeckt (Berge geben mehr Sicht).</li>
           <li><b>Forschung</b> im sternförmigen Technologiebaum: drei Stufen, echte Voraussetzungen und Einheitenfreischaltungen. Kosten steigen mit der Zahl deiner Städte.</li>
           <li><b>Marine</b>: Mit <b>Segeln</b> baust du Boote und Schiffe in Küstenstädten, mit <b>Navigation</b> Kriegsschiffe; <b>Aquatismus</b> gibt Verteidigungsbonus auf Wasser.</li>
+          <li><b>Siedler</b>: In der Hauptstadt ausbildbar; gründet auf freiem Feld (mind. 2 Felder von anderen Städten) eine neue Stadt.</li>
           <li><b>Sieg:</b> Erbeute alle Städte der Gegner.</li>
         </ul>
       </div>
-      <p class="footnote">Karte ziehen: Ziehen · Zoomen: Rad/Zoom · Auswählen: Klick</p>
+      <p class="footnote">Karte ziehen: Ziehen · Zoomen: Rad/Zoom · Auswählen: Klick · Tech-Baum: Doppeltipp setzt die Ansicht zurück</p>
     </div>
   </div>
 
@@ -81,6 +104,26 @@
             <div id="tech-nodes"></div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="overview-overlay" class="overlay hidden">
+    <div class="card">
+      <div class="card-head">
+        <h2>Übersicht</h2>
+        <button id="overviewClose" class="btn ghost small">Schließen</button>
+      </div>
+      <div id="overview-list"></div>
+    </div>
+  </div>
+
+  <div id="confirm-overlay" class="overlay hidden">
+    <div class="card narrow">
+      <p id="confirm-text" class="confirm-text"></p>
+      <div class="menu-buttons">
+        <button id="confirmNo" class="btn big">Abbrechen</button>
+        <button id="confirmYes" class="btn primary big">Ja</button>
       </div>
     </div>
   </div>

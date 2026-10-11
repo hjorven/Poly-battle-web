@@ -109,6 +109,11 @@ async function afterAction(events = []) {
   }
   app.busy = false;
   refresh();
+  const token = (app.state.round || 0) + ':' + app.state.turn;
+  if (myTurn() && !anyIdle(actAs()) && app.idleWarned !== token) {
+    app.idleWarned = token;
+    ui.toast('Alle Einheiten erledigt – Zug beenden', 'good');
+  }
   await saveOnline();
   if (!app.state.winner) await maybeBot();
 }
@@ -172,6 +177,38 @@ async function doImprove(city, type, q, r) {
   await afterAction();
 }
 
+async function doFound(unit) {
+  const res = R.foundCity(app.state, unit, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
+  app.busy = true;
+  ui.toast('Stadt gegründet', 'good');
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
+function anyIdle(owner) {
+  return (app.state.units || []).some(u => u.owner === owner && !u.acted && u.mp > 0);
+}
+
+function doEndTurnNow() {
+  app.busy = true;
+  app.sel = null;
+  R.endTurn(app.state);
+  return render.syncBoard(app.state, viewer()).then(() => {
+    if (app.mode === 'hotseat') ui.toast(`Am Zug: ${needName(app.state, app.state.turn)}`);
+    return afterAction();
+  });
+}
+
+async function doEndTurn() {
+  if (!myTurn()) return;
+  if (app.mode !== 'hotseat' && anyIdle(actAs())) {
+    ui.showConfirm('Es sind noch Einheiten mit Aktionen übrig. Zug trotzdem beenden?', doEndTurnNow);
+    return;
+  }
+  await doEndTurnNow();
+}
+
 async function doResearch(techId) {
   const res = R.research(app.state, techId, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
@@ -179,16 +216,6 @@ async function doResearch(techId) {
   ui.toast(`${TECHS[techId].name} erforscht`, 'good');
   await afterAction();
   if (ui.isTechOpen()) ui.openTech(app.state, ctx());
-}
-
-async function doEndTurn() {
-  if (!myTurn()) return;
-  app.busy = true;
-  app.sel = null;
-  R.endTurn(app.state);
-  await render.syncBoard(app.state, viewer());
-  if (app.mode === 'hotseat') ui.toast(`Am Zug: ${needName(app.state, app.state.turn)}`);
-  await afterAction();
 }
 
 async function maybeBot() {
@@ -219,6 +246,9 @@ async function maybeBot() {
         await render.syncBoard(app.state, viewer());
       } else if (step.kind === 'improve') {
         R.improve(app.state, step.city, step.type, step.q, step.r, player);
+        await render.syncBoard(app.state, viewer());
+      } else if (step.kind === 'settle') {
+        R.foundCity(app.state, step.unit, player);
         await render.syncBoard(app.state, viewer());
       } else if (step.kind === 'research') {
         R.research(app.state, step.tech, player);
@@ -292,9 +322,12 @@ function startLocal(mode) {
   app.hasOpponent = true;
   app.sel = null;
   app.busy = false;
-  const count = mode === 'bot' ? 4 : 2;
+  app.idleWarned = null;
+  const settings = ui.getSettings();
+  const count = mode === 'bot' ? settings.bots + 1 : 2;
   const tribe = mode === 'bot' ? ui.getTribe() : null;
-  app.state = R.createGame(Math.floor(Math.random() * 2 ** 31), count, tribe);
+  const opts = mode === 'bot' ? { tribe, stars: settings.stars } : null;
+  app.state = R.createGame(Math.floor(Math.random() * 2 ** 31), count, opts);
   history.replaceState(null, '', location.pathname);
   ui.hideMenu();
   ui.hideWinner();
@@ -375,6 +408,24 @@ function boot() {
     onTrain: doTrain,
     onBuyPop: doBuyPop,
     onImprove: doImprove,
+    onFound: doFound,
+    onClosePanel: () => { app.sel = null; refresh(); },
+    onOpenOverview: () => { if (app.state) ui.showOverview(app.state, ctx()); },
+    onCloseOverview: () => ui.hideOverview(),
+    onFocusUnit: id => {
+      const u = R.findUnit(app.state, id);
+      if (!u) return;
+      ui.hideOverview();
+      app.sel = { kind: 'unit', id: u.id };
+      render.cameraTo(u.q, u.r, true);
+      refresh();
+    },
+    onFocusCity: (q, r) => {
+      ui.hideOverview();
+      app.sel = { kind: 'city', q, r };
+      render.cameraTo(q, r, true);
+      refresh();
+    },
     onMenu: () => ui.showMenu(),
     onRestart: () => { ui.hideWinner(); ui.showMenu(); },
     onMode: mode => mode === 'online' ? startOnline() : startLocal(mode),

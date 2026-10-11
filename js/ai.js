@@ -5,7 +5,7 @@ import { hexDistance, hk } from './hex.js';
 const UNIT_VALUE = {
   warrior: 2, archer: 3, rider: 3, defender: 3, swordsman: 5,
   catapult: 5, mindbender: 4, knight: 6, giant: 7,
-  boat: 3, ship: 5, battleship: 7
+  boat: 3, ship: 5, battleship: 7, settler: 1
 };
 
 function attackScore(state, attacker, defender) {
@@ -16,6 +16,7 @@ function attackScore(state, attacker, defender) {
   let score = damage;
   if (damage >= defender.hp) score += 20 + UNIT_VALUE[defender.type] * 2;
   score += UNIT_VALUE[defender.type];
+  score += Math.max(0, 12 - defender.hp) * 0.6;
   if (attacker.hp <= 2) score -= 6;
   return score;
 }
@@ -28,6 +29,7 @@ function bestBuilding(state, player) {
   const stars = state.stars[player];
   let best = null;
   for (const city of R.citiesFor(state, player)) {
+    if (city.pop < 2 && state.cities.filter(c => c.owner === player).length < 3) continue;
     for (const [q, r] of R.territory(city)) {
       if (R.improvementAt(state, q, r) || R.resourceAt(state, q, r)) continue;
       if (state.units.some(u => u.q === q && u.r === r)) continue;
@@ -40,6 +42,39 @@ function bestBuilding(state, player) {
         if (!best || score > best.score) best = { kind: 'improve', city, type, q, r, score };
       }
     }
+  }
+  return best;
+}
+
+function settleStep(state, player) {
+  if (!state.settlerAt) state.settlerAt = {};
+  const sitters = state.units.filter(u => u.owner === player && u.type === 'settler' && !u.acted);
+  for (const s of sitters) {
+    if (R.canFound(state, s, player).ok) {
+      state.settlerAt[player] = state.round;
+      return { kind: 'settle', unit: s };
+    }
+  }
+  const cities = R.citiesFor(state, player);
+  const count = cities.length;
+  if (count >= 5) return null;
+  if (state.round - (state.settlerAt[player] || 0) < 3) return null;
+  const cap = cities.find(c => c.isCapital);
+  if (!cap || cap.trained) return null;
+  if (state.units.some(u => u.q === cap.q && u.r === cap.r)) return null;
+  if (state.stars[player] < UNITS.settler.cost + 3) return null;
+  if (!R.canTrain(state, cap, 'settler', player).ok) return null;
+  return { kind: 'train', city: cap, type: 'settler' };
+}
+
+function bestSettleMove(state, s) {
+  const reach = R.reachableMap(state, s);
+  let best = null, bd = -1;
+  for (const [k] of reach) {
+    const [q, r] = k.split(',').map(Number);
+    if (!R.canFound(state, { ...s, q, r }, s.owner).ok) continue;
+    const d = Math.min(99, ...state.cities.map(c => hexDistance(q, r, c.q, c.r)));
+    if (d > bd) { bd = d; best = { unit: s, q, r }; }
   }
   return best;
 }
@@ -85,11 +120,16 @@ export function botStep(state, player) {
   for (const u of mine) {
     if (u.acted) continue;
     for (const t of R.attackTargets(state, u)) {
+      const res = R.battleResults(state, u, t);
+      if (res.damage < t.hp && res.retaliation >= u.hp) continue;
       const s = attackScore(state, u, t);
       if (!bestAttack || s > bestAttack.score) bestAttack = { kind: 'attack', attacker: u, defender: t, score: s };
     }
   }
   if (bestAttack) return bestAttack;
+
+  const settle = settleStep(state, player);
+  if (settle) return settle;
 
   for (const c of R.citiesFor(state, player)) {
     const unlocked = R.unlockedUnits(state, player);
@@ -111,6 +151,11 @@ export function botStep(state, player) {
 
   for (const u of mine) {
     if (u.acted && u.mp <= 0) continue;
+    if (u.type === 'settler') {
+      const mv = bestSettleMove(state, u);
+      if (mv) return { kind: 'move', unit: mv.unit, q: mv.q, r: mv.r };
+      continue;
+    }
     const mv = bestMove(state, u, player);
     if (mv) return { kind: 'move', unit: mv.unit, q: mv.q, r: mv.r };
   }
