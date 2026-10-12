@@ -3,6 +3,7 @@ import * as render from './render.js';
 import * as ui from './ui.js';
 import * as net from './net.js';
 import { botStep } from './ai.js';
+import { saveGame, loadGame, saveInfo, clearSave } from './save.js';
 import { NAMES, UNITS, TECHS, IMPROVEMENTS } from './config.js';
 
 const app = {
@@ -91,12 +92,31 @@ function updateSelection() {
   }
 }
 
+function humanDefeated() {
+  return app.mode === 'bot' && !!app.state && !app.state.winner && R.isEliminated(app.state, 'player_1');
+}
+
 function checkWinnerUI() {
-  if (app.state && app.state.winner) ui.showWinner(app.state, ctx());
+  if (!app.state) return;
+  if (app.state.winner) { clearSave(); ui.showWinner(app.state, ctx()); }
+  else if (humanDefeated()) { clearSave(); ui.showDefeat(app.state); }
+}
+
+// Lokale Partien nach jeder Aktion sichern (Neuladen / Tab schließen).
+function persist() {
+  if (app.online || !app.state) return;
+  if (humanDefeated()) { clearSave(); return; }
+  saveGame(app.mode, app.state);
+}
+
+function showMenu() {
+  ui.setContinue(saveInfo());
+  ui.showMenu();
 }
 
 async function saveOnline() {
   if (!app.online || !app.gameId) return;
+  app.state.rev = (app.state.rev || 0) + 1;
   const { error } = await net.saveMatch(app.gameId, app.state);
   if (error) ui.toast(error, 'warn');
 }
@@ -114,6 +134,7 @@ async function afterAction(events = []) {
     app.idleWarned = token;
     ui.toast('Alle Einheiten erledigt – Zug beenden', 'good');
   }
+  persist();
   await saveOnline();
   if (!app.state.winner) await maybeBot();
 }
@@ -225,7 +246,7 @@ async function maybeBot() {
   app.sel = null;
   refresh();
   await sleep(550);
-  while (app.state.turn !== 'player_1' && !app.state.winner) {
+  while (app.state.turn !== 'player_1' && !app.state.winner && !humanDefeated()) {
     const player = app.state.turn;
     let steps = 0;
     while (app.state.turn === player && !app.state.winner) {
@@ -265,6 +286,7 @@ async function maybeBot() {
     }
   }
   app.busy = false;
+  persist();
   refresh();
 }
 
@@ -272,7 +294,10 @@ async function onHexPick(key) {
   if (!app.state || app.state.winner || app.busy) return;
   const [q, r] = key.split(',').map(Number);
   const st = app.state;
-  const unit = R.unitAt(st, q, r);
+  const v = viewer();
+  const rawUnit = R.unitAt(st, q, r);
+  // Feindliche Einheiten im Nebel lassen sich weder anwählen noch angreifen.
+  const unit = rawUnit && (!v || rawUnit.owner === v || R.isVisible(st, v, q, r)) ? rawUnit : null;
   const city = R.cityAt(st, q, r);
 
   if (!myTurn()) {
@@ -328,12 +353,38 @@ function startLocal(mode) {
   const tribe = mode === 'bot' ? ui.getTribe() : null;
   const opts = mode === 'bot' ? { tribe, stars: settings.stars } : null;
   app.state = R.createGame(Math.floor(Math.random() * 2 ** 31), count, opts);
+  enterLocal();
+  persist();
+}
+
+function enterLocal() {
+  if (app.channel) {
+    try { net.unsubscribe(app.channel); } catch (e) { /* ignore */ }
+    app.channel = null;
+  }
   history.replaceState(null, '', location.pathname);
   ui.hideMenu();
   ui.hideWinner();
   document.getElementById('copyLinkBtn').classList.add('hidden');
   render.syncBoard(app.state, viewer());
   refresh();
+}
+
+function continueGame() {
+  const data = loadGame();
+  if (!data) { ui.setContinue(null); ui.toast('Kein Spielstand gefunden', 'warn'); return; }
+  app.mode = data.mode;
+  app.online = false;
+  app.gameId = null;
+  app.myRole = null;
+  app.hasOpponent = true;
+  app.sel = null;
+  app.busy = false;
+  app.idleWarned = null;
+  app.state = data.state;
+  enterLocal();
+  ui.toast(`Spielstand geladen · Runde ${app.state.round}`, 'good');
+  maybeBot();
 }
 
 async function startOnline() {
@@ -346,7 +397,7 @@ async function startOnline() {
   if (hashId) {
     app.gameId = hashId;
     const { match, role, error } = await net.joinMatch(hashId);
-    if (error) { ui.toast(error, 'warn'); ui.showMenu(); return; }
+    if (error) { ui.toast(error, 'warn'); showMenu(); return; }
     app.state = match.game_state;
     app.myRole = role;
     app.hasOpponent = !!match.player_2;
@@ -357,7 +408,7 @@ async function startOnline() {
   } else {
     const state = R.createGame(Math.floor(Math.random() * 2 ** 31), 2);
     const { match, error } = await net.createMatch(state);
-    if (error) { ui.toast(error, 'warn'); ui.showMenu(); return; }
+    if (error) { ui.toast(error, 'warn'); showMenu(); return; }
     app.state = match.game_state;
     app.myRole = 'player_1';
     app.hasOpponent = false;
@@ -375,7 +426,9 @@ async function startOnline() {
     app.channel = null;
   }
   app.channel = net.subscribe(app.gameId, match => {
-    if (!app.online) return;
+    if (!app.online || !match.game_state) return;
+    // Veraltete oder eigene, bereits angewendete Stände ignorieren.
+    if ((match.game_state.rev || 0) < (app.state?.rev || 0)) return;
     app.state = match.game_state;
     if (match.player_2) app.hasOpponent = true;
     app.busy = false;
@@ -426,8 +479,9 @@ function boot() {
       render.cameraTo(q, r, true);
       refresh();
     },
-    onMenu: () => ui.showMenu(),
-    onRestart: () => { ui.hideWinner(); ui.showMenu(); },
+    onMenu: () => showMenu(),
+    onRestart: () => { ui.hideWinner(); showMenu(); },
+    onContinue: continueGame,
     onMode: mode => mode === 'online' ? startOnline() : startLocal(mode),
     onCopyLink: copyLink
   });
@@ -435,7 +489,7 @@ function boot() {
   document.getElementById('copyLinkBtn').addEventListener('click', copyLink);
 
   if (location.hash.length > 1) startOnline();
-  else ui.showMenu();
+  else showMenu();
 
   window.__pb = { app, project: render.project, R, botStep };
 }
