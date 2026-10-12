@@ -4,7 +4,7 @@ import * as ui from './ui.js';
 import * as net from './net.js';
 import { botStep } from './ai.js';
 import { saveGame, loadGame, saveInfo, clearSave } from './save.js';
-import { NAMES, UNITS, TECHS, IMPROVEMENTS } from './config.js';
+import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS } from './config.js';
 
 const app = {
   mode: null,
@@ -99,7 +99,7 @@ function humanDefeated() {
 function checkWinnerUI() {
   if (!app.state) return;
   if (app.state.winner) { clearSave(); ui.showWinner(app.state, ctx()); }
-  else if (humanDefeated()) { clearSave(); ui.showDefeat(app.state); }
+  else if (humanDefeated()) { clearSave(); ui.showDefeat(app.state, ctx()); }
 }
 
 // Lokale Partien nach jeder Aktion sichern (Neuladen / Tab schließen).
@@ -136,6 +136,10 @@ async function afterAction(events = []) {
   for (const ev of events) {
     if (ev.kind === 'capture') {
       ui.toast(ev.to ? `Stadt erobert! (${needName(app.state, ev.to)})` : 'Stadt neutralisiert', 'good');
+    } else if (ev.kind === 'ruin') {
+      ui.toast(`Ruine erkundet: ${ev.text}`, 'good');
+    } else if (ev.kind === 'note') {
+      ui.toast(ev.text);
     }
   }
   app.busy = false;
@@ -147,11 +151,28 @@ async function afterAction(events = []) {
   }
   persist();
   await saveOnline();
+  offerReward();
   if (!app.state.winner) await maybeBot();
 }
 
 function actAs() {
   return ctx().actAs;
+}
+
+// Offene Stadt-Belohnung des aktiven Spielers direkt zur Auswahl anbieten.
+function offerReward() {
+  if (!myTurn() || ui.isRewardOpen()) return;
+  const city = R.citiesFor(app.state, actAs()).find(c => R.pendingLevel(c));
+  if (city) ui.showReward(app.state, city, ctx());
+}
+
+async function doChooseReward(city, id) {
+  const res = R.chooseReward(app.state, city, id, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
+  app.busy = true;
+  ui.toast(`${CITY_REWARDS[id].name} gewählt`, 'good');
+  await render.syncBoard(app.state, viewer());
+  await afterAction(res.events);
 }
 
 function viewer() {
@@ -226,10 +247,19 @@ function doEndTurnNow() {
   app.busy = true;
   app.sel = null;
   R.endTurn(app.state);
-  return render.syncBoard(app.state, viewer()).then(() => {
-    if (app.mode === 'hotseat') { ui.toast(`Am Zug: ${needName(app.state, app.state.turn)}`); focusHome(); }
-    return afterAction();
-  });
+  // Hotseat: erst Übergabe-Bildschirm, dann die Sicht des nächsten Spielers.
+  if (app.mode === 'hotseat' && !app.state.winner) {
+    ui.showHandover(needName(app.state, app.state.turn), () => {
+      render.syncBoard(app.state, viewer());
+      focusHome();
+      afterAction();
+    });
+    app.busy = false;
+    persist();
+    refresh();
+    return Promise.resolve();
+  }
+  return render.syncBoard(app.state, viewer()).then(() => afterAction());
 }
 
 async function doEndTurn() {
@@ -284,6 +314,9 @@ async function maybeBot() {
         await render.syncBoard(app.state, viewer());
       } else if (step.kind === 'research') {
         R.research(app.state, step.tech, player);
+      } else if (step.kind === 'reward') {
+        R.chooseReward(app.state, step.city, step.choice, player);
+        await render.syncBoard(app.state, viewer());
       }
       ui.updateStrip(app.state, ctx());
       await sleep(430);
@@ -362,7 +395,12 @@ function startLocal(mode) {
   const settings = ui.getSettings();
   const count = mode === 'bot' ? settings.bots + 1 : 2;
   const tribe = mode === 'bot' ? ui.getTribe() : null;
-  const opts = mode === 'bot' ? { tribe, stars: settings.stars } : null;
+  const opts = mode === 'bot'
+    ? {
+        tribe, stars: settings.stars, turnLimit: settings.turnLimit, aiLevel: settings.aiLevel,
+        ai: Array.from({ length: count - 1 }, (_, k) => 'player_' + (k + 2))
+      }
+    : { turnLimit: settings.turnLimit };
   app.state = R.createGame(Math.floor(Math.random() * 2 ** 31), count, opts);
   enterLocal();
   persist();
@@ -403,8 +441,14 @@ function continueGame() {
   app.busy = false;
   app.idleWarned = null;
   app.state = data.state;
+  if (app.mode === 'hotseat') {
+    enterLocal();
+    ui.showHandover(needName(app.state, app.state.turn), () => { focusHome(); offerReward(); });
+    return;
+  }
   enterLocal();
   ui.toast(`Spielstand geladen · Runde ${app.state.round}`, 'good');
+  offerReward();
   maybeBot();
 }
 
@@ -485,6 +529,7 @@ function boot() {
     onBuyPop: doBuyPop,
     onImprove: doImprove,
     onFound: doFound,
+    onChooseReward: doChooseReward,
     onClosePanel: () => { app.sel = null; refresh(); },
     onOpenOverview: () => { if (app.state) ui.showOverview(app.state, ctx()); },
     onCloseOverview: () => ui.hideOverview(),
@@ -514,7 +559,7 @@ function boot() {
   if (location.hash.length > 1) startOnline();
   else showMenu();
 
-  window.__pb = { app, project: render.project, R, botStep };
+  window.__pb = { app, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); } };
 }
 
 boot();

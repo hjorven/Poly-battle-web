@@ -10,6 +10,10 @@ Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im
 - **Einheiten**: Krieger, Schütze, Reiter, Verteidiger, Schwertkämpfer, Katapult, Gedankenbeuger – jede mit eigenen Werten für Angriff, Verteidigung, Bewegung und Reichweite.
 - **Technologiebaum** in drei Stufen: Organisation, Jagd, Klettern, Reiten, Fischerei; Landwirtschaft, Schildmacher, Forstwirtschaft, Bogenschießen, Bergbau, Freie Hände, Wege, Segeln; Philosophie, Diplomatie, Mathematik, Schmiedekunst, Navigation. Die Kosten skalieren mit der Zahl eigener Städte.
 - **Städte**: Bevölkerung kaufen, pro Stadt und Runde eine Einheit ausbilden, Städte erobern.
+- **Stadtstufen**: Jede neue Bevölkerungsstufe (2 bis 5) bringt eine Belohnung zur Wahl – Werkstatt oder Erkunder, Stadtmauer oder Vorräte, Wachstum oder Grenzerweiterung, Park oder Riese.
+- **Ruinen** auf der Karte geben beim Betreten Sterne, eine Technologie, einen Schwertkämpfer, Bevölkerung oder eine aufgedeckte Umgebung.
+- **Spielmodi**: Eroberung (bis nur noch ein Stamm übrig ist) oder Perfektion (30 Runden, höchste Punktzahl gewinnt). Am Ende gibt es eine Auswertung mit Punkteverlauf.
+- **KI-Stärke** Leicht, Normal oder Schwer (Einkommen, Startsterne, Angriffsverhalten).
 - **Fog of War**: Unentdecktes Land ist abgedunkelt. Feindliche Einheiten sieht (und trifft) man nur, solange sie in Sichtweite einer eigenen Einheit oder Stadt stehen.
 - **Sieg**: Wer als Letzter noch Städte besitzt (alle anderen eliminiert), gewinnt. Verlierst du gegen die KI deine letzte Stadt, endet die Partie mit „Besiegt".
 - **Spielstand**: Partien gegen die KI und Hotseat-Partien werden nach jeder Aktion im Browser gespeichert und lassen sich über „Weiterspielen" im Menü fortsetzen.
@@ -19,7 +23,7 @@ Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im
 | Modus | Beschreibung |
 |---|---|
 | **Gegen KI** | Dein Stamm gegen 1–5 Bots auf einer großen Welt (lokal, kein Server nötig) |
-| **Hotseat** | Zwei Spieler abwechselnd an einem Gerät (lokal) |
+| **Hotseat** | Zwei Spieler abwechselnd an einem Gerät, mit Übergabe-Bildschirm zwischen den Zügen (lokal) |
 | **Online** | Über Supabase (`matches`-Tabelle) – Link teilen und gemeinsam spielen |
 
 ## Starten

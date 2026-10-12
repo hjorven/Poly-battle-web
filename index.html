@@ -55,8 +55,23 @@
         </div>
       </details>
       <details class="menu-section" id="settings-box">
-        <summary>Spieleinstellungen (Gegen KI)</summary>
+        <summary>Spieleinstellungen</summary>
         <div class="menu-body">
+          <div class="setting-row">
+            <span class="setting-label">Modus</span>
+            <div class="seg">
+              <button data-gamemode="conquest" class="chip-btn">Eroberung</button>
+              <button data-gamemode="perfection" class="chip-btn">Perfektion (30 Runden)</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">KI-Stärke</span>
+            <div class="seg">
+              <button data-ai="easy" class="chip-btn">Leicht</button>
+              <button data-ai="normal" class="chip-btn">Normal</button>
+              <button data-ai="hard" class="chip-btn">Schwer</button>
+            </div>
+          </div>
           <div class="setting-row">
             <span class="setting-label">Gegner</span>
             <div class="seg">
@@ -89,7 +104,9 @@
           <li><b>Forschung</b> im sternförmigen Technologiebaum: drei Stufen, echte Voraussetzungen und Einheitenfreischaltungen. Kosten steigen mit der Zahl deiner Städte.</li>
           <li><b>Marine</b>: Mit <b>Segeln</b> baust du Boote und Schiffe in Küstenstädten, mit <b>Navigation</b> Kriegsschiffe; <b>Aquatismus</b> gibt Verteidigungsbonus auf Wasser.</li>
           <li><b>Siedler</b>: In der Hauptstadt ausbildbar; gründet auf freiem Feld (mind. 2 Felder von anderen Städten) eine neue Stadt.</li>
-          <li><b>Sieg:</b> Erbeute alle Städte der Gegner.</li>
+          <li><b>Stadtstufen</b>: Wächst eine Stadt (Bevölkerung 2 bis 5), wählst du eine Belohnung – Werkstatt oder Erkunder, Stadtmauer oder Vorräte, Wachstum oder Grenzerweiterung, Park oder Riese.</li>
+          <li><b>Ruinen</b> liegen verstreut auf der Karte. Ziehe mit einer Einheit hinein: Sterne, eine Technologie, ein Schwertkämpfer, Bevölkerung oder eine aufgedeckte Umgebung.</li>
+          <li><b>Sieg:</b> Im Modus Eroberung erbeutest du alle Städte der Gegner. Im Modus Perfektion gewinnt nach 30 Runden die höchste Punktzahl (Städte, Bevölkerung, Technologien, Einheiten, Erkundung, Gebäude, Ruinen).</li>
         </ul>
         </div>
       </details>
@@ -135,10 +152,29 @@
     </div>
   </div>
 
-  <div id="winner-overlay" class="overlay hidden">
+  <div id="reward-overlay" class="overlay hidden">
     <div class="card narrow">
+      <h2 id="reward-title">Stadt steigt auf</h2>
+      <p id="reward-text" class="confirm-text"></p>
+      <div id="reward-options" class="menu-buttons"></div>
+    </div>
+  </div>
+
+  <div id="handover-overlay" class="overlay solid hidden">
+    <div class="card narrow">
+      <h2 id="handover-title">Spielerwechsel</h2>
+      <p id="handover-text" class="confirm-text">Gib das Gerät weiter.</p>
+      <div class="menu-buttons">
+        <button id="handoverGo" class="btn primary big">Bereit</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="winner-overlay" class="overlay hidden">
+    <div class="card narrow wide">
       <h1 id="winner-title">Gewonnen!</h1>
       <p id="winner-text"></p>
+      <div id="winner-stats"></div>
       <div class="menu-buttons">
         <button class="btn primary big" id="winnerRestart">Neues Spiel</button>
       </div>

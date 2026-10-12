@@ -5,7 +5,7 @@ import {
   RESOURCES, IMPROVEMENTS
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds } from '../js/hex.js';
-import { botStep } from '../js/ai.js';
+import { botStep, applyStep } from '../js/ai.js';
 import { saveGame, loadGame, saveInfo, clearSave } from '../js/save.js';
 
 let passed = 0;
@@ -44,7 +44,8 @@ function assertInvariants(state) {
   for (const u of state.units) {
     assert.ok(inBounds(u.q, u.r), 'unit out of bounds');
     const tile = R.terrainAt(state, u.q, u.r);
-    assert.ok(TERRAIN[tile].walkable, 'unit on unwalkable tile');
+    const naval = (UNITS[u.type].abilities || []).includes('water');
+    assert.ok(naval ? (tile === 'water' || tile === 'ocean' || !!R.cityAt(state, u.q, u.r)) : TERRAIN[tile].walkable, 'unit on wrong terrain');
     const k = hk(u.q, u.r);
     assert.ok(!seen.has(k), 'two units on same tile: ' + k);
     seen.add(k);
@@ -622,15 +623,7 @@ test('4 Bots: 30 Runden ohne Verletzungen', () => {
       while (st.turn === player && !st.winner) {
         const step = botStep(st, player);
         if (!step) break;
-        let res;
-        if (step.kind === 'attack') res = R.attack(st, step.attacker, step.defender);
-        else if (step.kind === 'move') res = R.moveUnit(st, step.unit, step.q, step.r);
-        else if (step.kind === 'train') res = R.trainUnit(st, step.city, step.type, player);
-        else if (step.kind === 'buyPop') res = R.buyPop(st, step.city, player);
-        else if (step.kind === 'improve') res = R.improve(st, step.city, step.type, step.q, step.r, player);
-        else if (step.kind === 'settle') res = R.foundCity(st, step.unit, player);
-        else if (step.kind === 'research') res = R.research(st, step.tech, player);
-        else throw new Error('unknown step ' + step.kind);
+        const res = applyStep(st, step, player);
         if (res && res.ok === false) throw new Error(`${step.kind} fehlgeschlagen: ${res.reason}`);
         assertInvariants(st);
         steps++;
@@ -832,18 +825,223 @@ test('KI-Partie läuft zu Ende (Simulation, mehrere Seeds)', () => {
       const step = botStep(st, p);
       guard++;
       if (!step) { R.endTurn(st); continue; }
-      if (step.kind === 'attack') {
-        const res = R.attack(st, step.attacker, step.defender);
-        assert.notStrictEqual(res.ok, false, 'KI wählt nur gültige Angriffe');
-      } else if (step.kind === 'move') R.moveUnit(st, step.unit, step.q, step.r);
-      else if (step.kind === 'train') R.trainUnit(st, step.city, step.type, p);
-      else if (step.kind === 'buyPop') R.buyPop(st, step.city, p);
-      else if (step.kind === 'improve') R.improve(st, step.city, step.type, step.q, step.r, p);
-      else if (step.kind === 'settle') R.foundCity(st, step.unit, p);
-      else if (step.kind === 'research') R.research(st, step.tech, p);
+      const res = applyStep(st, step, p);
+      if (step.kind === 'attack') assert.notStrictEqual(res.ok, false, 'KI wählt nur gültige Angriffe');
+      assert.ok(!res || res.ok !== false || step.kind === 'move', `KI-Schritt ${step.kind} gültig: ${res && res.reason}`);
     }
     assert.ok(guard < 20000, 'keine Endlosschleife');
     for (const u of st.units) assert.ok(u.hp > 0 && u.hp <= UNITS[u.type].hp, 'LP im gültigen Bereich');
+  }
+});
+
+console.log('\n-- Stadtstufen --');
+
+function cityState() {
+  const st = makeState();
+  st.explored = { player_1: [], player_2: [] };
+  const city = { q: 10, r: 8, owner: 'player_1', pop: 1, trained: false, isCapital: true };
+  st.cities.push(city, { q: 20, r: 12, owner: 'player_2', pop: 1, trained: false, isCapital: true });
+  return { st, city };
+}
+
+test('Bevölkerung 2 bis 5 erzeugt je eine offene Belohnung', () => {
+  const { st, city } = cityState();
+  R.growCity(st, city, 4);
+  assert.strictEqual(city.pop, 5);
+  assert.deepStrictEqual(city.pending, [2, 3, 4, 5]);
+  assert.deepStrictEqual(R.rewardOptions(city), ['workshop', 'explorer']);
+  assert.strictEqual(R.chooseReward(st, city, 'wall', 'player_1').ok, false, 'falsche Stufe');
+  assert.strictEqual(R.chooseReward(st, city, 'workshop', 'player_2').ok, false, 'fremde Stadt');
+});
+
+test('Werkstatt und Park erhöhen das Einkommen', () => {
+  const { st, city } = cityState();
+  R.growCity(st, city, 4);
+  const base = R.cityIncome(st, city);
+  R.chooseReward(st, city, 'workshop', 'player_1');
+  assert.strictEqual(R.cityIncome(st, city), base + 1);
+  R.chooseReward(st, city, 'resources', 'player_1');
+  R.chooseReward(st, city, 'borders', 'player_1');
+  R.chooseReward(st, city, 'park', 'player_1');
+  assert.ok(R.cityIncome(st, city) >= base + 2);
+  assert.strictEqual(R.pendingLevel(city), null);
+});
+
+test('Vorräte: +5 Sterne · Erkunder: Umgebung aufgedeckt', () => {
+  const { st, city } = cityState();
+  R.growCity(st, city, 2);
+  R.chooseReward(st, city, 'explorer', 'player_1');
+  assert.ok(R.isExplored(st, 'player_1', city.q + 4, city.r), 'Radius 4 aufgedeckt');
+  const before = st.stars.player_1;
+  R.chooseReward(st, city, 'resources', 'player_1');
+  assert.strictEqual(st.stars.player_1, before + 5);
+});
+
+test('Stadtmauer: Verteidiger in der Stadt ×4', () => {
+  const { st, city } = cityState();
+  const d = unit('d', 'player_1', 'defender', city.q, city.r);
+  st.units.push(d);
+  assert.strictEqual(R.defenceBonus(st, d), 1.5);
+  city.rewards = { 3: 'wall' };
+  assert.strictEqual(R.defenceBonus(st, d), 4);
+});
+
+test('Grenzerweiterung: Gebiet Radius 2, Bauen auch dort', () => {
+  const { st, city } = cityState();
+  assert.strictEqual(R.territory(city).length, 6);
+  city.rewards = { 4: 'borders' };
+  assert.strictEqual(R.territory(city).length, 18);
+  st.techs.player_1.push('organization', 'farming');
+  assert.ok(R.improve(st, city, 'farm', city.q + 2, city.r, 'player_1').ok, 'Farm im äußeren Ring');
+});
+
+test('Wachstum führt direkt zur nächsten Stufe', () => {
+  const { st, city } = cityState();
+  R.growCity(st, city, 3);
+  R.chooseReward(st, city, 'workshop', 'player_1');
+  R.chooseReward(st, city, 'resources', 'player_1');
+  R.chooseReward(st, city, 'growth', 'player_1');
+  assert.strictEqual(city.pop, 5);
+  assert.deepStrictEqual(R.rewardOptions(city), ['park', 'giant']);
+});
+
+test('Riese nur als Belohnung, erscheint bei der Stadt', () => {
+  const { st, city } = cityState();
+  assert.ok(!R.unlockedUnits(st, 'player_1').includes('giant'));
+  assert.strictEqual(R.canTrain(st, city, 'giant', 'player_1').ok, false);
+  city.pop = 4; city.pending = [5]; city.rewards = {};
+  R.chooseReward(st, city, 'giant', 'player_1');
+  const g = st.units.find(u => u.type === 'giant');
+  assert.ok(g && g.owner === 'player_1' && hexDistance(g.q, g.r, city.q, city.r) <= 1);
+});
+
+test('KI wählt offene Belohnungen selbst', () => {
+  const { st, city } = cityState();
+  city.owner = 'player_2';
+  st.cities[1].owner = 'player_1';
+  st.turn = 'player_2';
+  R.growCity(st, city, 1);
+  const step = botStep(st, 'player_2');
+  assert.strictEqual(step.kind, 'reward');
+  assert.ok(applyStep(st, step, 'player_2').ok);
+});
+
+console.log('\n-- Ruinen --');
+
+test('createGame: Ruinen auf Feld/Wald, Abstand zu Städten', () => {
+  for (const seed of [1, 2, 3, 4]) {
+    const st = R.createGame(seed, 4);
+    const keys = Object.keys(st.ruins);
+    assert.ok(keys.length >= 4, 'genug Ruinen: ' + keys.length);
+    for (const k of keys) {
+      const [q, r] = k.split(',').map(Number);
+      assert.ok(['field', 'forest'].includes(R.terrainAt(st, q, r)));
+      assert.ok(st.cities.every(c => hexDistance(q, r, c.q, c.r) >= 3));
+    }
+  }
+});
+
+test('Ruine betreten: Belohnung, Ruine verschwindet', () => {
+  const { st } = cityState();
+  st.ruins = { [hk(6, 6)]: true };
+  const w = unit('w', 'player_1', 'warrior', 5, 6);
+  st.units.push(w);
+  const before = st.stars.player_1;
+  const res = R.moveUnit(st, w, 6, 6);
+  const ev = res.events.find(e => e.kind === 'ruin');
+  assert.ok(ev, 'Ruinen-Ereignis');
+  assert.ok(!R.ruinAt(st, 6, 6), 'Ruine weg');
+  assert.strictEqual(st.ruinsBy.player_1, 1);
+  assert.ok(st.stars.player_1 >= before || st.techs.player_1.length > 1 || st.units.length > 1 || st.cities[0].pop > 1 || st.explored.player_1.length > 0);
+});
+
+test('Ruinen-Belohnungen einzeln', () => {
+  for (const kind of ['stars', 'tech', 'unit', 'pop', 'reveal']) {
+    const { st } = cityState();
+    st.ruins = { [hk(6, 6)]: true };
+    const w = unit('w', 'player_1', 'warrior', 6, 6);
+    st.units.push(w);
+    const stars = st.stars.player_1, techs = st.techs.player_1.length, units = st.units.length;
+    const ev = R.claimRuin(st, w, kind);
+    assert.strictEqual(ev.reward, kind, kind);
+    if (kind === 'stars') assert.strictEqual(st.stars.player_1, stars + 10);
+    if (kind === 'tech') assert.strictEqual(st.techs.player_1.length, techs + 1);
+    if (kind === 'unit') assert.strictEqual(st.units.length, units + 1);
+    if (kind === 'pop') assert.strictEqual(st.cities[0].pop, 2);
+    if (kind === 'reveal') assert.ok(st.explored.player_1.length > 50);
+  }
+});
+
+console.log('\n-- Perfektion & Punkte --');
+
+test('Perfektion: nach 30 Runden gewinnt die höchste Punktzahl', () => {
+  const st = R.createGame(31, 3, { turnLimit: 30 });
+  let guard = 0;
+  while (!st.winner && guard++ < 1000) R.endTurn(st);
+  assert.strictEqual(st.endReason, 'score');
+  assert.strictEqual(st.round, 30);
+  const top = Math.max(...Object.values(st.finalScores));
+  assert.strictEqual(st.finalScores[st.winner], top);
+  assert.strictEqual(st.history[st.history.length - 1].round, 30);
+  assert.ok(st.history.length >= 30, 'Verlauf je Runde');
+  R.endTurn(st);
+  assert.strictEqual(st.round, 30, 'nach Spielende passiert nichts mehr');
+});
+
+test('Punkte steigen mit Stadt, Tech und Einheiten', () => {
+  const { st, city } = cityState();
+  const a = R.score(st, 'player_1');
+  R.growCity(st, city, 1);
+  st.techs.player_1.push('organization');
+  st.units.push(unit('x', 'player_1', 'warrior', 3, 3));
+  const b = R.score(st, 'player_1');
+  assert.strictEqual(b - a, 40 + 50 + 10);
+});
+
+test('Eroberung beendet Spiel mit Verlauf und Endpunkten', () => {
+  const { st } = cityState();
+  st.players = ['player_1', 'player_2'];
+  st.cities[1].owner = 'player_1';
+  R.checkWinner(st);
+  assert.strictEqual(st.winner, 'player_1');
+  assert.strictEqual(st.endReason, 'conquest');
+  assert.ok(st.finalScores && st.finalScores.player_1 > 0);
+});
+
+console.log('\n-- KI-Schwierigkeit --');
+
+test('KI-Stärke ändert Einkommen und Startsterne der Bots', () => {
+  const opts = lvl => ({ aiLevel: lvl, ai: ['player_2', 'player_3'], stars: 5 });
+  const easy = R.createGame(55, 3, opts('easy'));
+  const norm = R.createGame(55, 3, opts('normal'));
+  const hard = R.createGame(55, 3, opts('hard'));
+  assert.strictEqual(hard.stars.player_2 - norm.stars.player_2, 3, 'Startbonus');
+  assert.strictEqual(hard.stars.player_1, norm.stars.player_1, 'Mensch unverändert');
+  for (const c of easy.cities) c.pop = 4;
+  for (const c of norm.cities) c.pop = 4;
+  for (const c of hard.cities) c.pop = 4;
+  assert.ok(R.incomeFor(easy, 'player_2') < R.incomeFor(norm, 'player_2'));
+  assert.strictEqual(R.incomeFor(hard, 'player_2'), R.incomeFor(norm, 'player_2') + 2);
+  assert.strictEqual(R.incomeFor(easy, 'player_1'), R.incomeFor(norm, 'player_1'));
+});
+
+test('Komplette KI-Partien: jede Stärke, Perfektion bis zum Ende', () => {
+  for (const lvl of ['easy', 'normal', 'hard']) {
+    const st = R.createGame(900 + lvl.length, 4, { turnLimit: 30, aiLevel: lvl, ai: ['player_1', 'player_2', 'player_3', 'player_4'] });
+    let guard = 0;
+    while (!st.winner && guard < 40000) {
+      const p = st.turn;
+      const step = botStep(st, p);
+      guard++;
+      if (!step) { R.endTurn(st); continue; }
+      const res = applyStep(st, step, p);
+      assert.ok(!res || res.ok !== false || step.kind === 'move', `${lvl}: ${step.kind} gültig (${res && res.reason})`);
+    }
+    assert.ok(st.winner, lvl + ': Spiel endet');
+    const pending = st.cities.filter(c => c.owner && R.pendingLevel(c) && st.ai.includes(c.owner) && c.owner !== st.turn);
+    assert.ok(Object.keys(st.ruinsBy).length > 0, lvl + ': Ruinen werden erkundet');
+    for (const u of st.units) assert.ok(u.hp > 0 && u.hp <= UNITS[u.type].hp);
+    console.log(`      (${lvl}: Sieger ${st.winner} durch ${st.endReason}, Runde ${st.round})`);
   }
 });
 
