@@ -187,9 +187,43 @@ export function updateExplored(state, player) {
   return changed;
 }
 
+// Set-Cache pro explored-Array: vermeidet Array.includes (O(n)) bei
+// jedem Aufruf. Wird neu gebaut, sobald das Array wächst oder ersetzt wird.
+const exploredCache = new WeakMap();
+function exploredSetOf(arr) {
+  let entry = exploredCache.get(arr);
+  if (!entry || entry.len !== arr.length) {
+    entry = { len: arr.length, set: new Set(arr) };
+    exploredCache.set(arr, entry);
+  }
+  return entry.set;
+}
+
 export function isExplored(state, player, q, r) {
   if (!player || !state.explored || !state.explored[player]) return true;
-  return state.explored[player].includes(hk(q, r));
+  return exploredSetOf(state.explored[player]).has(hk(q, r));
+}
+
+// Aktuell sichtbar (nicht nur einmal entdeckt): innerhalb der Sichtweite
+// einer eigenen Einheit oder Stadt.
+export function isVisible(state, player, q, r) {
+  if (!player || !state.explored || !state.explored[player]) return true;
+  const sailing = hasTech(state, player, 'sailing') ? 1 : 0;
+  for (const u of state.units) {
+    if (u.owner !== player) continue;
+    let radius = UNITS[u.type].sight ?? VISION.unit;
+    if (terrainAt(state, u.q, u.r) === 'mountain') radius = Math.max(radius, 2);
+    if (hexDistance(u.q, u.r, q, r) <= radius + sailing) return true;
+  }
+  for (const c of state.cities) {
+    if (c.owner === player && hexDistance(c.q, c.r, q, r) <= VISION.city) return true;
+  }
+  return false;
+}
+
+// Spieler, der keine Städte mehr hat (z. B. Mensch im KI-Modus besiegt).
+export function isEliminated(state, player) {
+  return players(state).includes(player) && !alive(state, player);
 }
 
 export function canAct(state, player) {
@@ -284,13 +318,20 @@ export function reachableMap(state, unit) {
   return out;
 }
 
+// Einheiten ohne Angriffswert (Siedler) greifen nie an – außer sie können
+// bekehren (Gedankenbeuger).
+export function canEverAttack(type) {
+  return UNITS[type].atk > 0 || hasAbility(type, 'convert');
+}
+
 export function attackTargets(state, unit) {
+  if (!canEverAttack(unit.type)) return [];
   if (!canAttackNow(state, unit)) return [];
   const range = UNITS[unit.type].range;
   return state.units.filter(u =>
     u.owner !== unit.owner &&
     hexDistance(unit.q, unit.r, u.q, u.r) <= range &&
-    isExplored(state, unit.owner, u.q, u.r)
+    isVisible(state, unit.owner, u.q, u.r)
   );
 }
 
@@ -304,6 +345,9 @@ function finishAction(attacker) {
 
 export function attack(state, attacker, defender) {
   const events = [];
+  // Regelprüfung auch hier, damit KI, Online-Gegner oder Konsole keine
+  // ungültigen Angriffe ausführen können.
+  if (!attackTargets(state, attacker).includes(defender)) return { events, killed: false, ok: false };
   const dist = hexDistance(attacker.q, attacker.r, defender.q, defender.r);
 
   if (hasAbility(attacker.type, 'convert')) {

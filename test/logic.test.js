@@ -6,6 +6,7 @@ import {
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds } from '../js/hex.js';
 import { botStep } from '../js/ai.js';
+import { saveGame, loadGame, saveInfo, clearSave } from '../js/save.js';
 
 let passed = 0;
 let failed = 0;
@@ -724,6 +725,126 @@ test('createGame: Start-Sterne-Option', () => {
   assert.ok(normal.stars['player_1'] >= 10, 'reich: >= 10 Sterne');
   const knapp = R.createGame(4321, 4, { stars: 2 });
   assert.ok(knapp.stars['player_1'] >= 2 && knapp.stars['player_1'] < 10, 'knapp: wenige Sterne');
+});
+
+console.log('\n-- Korrekturen --');
+
+test('Siedler (Angriff 0) kann nicht angreifen, KI greift damit nicht an', () => {
+  const st = makeState();
+  st.cities.push({ q: 2, r: 2, owner: 'player_1', pop: 1, trained: true, isCapital: true });
+  st.cities.push({ q: 20, r: 12, owner: 'player_2', pop: 1, trained: true, isCapital: true });
+  const s = unit('s', 'player_1', 'settler', 5, 5);
+  const w = unit('w', 'player_2', 'warrior', 6, 5);
+  st.units.push(s, w);
+  assert.strictEqual(R.attackTargets(st, s).length, 0, 'keine Ziele');
+  const res = R.attack(st, s, w);
+  assert.strictEqual(res.ok, false, 'Angriff abgelehnt');
+  assert.strictEqual(s.hp, UNITS.settler.hp, 'Siedler unverletzt');
+  st.stars.player_1 = 0;
+  const step = botStep(st, 'player_1');
+  assert.ok(!step || step.kind !== 'attack', 'KI-Siedler greift nicht an');
+});
+
+test('Gedankenbeuger (Angriff 0) darf weiterhin bekehren', () => {
+  const st = makeState();
+  st.cities.push({ q: 2, r: 2, owner: 'player_1', pop: 1, trained: false, isCapital: true });
+  const m = unit('m', 'player_1', 'mindbender', 5, 5);
+  const w = unit('w', 'player_2', 'warrior', 6, 5);
+  st.units.push(m, w);
+  assert.strictEqual(R.attackTargets(st, m).length, 1);
+  R.attack(st, m, w);
+  assert.strictEqual(w.owner, 'player_1');
+});
+
+test('Nebel: entdeckt, aber außer Sicht = kein Angriffsziel', () => {
+  const st = makeState();
+  st.explored = { player_1: [], player_2: [] };
+  st.cities.push({ q: 2, r: 2, owner: 'player_1', pop: 1, trained: false, isCapital: true });
+  const a = unit('a', 'player_1', 'archer', 10, 8);
+  const e = unit('e', 'player_2', 'warrior', 12, 8);
+  st.units.push(a, e);
+  st.explored.player_1.push(hk(12, 8));
+  assert.ok(R.isVisible(st, 'player_1', 12, 8), 'Bogenschütze sieht 2 Felder');
+  assert.strictEqual(R.attackTargets(st, a).length, 1);
+  e.q = 13; // weiter weg, Feld bleibt aber "entdeckt"
+  st.explored.player_1.push(hk(13, 8));
+  assert.ok(R.isExplored(st, 'player_1', 13, 8));
+  assert.ok(!R.isVisible(st, 'player_1', 13, 8), 'nicht mehr sichtbar');
+});
+
+test('isExplored: Cache folgt neuen Einträgen', () => {
+  const st = makeState();
+  st.explored = { player_1: [] };
+  assert.ok(!R.isExplored(st, 'player_1', 3, 3));
+  st.explored.player_1.push(hk(3, 3));
+  assert.ok(R.isExplored(st, 'player_1', 3, 3));
+});
+
+test('isEliminated: Mensch ohne Städte ist raus, KI spielt nicht endlos weiter', () => {
+  const st = makeState();
+  st.cities.push({ q: 20, r: 12, owner: 'player_2', pop: 1, trained: false, isCapital: true });
+  st.cities.push({ q: 4, r: 12, owner: 'player_3', pop: 1, trained: false, isCapital: true });
+  assert.ok(R.isEliminated(st, 'player_1'));
+  assert.ok(!R.isEliminated(st, 'player_2'));
+  assert.strictEqual(st.winner, null, 'noch kein Sieger');
+});
+
+console.log('\n-- Spielstand --');
+
+function memStore() {
+  const m = new Map();
+  return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) };
+}
+
+test('saveGame/loadGame: Rundreise erhält den Spielstand', () => {
+  const store = memStore();
+  const st = R.createGame(777, 3, { tribe: 'bardur' });
+  assert.ok(saveGame('bot', st, store));
+  const data = loadGame(store);
+  assert.strictEqual(data.mode, 'bot');
+  assert.deepStrictEqual(data.state, JSON.parse(JSON.stringify(st)));
+  assert.deepStrictEqual(saveInfo(store), { mode: 'bot', label: 'Gegen KI', round: st.round });
+  // geladener Stand ist spielbar
+  const loaded = data.state;
+  R.endTurn(loaded);
+  assert.notStrictEqual(loaded.turn, 'player_1');
+});
+
+test('saveGame: Online und beendete Spiele werden nicht gespeichert', () => {
+  const store = memStore();
+  const st = R.createGame(778, 2);
+  assert.ok(!saveGame('online', st, store));
+  saveGame('hotseat', st, store);
+  st.winner = 'player_1';
+  saveGame('hotseat', st, store);
+  assert.strictEqual(loadGame(store), null, 'Sieg löscht Spielstand');
+  store.setItem('pb_save_v1', '{kaputt');
+  assert.strictEqual(loadGame(store), null, 'kaputte Daten werden ignoriert');
+  clearSave(store);
+});
+
+test('KI-Partie läuft zu Ende (Simulation, mehrere Seeds)', () => {
+  for (const seed of [11, 12, 13]) {
+    const st = R.createGame(seed, 3);
+    let guard = 0;
+    while (!st.winner && st.round < 60 && guard < 20000) {
+      const p = st.turn;
+      const step = botStep(st, p);
+      guard++;
+      if (!step) { R.endTurn(st); continue; }
+      if (step.kind === 'attack') {
+        const res = R.attack(st, step.attacker, step.defender);
+        assert.notStrictEqual(res.ok, false, 'KI wählt nur gültige Angriffe');
+      } else if (step.kind === 'move') R.moveUnit(st, step.unit, step.q, step.r);
+      else if (step.kind === 'train') R.trainUnit(st, step.city, step.type, p);
+      else if (step.kind === 'buyPop') R.buyPop(st, step.city, p);
+      else if (step.kind === 'improve') R.improve(st, step.city, step.type, step.q, step.r, p);
+      else if (step.kind === 'settle') R.foundCity(st, step.unit, p);
+      else if (step.kind === 'research') R.research(st, step.tech, p);
+    }
+    assert.ok(guard < 20000, 'keine Endlosschleife');
+    for (const u of st.units) assert.ok(u.hp > 0 && u.hp <= UNITS[u.type].hp, 'LP im gültigen Bereich');
+  }
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
