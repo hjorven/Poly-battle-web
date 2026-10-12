@@ -52,7 +52,20 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-#player-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Immer einzeilig: bei vielen Stämmen horizontal wischen statt umbrechen. */
+#player-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+#player-strip::-webkit-scrollbar { display: none; }
 
 .chip {
   display: flex;
@@ -65,6 +78,7 @@ button:focus-visible {
   color: var(--muted);
   transition: border-color 0.15s, background 0.15s;
   white-space: nowrap;
+  flex: none;
 }
 .chip.active {
   border-color: var(--text);
@@ -86,7 +100,7 @@ button:focus-visible {
   min-width: 0;
 }
 
-.top-actions { display: flex; align-items: center; gap: 10px; }
+.top-actions { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; }
 #round-label {
   font-size: 13px;
   font-weight: 600;
@@ -193,11 +207,14 @@ button:focus-visible {
 #panel {
   position: absolute;
   left: 14px;
-  bottom: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   width: 320px;
   max-width: calc(100vw - 28px);
   max-height: 55vh;
+  max-height: 55dvh;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   background: var(--panel);
   border: 1px solid var(--border);
   padding: 14px;
@@ -219,20 +236,22 @@ button:focus-visible {
 .panel-sub { font-size: 12px; color: var(--muted); }
 
 .stat-row {
-  display: flex;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
   margin: 8px 0;
-  flex-wrap: wrap;
 }
 .stat {
   background: var(--bg);
   border: 1px solid var(--border);
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 6px 4px;
+  font-size: 11px;
   color: var(--muted);
   text-align: center;
-  flex: 1;
-  min-width: 64px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .stat b { display: block; font-size: 15px; color: var(--text); margin-top: 2px; }
 
@@ -272,12 +291,19 @@ button:focus-visible {
   inset: 0;
   background: rgba(24, 24, 27, 0.55);
   display: flex;
-  align-items: center;
+  /* flex-start + margin:auto statt center: zentriert, schneidet aber bei
+     hohen Karten oben nichts ab (sonst ist der Anfang nicht erreichbar). */
+  align-items: flex-start;
   justify-content: center;
   z-index: 50;
   padding: 20px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
+.overlay > .card { margin: auto; flex: none; }
 .overlay.hidden { display: none; }
 
 .card {
@@ -366,6 +392,7 @@ button:focus-visible {
 
 #tech-overlay .card {
   max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
   display: flex;
   flex-direction: column;
   width: min(680px, 96vw);
@@ -376,8 +403,9 @@ button:focus-visible {
 #tech-tree {
   position: relative;
   width: 100%;
-  height: min(58vh, 540px);
-  min-height: 360px;
+  height: min(70vh, 640px);
+  height: min(70dvh, 640px);
+  min-height: 320px;
   overflow: hidden;
   background:
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0) 40%, var(--bg) 80%),
@@ -511,7 +539,7 @@ button:focus-visible {
 .seg .chip-btn { border: 1px solid var(--border); padding: 6px 11px; font-size: 12px; }
 .seg .chip-btn.active { border-color: var(--text); background: var(--hover); color: var(--text); }
 
-#overview-overlay .card { max-width: 520px; max-height: 86vh; overflow-y: auto; }
+#overview-overlay .card { max-width: 520px; max-height: 86vh; max-height: 86dvh; overflow-y: auto; touch-action: pan-y; }
 #confirm-overlay .card.narrow { text-align: center; }
 .confirm-text { margin: 6px 0 18px; font-size: 15px; color: var(--text); line-height: 1.45; }
 .overview-row { display: flex; align-items: center; width: 100%; text-align: left; }
@@ -519,7 +547,20 @@ button:focus-visible {
 .overview-stat { margin-bottom: 4px; }
 .overview-stat .panel-head { margin-bottom: 8px; }
 
-#tech-overlay .card { max-height: 92vh; overflow-y: auto; }
+#tech-overlay .card { max-height: 92vh; max-height: 92dvh; overflow-y: auto; }
+
+/* Tablets (iPad hoch, kleine Laptops): Zusatzinfos ausblenden, damit die
+   Leiste einzeilig bleibt und „Zug beenden" sichtbar ist. */
+@media (max-width: 1100px) {
+  #status { display: none; }
+  .chip .meta { display: none; }
+  #topbar { gap: 10px; }
+}
+@media (max-width: 900px) {
+  #round-label { display: none; }
+  #endTurnBtn { min-width: 0; }
+  .top-actions { gap: 4px; }
+}
 
 @media (max-width: 750px) {
   .card { padding: 18px 14px; }
@@ -534,17 +575,16 @@ button:focus-visible {
   #status, #round-label { display: none; }
   .brand { font-size: 14px; }
   #topbar { gap: 8px; padding: 0 8px; }
-  #player-strip { flex-wrap: nowrap; overflow-x: auto; min-width: 0; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-  #player-strip::-webkit-scrollbar { display: none; }
   .chip { padding: 4px 8px; font-size: 12px; flex: none; }
   .chip .meta { display: none; }
   .btn { padding: 8px 10px; font-size: 13px; }
   #panel {
     left: 8px;
     right: 8px;
-    bottom: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     width: auto;
     max-height: 44vh;
+    max-height: 44dvh;
   }
   .card { padding: 22px; }
 }
