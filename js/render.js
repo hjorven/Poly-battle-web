@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H } from './config.js';
-import { playerColor } from './rules.js';
+import { playerColor, isVisible } from './rules.js';
 import { toWorld, forEachHex, hk } from './hex.js';
 
 let colorMap = {};
@@ -357,7 +357,7 @@ function buildTiles(state) {
       scene.add(mesh);
       tileMeshes.push(mesh);
       const decor = [];
-      tiles.set(hk(q, r), { mesh, baseMat, top: def.height, terrain: t, decor, seen: true });
+      tiles.set(hk(q, r), { mesh, baseMat, top: def.height, terrain: t, decor, seen: true, imp: null, impNode: null });
 
       if (t === 'forest') {
         let s = (q * 73856093) ^ (r * 19349663);
@@ -404,15 +404,58 @@ function buildTiles(state) {
         mesh.add(rn);
         decor.push(rn);
       }
-      const imp = state.improvements ? state.improvements[hk(q, r)] : null;
-      if (imp) {
-        const inode = improvementNode(imp);
-        inode.position.y = def.height / 2 + 0.02;
-        mesh.add(inode);
-        decor.push(inode);
-      }
+      syncImprovement(tiles.get(hk(q, r)), state.improvements ? state.improvements[hk(q, r)] : null);
     }
   }
+}
+
+// Gebäude auf einer Kachel an den Spielstand anpassen (auch für Gebäude,
+// die erst während der Partie gebaut werden).
+function syncImprovement(t, imp) {
+  if (!t || (t.imp || null) === (imp || null)) return;
+  if (t.impNode) {
+    t.mesh.remove(t.impNode);
+    t.decor = t.decor.filter(d => d !== t.impNode);
+    t.impNode = null;
+  }
+  t.imp = imp || null;
+  if (!imp) return;
+  const inode = improvementNode(imp);
+  inode.position.y = TERRAIN[t.terrain].height / 2 + 0.02;
+  inode.visible = t.seen;
+  t.mesh.add(inode);
+  t.decor.push(inode);
+  t.impNode = inode;
+}
+
+// Alles vom vorherigen Spiel entfernen, damit eine neue Karte (neues Spiel,
+// geladener Spielstand, Online-Partie) korrekt aufgebaut wird.
+function clearBoard() {
+  for (const t of tiles.values()) {
+    scene.remove(t.mesh);
+    t.baseMat.dispose();
+  }
+  tiles.clear();
+  tileMeshes = [];
+  for (const node of unitNodes.values()) {
+    scene.remove(node.group);
+    node.sprite.userData.texture?.dispose();
+    node.sprite.material.dispose();
+  }
+  unitNodes.clear();
+  for (const node of cityNodes.values()) scene.remove(node.group);
+  cityNodes.clear();
+  // Laufende Animationen beenden, damit wartende Promises nicht hängen.
+  const pending = tweens;
+  tweens = [];
+  for (const tw of pending) {
+    try { tw.resolve?.(); } catch (e) { /* Knoten bereits entfernt */ }
+  }
+}
+
+let boardSignature = null;
+function terrainSignature(state) {
+  return state.terrain.join('|');
 }
 
 function hexTop(key) {
@@ -715,9 +758,15 @@ export function syncBoard(state, viewer = null) {
   if (!initialized) return Promise.resolve();
   colorMap = {};
   for (const p of state.players || []) colorMap[p] = playerColor(state, p);
-  if (!tiles.size) buildTiles(state);
+  const sig = terrainSignature(state);
+  if (sig !== boardSignature) {
+    clearBoard();
+    buildTiles(state);
+    boardSignature = sig;
+  }
   const explored = exploredSet(state, viewer);
   for (const [key, t] of tiles) {
+    syncImprovement(t, state.improvements ? state.improvements[key] : null);
     const seen = !explored || explored.has(key);
     t.seen = seen;
     t.mesh.material = seen ? t.baseMat : darkMatFor(t.terrain);
@@ -768,7 +817,9 @@ export function syncBoard(state, viewer = null) {
   for (const u of state.units) {
     const node = unitNodes.get(u.id);
     if (!node) continue;
-    const seen = !explored || u.owner === viewer || explored.has(hk(u.q, u.r));
+    // Fremde Einheiten nur zeigen, solange sie gerade in Sichtweite sind –
+    // entdecktes, aber nicht beobachtetes Land verrät keine Truppen.
+    const seen = !explored || u.owner === viewer || isVisible(state, viewer, u.q, u.r);
     node.group.visible = !!seen;
   }
   for (const c of state.cities) {

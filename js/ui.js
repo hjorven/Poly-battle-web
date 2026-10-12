@@ -44,6 +44,7 @@ export function initUI(h) {
   $('confirm-overlay').addEventListener('click', e => {
     if (e.target === e.currentTarget) hideConfirm();
   });
+  $('continueBtn')?.addEventListener('click', () => handlers.onContinue?.());
   document.querySelectorAll('[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onMode(btn.dataset.mode));
   });
@@ -586,6 +587,20 @@ export function showWinner(state, ctx) {
   else if (ctx.mode === 'online') text = winner === ctx.myRole ? 'Du hast gewonnen.' : 'Dein Gegner hat gewonnen.';
   $('winner-text').textContent = text + ` · Runde ${state.round}`;
   $('winner-overlay').classList.remove('hidden');
+}
+
+export function showDefeat(state) {
+  $('winner-title').textContent = 'Besiegt';
+  $('winner-text').textContent = `Du hast deine letzte Stadt verloren · Runde ${state.round}`;
+  $('winner-overlay').classList.remove('hidden');
+}
+
+export function setContinue(info) {
+  const btn = $('continueBtn');
+  if (!btn) return;
+  if (!info) { btn.classList.add('hidden'); return; }
+  btn.textContent = `Weiterspielen (${info.label}, Runde ${info.round})`;
+  btn.classList.remove('hidden');
 }
 
 export function hideWinner() {
