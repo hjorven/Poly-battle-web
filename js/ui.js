@@ -373,13 +373,17 @@ const CHILDREN = (() => {
 const ANGLE = {};
 ROOTS.forEach((id, i) => { ANGLE[id] = (-90 + i * 72) * Math.PI / 180; });
 
-const techNav = { scale: 1, tx: 0, ty: 0, bound: false, lastDrag: 0 };
+const techNav = { scale: 1, tx: 0, ty: 0, bound: false, lastDrag: 0, home: { scale: 1, tx: 0, ty: 0 } };
+// Der Baum wird in einem festen virtuellen Raum ausgelegt (Abstände so
+// gewählt, dass sich die 74-px-Knoten nie überlappen) und dann passend in
+// das sichtbare Feld skaliert – unabhängig von Bildschirmgröße und Ausrichtung.
+const TECH_SPACE = 660;
 let lastTechClick = null;
 let lastTechTarget = null;
 function resetTechNav() {
-  techNav.scale = 1;
-  techNav.tx = 0;
-  techNav.ty = 0;
+  techNav.scale = techNav.home.scale;
+  techNav.tx = techNav.home.tx;
+  techNav.ty = techNav.home.ty;
   applyTechNav();
 }
 function applyTechNav() {
@@ -479,10 +483,9 @@ function bindTechNav() {
   }, true);
 }
 
-function layoutTechs(W, H) {
-  const cx = W / 2, cy = H / 2;
-  const m = Math.min(W, H);
-  const radius = { 1: m * 0.20, 2: m * 0.38, 3: m * 0.52 };
+function layoutTechs() {
+  const cx = TECH_SPACE / 2, cy = TECH_SPACE / 2;
+  const radius = { 1: 105, 2: 200, 3: 288 };
   const pos = {};
   const polar = (r, a) => ({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
   const place = id => {
@@ -490,7 +493,7 @@ function layoutTechs(W, H) {
     if (t.req) {
       const sibs = CHILDREN[t.req] || [id];
       const i = sibs.indexOf(id);
-      const spread = t.tier === 2 ? 0.26 : 0.17;
+      const spread = t.tier === 2 ? 0.62 : 0.4;
       const off = sibs.length > 1 ? (i - (sibs.length - 1) / 2) * spread : 0;
       ANGLE[id] = ANGLE[t.req] + off;
     }
@@ -502,10 +505,9 @@ function layoutTechs(W, H) {
   return pos;
 }
 
-export function openTech(state, ctx) {
+export function openTech(state, ctx, keepView = false) {
   const overlay = $('tech-overlay');
   overlay.classList.remove('hidden');
-  resetTechNav();
   const stars = state.stars[ctx.actAs];
   $('tech-stars').textContent = stars + ' Sterne';
   const tree = $('tech-tree');
@@ -514,7 +516,18 @@ export function openTech(state, ctx) {
   nodes.innerHTML = '';
   const W = tree.clientWidth || 560;
   const H = tree.clientHeight || 420;
-  const pos = layoutTechs(W, H);
+  const pos = layoutTechs();
+  const fit = Math.min(1.15, W / TECH_SPACE, H / TECH_SPACE);
+  techNav.home = { scale: fit, tx: (W - TECH_SPACE * fit) / 2, ty: (H - TECH_SPACE * fit) / 2 };
+  // Beim erneuten Öffnen (z. B. nach dem Erforschen) Ansicht behalten,
+  // beim ersten Öffnen auf die Gesamtansicht setzen.
+  if (!keepView) resetTechNav();
+  const VW = TECH_SPACE, VH = TECH_SPACE;
+  const vp = $('tech-viewport');
+  vp.style.right = 'auto';
+  vp.style.bottom = 'auto';
+  vp.style.width = VW + 'px';
+  vp.style.height = VH + 'px';
 
   let lines = '';
   for (const id in TECHS) {
@@ -524,9 +537,9 @@ export function openTech(state, ctx) {
     const done = state.techs[ctx.actAs].includes(id);
     lines += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${done ? '#16a34a' : '#d4d4d8'}" stroke-width="2" />`;
   }
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  svg.setAttribute('width', W);
-  svg.setAttribute('height', H);
+  svg.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
+  svg.setAttribute('width', VW);
+  svg.setAttribute('height', VH);
   svg.innerHTML = lines;
 
   lastTechIds = new Set(state.techs[ctx.actAs]);

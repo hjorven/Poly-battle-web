@@ -227,7 +227,7 @@ function doEndTurnNow() {
   app.sel = null;
   R.endTurn(app.state);
   return render.syncBoard(app.state, viewer()).then(() => {
-    if (app.mode === 'hotseat') ui.toast(`Am Zug: ${needName(app.state, app.state.turn)}`);
+    if (app.mode === 'hotseat') { ui.toast(`Am Zug: ${needName(app.state, app.state.turn)}`); focusHome(); }
     return afterAction();
   });
 }
@@ -247,7 +247,7 @@ async function doResearch(techId) {
   app.busy = true;
   ui.toast(`${TECHS[techId].name} erforscht`, 'good');
   await afterAction();
-  if (ui.isTechOpen()) ui.openTech(app.state, ctx());
+  if (ui.isTechOpen()) ui.openTech(app.state, ctx(), true);
 }
 
 async function maybeBot() {
@@ -378,7 +378,17 @@ function enterLocal() {
   ui.hideWinner();
   document.getElementById('copyLinkBtn').classList.add('hidden');
   render.syncBoard(app.state, viewer());
+  focusHome();
   refresh();
+}
+
+// Kamera zu Spielbeginn auf die eigene Hauptstadt richten.
+function focusHome() {
+  const v = viewer();
+  if (!app.state || !v) return;
+  const cities = R.citiesFor(app.state, v);
+  const home = cities.find(c => c.isCapital) || cities[0];
+  if (home) render.cameraTo(home.q, home.r);
 }
 
 function continueGame() {
@@ -414,6 +424,7 @@ async function startOnline() {
     app.hasOpponent = !!match.player_2;
     ui.hideMenu();
     render.syncBoard(app.state, viewer());
+    focusHome();
     refresh();
     if (!app.myRole) ui.toast('Spiel läuft bereits – du schaust zu.');
   } else {
@@ -427,6 +438,7 @@ async function startOnline() {
     location.hash = match.id;
     ui.hideMenu();
     render.syncBoard(app.state, viewer());
+    focusHome();
     refresh();
     ui.toast('Spiel erstellt – teile den Link!', 'good');
   }
