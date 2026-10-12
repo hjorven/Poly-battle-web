@@ -117,8 +117,19 @@ function showMenu() {
 async function saveOnline() {
   if (!app.online || !app.gameId) return;
   app.state.rev = (app.state.rev || 0) + 1;
-  const { error } = await net.saveMatch(app.gameId, app.state);
-  if (error) ui.toast(error, 'warn');
+  const { error, rejected } = await net.saveMatch(app.gameId, app.state);
+  if (!error) return;
+  ui.toast(error, 'warn');
+  // Server hat den Zug abgelehnt: auf den gültigen Stand der Datenbank zurück.
+  if (rejected) {
+    const { match } = await net.fetchMatch(app.gameId);
+    if (match && match.game_state) {
+      app.state = match.game_state;
+      app.sel = null;
+      render.syncBoard(app.state, viewer());
+      refresh();
+    }
+  }
 }
 
 async function afterAction(events = []) {

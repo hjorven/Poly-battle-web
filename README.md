@@ -30,6 +30,12 @@ npm run serve     # startet einen lokalen Webserver auf Port 8080
 
 Einfach `index.html` über einen beliebigen statischen Server ausliefern (GitHub Pages funktioniert direkt). Voraussetzung: Internetzugang für die Three.js-Importmap (jsDelivr). Für den Online-Modus werden die Supabase-Zugangsdaten in `js/net.js` benötigt.
 
+### Online-Modus (Supabase)
+
+Die Tabelle `matches` ist nur lesbar. Geschrieben wird ausschließlich über die Datenbank-Funktionen `create_match`, `join_match` und `save_match` aus `supabase/migrations/20261012_secure_matches.sql`. Sie prüfen, ob du Spieler der Partie bist, ob du am Zug bist und ob der Stand neuer ist. Spieler-Kennungen liegen nur als SHA-256-Hash in der Datenbank.
+
+Grenze: Der Server prüft nicht die Spielregeln selbst. Wer am Zug ist, könnte theoretisch einen manipulierten Spielstand senden.
+
 ## Tests
 
 ```bash
