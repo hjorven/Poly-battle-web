@@ -10,10 +10,13 @@ function getClient() {
   return client;
 }
 
+// Geheime Spieler-Kennung dieses Browsers. Die Datenbank speichert nur
+// ihren SHA-256-Hash; geschrieben wird ausschließlich über die Funktionen
+// create_match / join_match / save_match (siehe supabase/migrations).
 export function getToken() {
   try {
     let t = localStorage.getItem('pb_token');
-    if (!t) { t = crypto.randomUUID(); localStorage.setItem('pb_token', t); }
+    if (!t || t.length < 16) { t = crypto.randomUUID(); localStorage.setItem('pb_token', t); }
     return t;
   } catch (e) {
     return crypto.randomUUID();
@@ -21,42 +24,32 @@ export function getToken() {
 }
 
 function parseState(match) {
-  if (typeof match.game_state === 'string') match.game_state = JSON.parse(match.game_state);
+  if (match && typeof match.game_state === 'string') match.game_state = JSON.parse(match.game_state);
   return match;
 }
 
 export async function createMatch(state) {
   const sb = getClient();
   if (!sb) return { error: 'Multiplayer-Bibliothek nicht geladen.' };
-  const { data, error } = await sb
-    .from('matches')
-    .insert([{ game_state: state, current_turn: state.turn, player_1: getToken() }])
-    .select()
-    .single();
-  if (error) return { error: 'Spiel konnte nicht erstellt werden: ' + error.message };
+  const { data, error } = await sb.rpc('create_match', { p_state: state, p_token: getToken() });
+  if (error || !data) return { error: 'Spiel konnte nicht erstellt werden: ' + (error ? error.message : 'keine Antwort') };
   return { match: parseState(data) };
 }
 
 export async function joinMatch(gameId) {
   const sb = getClient();
   if (!sb) return { error: 'Multiplayer-Bibliothek nicht geladen.' };
-  const token = getToken();
-  const { data, error } = await sb.from('matches').select('*').eq('id', gameId).single();
-  if (error || !data) return { error: 'Spiel nicht gefunden. Prüfe den Link.' };
+  const { data, error } = await sb.rpc('join_match', { p_id: gameId, p_token: getToken() });
+  if (error || !data || !data.match) return { error: 'Spiel nicht gefunden. Prüfe den Link.' };
+  return { match: parseState(data.match), role: data.role || null };
+}
 
-  let role = null;
-  if (data.player_1 === token) role = 'player_1';
-  else if (data.player_2 === token) role = 'player_2';
-  else if (!data.player_2) {
-    const { data: upd } = await sb
-      .from('matches')
-      .update({ player_2: token })
-      .eq('id', gameId)
-      .is('player_2', null)
-      .select();
-    if (upd && upd.length) { role = 'player_2'; data.player_2 = token; }
-  }
-  return { match: parseState(data), role };
+export async function fetchMatch(gameId) {
+  const sb = getClient();
+  if (!sb) return { error: 'Offline' };
+  const { data, error } = await sb.from('matches').select('id, game_state, current_turn, player_2').eq('id', gameId).single();
+  if (error || !data) return { error: 'Spiel nicht gefunden.' };
+  return { match: parseState(data) };
 }
 
 export function subscribe(gameId, onUpdate) {
@@ -79,10 +72,7 @@ export function unsubscribe(channel) {
 export async function saveMatch(gameId, state) {
   const sb = getClient();
   if (!sb) return { error: 'Offline' };
-  const { error } = await sb
-    .from('matches')
-    .update({ game_state: state, current_turn: state.turn, last_move_at: new Date().toISOString() })
-    .eq('id', gameId);
-  if (error) return { error: 'Synchronisation fehlgeschlagen.' };
+  const { error } = await sb.rpc('save_match', { p_id: gameId, p_token: getToken(), p_state: state });
+  if (error) return { error: 'Zug nicht gespeichert: ' + error.message, rejected: true };
   return {};
 }
