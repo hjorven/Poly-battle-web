@@ -943,6 +943,8 @@ export function cameraTo(q, r, close = false) {
   const toT = new THREE.Vector3(p.x, 0, p.z);
   const fromP = camera.position.clone();
   const off = close ? new THREE.Vector3(0, 11, 10) : new THREE.Vector3(-2, 19, 17);
+  // Hochformat (iPad/Handy hochkant): weiter weg, damit genug Breite sichtbar ist.
+  if (camera.aspect < 1) off.multiplyScalar(1 + (1 - camera.aspect) * 0.9);
   const toP = toT.clone().add(off);
   addTween({
     dur: 450,
