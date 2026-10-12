@@ -193,8 +193,10 @@ function pick(clientX, clientY) {
   if (!hits.length) return null;
   const h = hits[0].object.userData.hex;
   const key = hk(h.q, h.r);
-  const t = tiles.get(key);
-  if (!t || !t.seen) return null;
+  // Auch Felder im Nebel sind antippbar: Einheiten dürfen dorthin ziehen,
+  // wenn das Feld als Ziel markiert ist. Was dort steht, entscheidet main.js
+  // (versteckte Gegner bleiben unsichtbar und nicht anwählbar).
+  if (!tiles.get(key)) return null;
   return key;
 }
 

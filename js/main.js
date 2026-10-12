@@ -342,7 +342,9 @@ async function onHexPick(key) {
   const rawUnit = R.unitAt(st, q, r);
   // Feindliche Einheiten im Nebel lassen sich weder anwählen noch angreifen.
   const unit = rawUnit && (!v || rawUnit.owner === v || R.isVisible(st, v, q, r)) ? rawUnit : null;
-  const city = R.cityAt(st, q, r);
+  const rawCity = R.cityAt(st, q, r);
+  // Städte im unentdeckten Nebel bleiben verborgen.
+  const city = rawCity && (!v || rawCity.owner === v || R.isExplored(st, v, q, r)) ? rawCity : null;
 
   if (!myTurn()) {
     app.sel = unit ? { kind: 'unit', id: unit.id } : (city ? { kind: 'city', q, r } : null);
