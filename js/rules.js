@@ -4,7 +4,7 @@ import {
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
-  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -263,6 +263,7 @@ export function cityIncome(state, city) {
     s += cityTiles(state, city).filter(([q, r]) => improvementAt(state, q, r) === 'farm').length;
   }
   if (perk === 'splendor' && city.isCapital) s += 2;
+  if (perk === 'legion' && city.isCapital) s += 1;
   return s;
 }
 
@@ -286,9 +287,13 @@ export function isBot(state, player) {
 }
 
 export function maxMove(state, owner, type) {
-  let base = UNITS[type].move;
-  if (hasAbility(type, 'water') && perkOf(state, owner) === 'seafarer') base += 1;
-  return state.techs[owner] && state.techs[owner].includes('roads') ? base + 1 : base;
+  const base = UNITS[type].move;
+  return hasAbility(type, 'water') && perkOf(state, owner) === 'seafarer' ? base + 1 : base;
+}
+
+export function ownLand(state, owner, q, r) {
+  const c = cityAt(state, q, r) || tileCity(state, q, r);
+  return !!c && c.owner === owner;
 }
 
 function hasTech(state, owner, tech) {
@@ -320,6 +325,8 @@ export function moveCost(state, unit, q, r) {
   const tile = terrainAt(state, q, r);
   if (hasAbility(unit.type, 'water') && isWet(tile)) return 1;
   if (bridgeAt(state, q, r)) return 1;
+  // Wege: im eigenen Gebiet kostet jedes Landfeld nur 1 Bewegung.
+  if (hasTech(state, unit.owner, 'roads') && ownLand(state, unit.owner, q, r)) return 1;
   const perk = perkOf(state, unit.owner);
   if (tile === 'forest' && perk === 'woodland') return 1;
   if (tile === 'mountain' && perk === 'mountaineer') return 1;
@@ -379,6 +386,7 @@ export function unitSight(state, u) {
     if (hasAbility(u.type, 'scout')) radius += 1;
   }
   if (hasTech(state, u.owner, 'sailing')) radius += 1;
+  if ((u.type === 'rider' || u.type === 'knight') && perkOf(state, u.owner) === 'lookouts') radius += 1;
   return radius;
 }
 
@@ -759,6 +767,8 @@ export function moveUnit(state, unit, q, r) {
   }
   const ruin = claimRuin(state, unit);
   if (ruin) events.push(ruin);
+  const light = claimLighthouse(state, unit);
+  if (light) events.push(light);
   updateExplored(state, unit.owner);
   return { ok: true, events };
 }
@@ -1417,6 +1427,7 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
 
   generateResources(state, rand, centerCities);
   generateRuins(state, rand);
+  placeLighthouses(state);
   startTurn(state);
   recordHistory(state);
   return state;
@@ -1602,6 +1613,49 @@ function generateRuins(state, rand) {
   }
 }
 
+// --- Leuchttürme ---------------------------------------------------------------
+
+function placeLighthouses(state) {
+  state.lighthouses = {};
+  for (const [q, r] of [[0, 0], [MAP_W - 1, 0], [MAP_W - 1, MAP_H - 1], [0, MAP_H - 1]]) {
+    state.terrain[idx(q, r)] = 'ocean';
+    state.lighthouses[hk(q, r)] = [];
+  }
+}
+
+export function lighthouseKeys(state) {
+  return Object.keys(state.lighthouses || {});
+}
+
+export function lighthouseFound(state, player, key) {
+  return !!(state.lighthouses && state.lighthouses[key] && state.lighthouses[key].includes(player));
+}
+
+export function lighthouseCount(state, player) {
+  return lighthouseKeys(state).filter(k => lighthouseFound(state, player, k)).length;
+}
+
+// Erreicht: Einheit steht auf dem Turm oder daneben. Jeder Stamm einmal je Turm.
+export function claimLighthouse(state, unit) {
+  const p = unit.owner;
+  for (const key of lighthouseKeys(state)) {
+    if (lighthouseFound(state, p, key)) continue;
+    const [q, r] = key.split(',').map(Number);
+    if (hexDistance(q, r, unit.q, unit.r) > 1) continue;
+    state.lighthouses[key].push(p);
+    state.stars[p] += LIGHTHOUSE.stars;
+    revealAround(state, p, q, r, LIGHTHOUSE.reveal);
+    let text = `Leuchtturm erreicht: +${LIGHTHOUSE.stars} Sterne`;
+    const found = lighthouseCount(state, p);
+    if (found === lighthouseKeys(state).length) {
+      state.stars[p] += LIGHTHOUSE.allBonus;
+      text = `Alle Leuchttürme gefunden: +${LIGHTHOUSE.stars + LIGHTHOUSE.allBonus} Sterne`;
+    } else text += ` (${found}/${lighthouseKeys(state).length})`;
+    return { kind: 'lighthouse', text, player: p, q, r };
+  }
+  return null;
+}
+
 // --- Punkte, Verlauf, Spielende ---------------------------------------------
 
 export function score(state, player) {
@@ -1617,6 +1671,7 @@ export function score(state, player) {
   for (const u of state.units) if (u.owner === player) s += SCORE.unitCost * UNITS[u.carry || u.type].cost;
   s += SCORE.explored * ((state.explored && state.explored[player]) ? state.explored[player].length : 0);
   s += SCORE.ruin * ((state.ruinsBy && state.ruinsBy[player]) || 0);
+  s += SCORE.lighthouse * lighthouseCount(state, player);
   return s;
 }
 
@@ -1628,7 +1683,8 @@ export function scoreBreakdown(state, player) {
     units: state.units.filter(u => u.owner === player).length,
     techs: (state.techs[player] || []).filter(t => t !== 'basic').length,
     explored: (state.explored && state.explored[player]) ? state.explored[player].length : 0,
-    ruins: (state.ruinsBy && state.ruinsBy[player]) || 0
+    ruins: (state.ruinsBy && state.ruinsBy[player]) || 0,
+    lighthouses: lighthouseCount(state, player)
   };
 }
 

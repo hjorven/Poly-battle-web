@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import * as R from '../js/rules.js';
 import {
   UNITS, TERRAIN, MAP_W, MAP_H, START_STARS, MAX_POP, TRIBES,
-  RESOURCES, IMPROVEMENTS
+  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
@@ -188,11 +188,40 @@ test('Klettern erlaubt das Betreten von Bergen', () => {
   assert.ok(R.reachableMap(st, u).has('5,5'), 'mit Klettern erreichbar');
 });
 
-test('Wege geben +1 Bewegung', () => {
+test('Wege: im eigenen Gebiet kosten Wald und Berg nur 1 Bewegung', () => {
   const st = makeState();
+  st.terrain[5 * MAP_W + 6] = 'forest';
+  st.terrain[8 * MAP_W + 9] = 'forest';
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }];
+  const u = unit('u', 'player_1', 'warrior', 5, 5);
+  assert.strictEqual(R.moveCost(st, u, 6, 5), 2, 'ohne Wege');
   st.techs.player_1.push('riding', 'roads');
-  assert.strictEqual(R.maxMove(st, 'player_1', 'rider'), UNITS.rider.move + 1);
-  assert.strictEqual(R.maxMove(st, 'player_2', 'rider'), UNITS.rider.move);
+  assert.strictEqual(R.moveCost(st, u, 6, 5), 1, 'eigenes Gebiet');
+  assert.strictEqual(R.moveCost(st, u, 9, 8), 2, 'außerhalb des Gebiets');
+  assert.strictEqual(R.moveCost(st, unit('e', 'player_2', 'warrior', 7, 5), 6, 5), 2, 'fremdes Gebiet');
+  assert.strictEqual(R.maxMove(st, 'player_1', 'rider'), UNITS.rider.move, 'keine Extra-Bewegung');
+});
+
+test('Leuchttürme: in allen vier Ecken, je Stamm einmal Sterne, Bonus für alle vier', () => {
+  const st = R.createGame(5, 2);
+  const keys = R.lighthouseKeys(st);
+  assert.deepStrictEqual(keys.sort(), [hk(0, 0), hk(MAP_W - 1, 0), hk(MAP_W - 1, MAP_H - 1), hk(0, MAP_H - 1)].sort());
+  for (const k of keys) assert.strictEqual(R.terrainAt(st, ...k.split(',').map(Number)), 'ocean');
+  const ship = unit('s', 'player_1', 'ship', 1, 0);
+  const before = st.stars.player_1;
+  const ev = R.claimLighthouse(st, ship);
+  assert.strictEqual(ev.kind, 'lighthouse');
+  assert.strictEqual(st.stars.player_1, before + LIGHTHOUSE.stars);
+  assert.ok(st.explored.player_1.includes(hk(0, 0)), 'Umgebung aufgedeckt');
+  assert.strictEqual(R.claimLighthouse(st, ship), null, 'nur einmal');
+  assert.ok(R.claimLighthouse(st, unit('t', 'player_2', 'ship', 0, 1)), 'anderer Stamm auch');
+  const far = unit('f', 'player_1', 'ship', 5, 0);
+  assert.strictEqual(R.claimLighthouse(st, far), null, 'zu weit weg');
+  const s0 = st.stars.player_1;
+  for (const [q, r] of [[MAP_W - 1, 0], [MAP_W - 1, MAP_H - 1], [0, MAP_H - 1]]) R.claimLighthouse(st, unit('x', 'player_1', 'ship', q, r));
+  assert.strictEqual(st.stars.player_1, s0 + 3 * LIGHTHOUSE.stars + LIGHTHOUSE.allBonus);
+  assert.strictEqual(R.lighthouseCount(st, 'player_1'), 4);
+  assert.strictEqual(R.score(st, 'player_1') - R.score({ ...st, lighthouses: {} }, 'player_1'), 4 * SCORE.lighthouse);
 });
 
 test('Sturm: nur mit Dash darf nach dem Ziehen angegriffen werden', () => {

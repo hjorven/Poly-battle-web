@@ -167,7 +167,7 @@ export const TECHS = {
   ramming: { name: 'Rammen', tier: 2, req: 'fishing', desc: 'Zweig: Aquatismus' },
   archery: { name: 'Bogenschießen', tier: 2, req: 'hunting', desc: 'Bogenschützen; Wald-Verteidigung' },
   forestry: { name: 'Forstwirtschaft', tier: 2, req: 'hunting', desc: 'Sägewerke bauen (+1 Einkommen)' },
-  roads: { name: 'Wege', tier: 2, req: 'riding', desc: '+1 Bewegung für alle Einheiten; Brücken bauen' },
+  roads: { name: 'Wege', tier: 2, req: 'riding', desc: 'Im eigenen Gebiet kostet Wald und Berg nur 1 Bewegung; Brücken bauen' },
   freespirit: { name: 'Freier Geist', tier: 2, req: 'riding', desc: 'Zweig: Ritterlichkeit' },
 
   construction: { name: 'Baukunst', tier: 3, req: 'farming', desc: '+1 Stern pro Stadt' },
@@ -190,16 +190,16 @@ export const TECH_TIERS = [
 
 // Echte Stämme (reguläre Auswahl) mit Farbe, Start-Technologie und Starteinheit.
 export const TRIBES = {
-  imperius: { name: 'Imperius', color: 0x0000ff, startTechs: ['organization'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Ausgeglichene Fraktion des Imperiums.', perk: { id: 'legion', name: 'Legion', desc: 'Krieger kosten 1 Stern weniger.' } },
+  imperius: { name: 'Imperius', color: 0x0000ff, startTechs: ['organization'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Ausgeglichene Fraktion des Imperiums.', perk: { id: 'legion', name: 'Legion', desc: 'Krieger kosten 1 Stern weniger, die Hauptstadt bringt +1 Stern pro Runde.' } },
   bardur: { name: 'Bardur', color: 0x352514, startTechs: ['hunting'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Waldstämme des Nordens.', perk: { id: 'woodland', name: 'Waldvolk', desc: 'Wald kostet nur 1 Bewegung.' } },
   xinxi: { name: 'Xin-Xi', color: 0xcc0000, startTechs: ['climbing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Bergvolk der Berge.', perk: { id: 'mountaineer', name: 'Bergsteiger', desc: 'Berge kosten nur 1 Bewegung.' } },
   kickoo: { name: 'Kickoo', color: 0x00ff00, startTechs: ['fishing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Inselvolk der Südsee.', perk: { id: 'seafarer', name: 'Seefahrer', desc: 'Schiffe und Boote haben +1 Bewegung.' } },
-  oumaji: { name: 'Oumaji', color: 0xffff00, startTechs: ['riding'], startUnits: ['rider'], bonusStars: 0, blurb: 'Wüstenreiter – startet mit Reiter.', perk: { id: 'horselords', name: 'Steppenreiter', desc: 'Reiter kosten 1 Stern weniger.' } },
+  oumaji: { name: 'Oumaji', color: 0xffff00, startTechs: ['riding'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Wüstenreiter – startet mit Reiten.', perk: { id: 'lookouts', name: 'Späher', desc: 'Reiter und Ritter sehen 1 Feld weiter.' } },
   hoodrick: { name: 'Hoodrick', color: 0x996600, startTechs: ['archery'], startUnits: ['archer'], bonusStars: 0, blurb: 'Waldläufer – startet mit Bogenschützen.', perk: { id: 'longbow', name: 'Langbogen', desc: 'Bogenschützen kosten 1 Stern weniger.' } },
   quetzali: { name: 'Quetzali', color: 0x275c4a, startTechs: ['shields'], startUnits: ['defender'], bonusStars: 0, blurb: 'Startet mit Verteidiger.', perk: { id: 'guardians', name: 'Wächter', desc: 'Verteidiger kosten 1 Stern weniger.' } },
   vengir: { name: 'Vengir', color: 0xffffff, startTechs: ['smithery'], startUnits: ['swordsman'], bonusStars: 0, blurb: 'Kriegerisch – startet mit Schwertkämpfer.', perk: { id: 'forge', name: 'Schmiede', desc: 'Schwertkämpfer kosten 1 Stern weniger.' } },
   zebasi: { name: 'Zebasi', color: 0xff9900, startTechs: ['farming'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Savannenbauern – starke Wirtschaft.', perk: { id: 'harvest', name: 'Ernte', desc: 'Farmen bringen +1 Stern zusätzlich.' } },
-  aimo: { name: 'Ai-Mo', color: 0x36e2aa, startTechs: ['philosophy'], startUnits: ['mindbender'], bonusStars: 0, blurb: 'Weise – startet mit Gedankenbeuger und günstiger Forschung.', perk: { id: 'wisdom', name: 'Weisheit', desc: 'Jede Technologie kostet 1 Stern weniger.' } },
+  aimo: { name: 'Ai-Mo', color: 0x36e2aa, startTechs: ['meditation'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Weise – startet mit Meditation und günstiger Forschung.', perk: { id: 'wisdom', name: 'Weisheit', desc: 'Jede Technologie kostet 1 Stern weniger.' } },
   yadakk: { name: 'Yădakk', color: 0x7d231c, startTechs: ['roads'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Händler der Steppe.', perk: { id: 'traders', name: 'Händler', desc: '+1 Stern pro Runde für je 2 Städte.' } },
   luxidoor: { name: 'Luxidoor', color: 0xab3bd6, startTechs: [], startUnits: ['warrior'], bonusStars: 3, blurb: 'Reich, aber ohne Starttechnologie (+3 Sterne).', perk: { id: 'splendor', name: 'Prunk', desc: 'Die Hauptstadt bringt +2 Sterne pro Runde.' } }
 };
@@ -244,7 +244,7 @@ export const DISBAND_REFUND = 0.5;
 
 // Rabatte durch Stammes-Fähigkeiten (Perk-ID → Einheit).
 export const PERK_DISCOUNT = {
-  legion: 'warrior', horselords: 'rider', longbow: 'archer', guardians: 'defender', forge: 'swordsman'
+  legion: 'warrior', longbow: 'archer', guardians: 'defender', forge: 'swordsman'
 };
 
 // --- Veteranen ----------------------------------------------------------------
@@ -283,6 +283,12 @@ export const RUIN_REWARDS = {
 };
 export const RUIN_STARS = 10;
 
+// --- Leuchttürme --------------------------------------------------------------
+// In jeder Kartenecke steht ein Leuchtturm. Jeder Stamm kann jeden einmal
+// erreichen (Schiff auf oder neben dem Turm): Sterne und Sicht auf die Umgebung,
+// wer alle vier findet, bekommt einen Zusatzbonus.
+export const LIGHTHOUSE = { stars: 3, reveal: 3, allBonus: 5 };
+
 // --- Spielmodi & Schwierigkeit ---------------------------------------------
 export const GAME_MODES = {
   conquest: { label: 'Eroberung', turnLimit: null },
@@ -295,5 +301,5 @@ export const AI_LEVELS = {
 };
 // Punktewertung (Perfektion und Endstatistik).
 export const SCORE = {
-  city: 100, pop: 40, reward: 20, tech: 50, unitCost: 5, explored: 2, improvement: 30, ruin: 40
+  city: 100, pop: 40, reward: 20, tech: 50, unitCost: 5, explored: 2, improvement: 30, ruin: 40, lighthouse: 40
 };

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H } from './config.js';
-import { playerColor, isVisible, visibleKeys, cityView } from './rules.js';
+import { playerColor, isVisible, visibleKeys, cityView, lighthouseKeys, lighthouseFound } from './rules.js';
 import { toWorld, forEachHex, hk, DIRS } from './hex.js';
 
 let colorMap = {};
@@ -161,6 +161,7 @@ export function initRender(canvas, opts = {}) {
     }
     stepFog(now, dt);
     stepIdleMarkers(now);
+    stepLighthouses(dt);
     stepMinimap(now);
     controls.update();
     clampTarget();
@@ -309,6 +310,77 @@ function syncRuin(t, present) {
   t.mesh.add(n);
   t.decor.push(n);
   t.ruinNode = n;
+}
+
+// --- Leuchttürme ----------------------------------------------------------------
+// Hoch genug, um aus dem Nebel zu ragen: Orientierung von Beginn an. Die Lampe
+// leuchtet (mit kreisendem Lichtkegel), sobald der Betrachter den Turm erreicht hat.
+
+const lightNodes = new Map();
+const lampOn = new THREE.MeshBasicMaterial({ color: 0xffd34d });
+const lampOff = new THREE.MeshLambertMaterial({ color: 0x9ca3af, flatShading: true });
+
+function lighthouseNode() {
+  const g = new THREE.Group();
+  const rock = new THREE.Mesh(geo('lhRock', () => new THREE.CylinderGeometry(0.5, 0.62, 0.22, 7)), mat(0x8b8f94));
+  rock.position.y = 0.11;
+  g.add(rock);
+  const white = mat(0xf5f5f4), red = mat(0xd9443b);
+  const parts = [[0.27, 0.24, 0.3, white], [0.24, 0.215, 0.24, red], [0.215, 0.19, 0.24, white], [0.19, 0.17, 0.2, red]];
+  let y = 0.22;
+  parts.forEach(([rb, rt, h, m], i) => {
+    const seg = new THREE.Mesh(geo('lhSeg' + i, () => new THREE.CylinderGeometry(rt, rb, h, 10)), m);
+    seg.position.y = y + h / 2;
+    y += h;
+    g.add(seg);
+  });
+  const gallery = new THREE.Mesh(geo('lhGallery', () => new THREE.CylinderGeometry(0.25, 0.25, 0.05, 10)), mat(0x3f3f46));
+  gallery.position.y = y + 0.025;
+  g.add(gallery);
+  const lamp = new THREE.Mesh(geo('lhLamp', () => new THREE.CylinderGeometry(0.13, 0.13, 0.17, 10)), lampOff);
+  lamp.position.y = y + 0.135;
+  g.add(lamp);
+  const roof = new THREE.Mesh(geo('lhRoof', () => new THREE.ConeGeometry(0.19, 0.2, 10)), red);
+  roof.position.y = y + 0.32;
+  g.add(roof);
+  for (const m of g.children) m.castShadow = true;
+  // Lichtkegel: flacher, halbtransparenter Strahl, der sich dreht.
+  const beamGeo = geo('lhBeam', () => new THREE.ConeGeometry(0.32, 2.4, 12, 1, true).rotateZ(Math.PI / 2).translate(1.2, 0, 0));
+  const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({
+    color: 0xffe08a, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, fog: false
+  }));
+  beam.position.y = lamp.position.y;
+  beam.renderOrder = 14;
+  beam.visible = false;
+  g.add(beam);
+  g.userData = { lamp, beam };
+  return g;
+}
+
+function syncLighthouses(state, viewer) {
+  const keys = new Set(lighthouseKeys(state));
+  for (const [k, g] of lightNodes) {
+    if (!keys.has(k)) { scene.remove(g); lightNodes.delete(k); }
+  }
+  for (const k of keys) {
+    let g = lightNodes.get(k);
+    if (!g) {
+      const [q, r] = k.split(',').map(Number);
+      const p = toWorld(q, r);
+      g = lighthouseNode();
+      g.position.set(p.x, TERRAIN.ocean.height, p.z);
+      g.userData.beam.rotation.y = (q * 7 + r * 3) % 6;
+      scene.add(g);
+      lightNodes.set(k, g);
+    }
+    const lit = !viewer || lighthouseFound(state, viewer, k);
+    g.userData.lamp.material = lit ? lampOn : lampOff;
+    g.userData.beam.visible = lit;
+  }
+}
+
+function stepLighthouses(dt) {
+  for (const g of lightNodes.values()) if (g.userData.beam.visible) g.userData.beam.rotation.y += dt * 0.9;
 }
 
 // --- Brücken ----------------------------------------------------------------
@@ -800,6 +872,8 @@ function clearBoard() {
   unitNodes.clear();
   for (const node of cityNodes.values()) scene.remove(node.group);
   cityNodes.clear();
+  for (const g of lightNodes.values()) scene.remove(g);
+  lightNodes.clear();
   // Laufende Animationen beenden, damit wartende Promises nicht hängen.
   const pending = tweens;
   tweens = [];
@@ -1338,6 +1412,7 @@ export function syncBoard(state, viewer = null) {
     flattenUnseen(t);
     if (t.decor) for (const d of t.decor) d.visible = seen;
   }
+  syncLighthouses(state, viewer);
   // Städte so zeigen, wie der Betrachter sie kennt (live oder aus dem Gedächtnis).
   const cityViews = new Map();
   for (const c of state.cities) {

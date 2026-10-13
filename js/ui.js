@@ -914,13 +914,13 @@ function statsHtml(state, ctx) {
       <td class="num">${i + 1}.</td>
       <td><span class="dot" style="background:${hex(playerColor(state, player))}"></span>${playerLabel(state, player)}${player === me ? ' (du)' : ''}</td>
       <td class="num">${sc}</td><td class="num">${b.cities}</td><td class="num">${b.pop}</td>
-      <td class="num">${b.techs}</td><td class="num">${b.units}</td><td class="num">${b.ruins}</td>
+      <td class="num">${b.techs}</td><td class="num">${b.units}</td><td class="num">${b.ruins}</td><td class="num">${b.lighthouses}</td>
     </tr>`;
   }).join('');
   return `${chartSvg(state)}
     <div class="stats-scroll"><table class="stats-table">
       <thead><tr><th class="num">#</th><th>Stamm</th><th class="num">Punkte</th><th class="num">Städte</th>
-      <th class="num">Bev.</th><th class="num">Techs</th><th class="num">Einh.</th><th class="num">Ruinen</th></tr></thead>
+      <th class="num">Bev.</th><th class="num">Techs</th><th class="num">Einh.</th><th class="num">Ruinen</th><th class="num">Leuchtt.</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
 }
 
