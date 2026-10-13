@@ -36,6 +36,7 @@
     <div id="toast-area"></div>
     <aside id="panel" class="hidden"></aside>
     <div id="unit-chip" class="hidden"></div>
+    <div id="news" class="hidden" role="status" aria-live="polite"></div>
     <button id="menuBtn" class="btn ghost small" title="Menü">Menü</button>
     <button id="soundBtn" class="btn ghost small" title="Ton an/aus" aria-label="Ton an/aus"></button>
     <canvas id="minimap" width="220" height="150" title="Minikarte – antippen, um dorthin zu springen"></canvas>
@@ -55,7 +56,7 @@
       <div class="menu-buttons">
         <button id="continueBtn" class="btn primary big hidden">Weiterspielen</button>
         <button class="btn primary big" data-mode="bot">Gegen KI (1 Spieler)</button>
-        <button class="btn big" data-mode="hotseat">Hotseat (2 Spieler)</button>
+        <button class="btn big" data-mode="hotseat">Hotseat (ein Gerät)</button>
         <button class="btn big" data-mode="online">Online (Link teilen)</button>
         <button id="copyLinkBtn" class="btn big hidden">Link zum Spiel kopieren</button>
       </div>
@@ -107,6 +108,15 @@
               <button data-bots="3" class="chip-btn">3</button>
               <button data-bots="4" class="chip-btn">4</button>
               <button data-bots="5" class="chip-btn">5</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Menschen (Hotseat/Online)</span>
+            <div class="seg">
+              <button data-humans="2" class="chip-btn">2</button>
+              <button data-humans="3" class="chip-btn">3</button>
+              <button data-humans="4" class="chip-btn">4</button>
+              <button data-humans="5" class="chip-btn">5</button>
             </div>
           </div>
           <div class="setting-row">

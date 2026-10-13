@@ -704,3 +704,16 @@ button:focus-visible {
 .monument.ready { opacity: 1; border-color: #f59e0b; }
 .monument.done { opacity: 1; background: rgba(34, 197, 94, 0.08); }
 .mon-dot { width: 12px; height: 12px; border-radius: 50%; }
+
+/* Rückblick: was seit dem letzten eigenen Zug passiert ist */
+#news {
+  position: absolute; left: 12px; top: 64px; z-index: 30; width: min(340px, calc(100% - 24px));
+  background: #fff; border: 1px solid var(--border); border-left: 4px solid #dc2626; border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); padding: 10px 12px; font-size: 14px;
+}
+#news h3 { margin: 0 0 6px; font-size: 14px; }
+#news ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
+#news li button { all: unset; cursor: pointer; display: block; width: 100%; padding: 3px 4px; border-radius: 4px; }
+#news li button:hover, #news li button:focus-visible { background: #f4f4f5; }
+#news .news-more { color: #71717a; font-size: 12px; }
+@media (max-width: 760px) { #news { top: 108px; left: 8px; width: calc(100% - 16px); } }

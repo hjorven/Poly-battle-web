@@ -65,7 +65,7 @@ function statusText() {
   }
   if (app.mode === 'online') {
     if (!app.myRole) return `Zuschauer · Am Zug: ${needName(st, st.turn)}`;
-    if (!app.hasOpponent) return 'Warte auf Mitspieler – teile den Link (Menü → Link kopieren).';
+    if (!app.hasOpponent) return `Warte auf Mitspieler (${app.seated || 1}/${app.humanSeats || 2} da) – teile den Link (Menü → Link kopieren).`;
     if (myTurn()) return `Du bist am Zug (${needName(st, app.myRole)})`;
     if (R.isBot(st, st.turn)) return `KI zieht (${needName(st, st.turn)}) …`;
     return `Gegner ist am Zug (${needName(st, st.turn)})`;
@@ -84,12 +84,33 @@ function refresh() {
   render.setIdleMarkers(idle);
   warnThreats();
   announceMonuments();
+  showNews();
   render.drawMinimap(app.state, viewer());
   updateSelection();
   checkWinnerUI();
 }
 
 // Bedrohte Städte rot markieren und einmal pro Zug darauf hinweisen.
+// Rückblick auf die Züge der anderen seit dem eigenen letzten Zug.
+function showNews() {
+  if (!myTurn()) return;
+  const p = actAs();
+  const news = R.takeNews(app.state, p);
+  if (!news.length) return;
+  const name = pl => needName(app.state, pl);
+  // „deinen Krieger“, aber „dein Schiff“.
+  const ACC = { archer: 'Bogenschützen', giant: 'Riesen' };
+  const your = t => (['catapult', 'boat', 'ship', 'battleship'].includes(t) ? 'dein ' : 'deinen ') + (ACC[t] || UNITS[t].name);
+  const lines = [];
+  for (const e of news.filter(e => e.kind === 'war')) lines.push({ text: `${name(e.by)} hat dir den Krieg erklärt` });
+  for (const e of news.filter(e => e.kind === 'cityLost')) lines.push({ text: `${name(e.by)} hat eine deiner Städte erobert`, q: e.q, r: e.r });
+  for (const e of news.filter(e => e.kind === 'unitLost')) lines.push({ text: `${name(e.by)} hat ${your(e.unit)} besiegt`, q: e.q, r: e.r });
+  for (const e of news.filter(e => e.kind === 'converted')) lines.push({ text: `${name(e.by)} hat ${your(e.unit)} bekehrt`, q: e.q, r: e.r });
+  for (const e of news.filter(e => e.kind === 'hit')) lines.push({ text: `${name(e.by)} hat ${your(e.unit)} angegriffen (−${e.dmg} Leben)`, q: e.q, r: e.r });
+  ui.showNews(lines);
+  persist();
+}
+
 // Neu freigeschaltete Monumente einmal ankündigen.
 function announceMonuments() {
   if (!myTurn()) return;
@@ -480,6 +501,7 @@ function anyIdle(owner) {
 }
 
 function doEndTurnNow() {
+  ui.hideNews();
   app.busy = true;
   app.sel = null;
   R.endTurn(app.state);
@@ -706,7 +728,7 @@ function startLocal(mode) {
   app.busy = false;
   app.idleWarned = null;
   const settings = ui.getSettings();
-  const count = mode === 'bot' ? settings.bots + 1 : 2;
+  const count = mode === 'bot' ? settings.bots + 1 : settings.humans;
   const tribe = mode === 'bot' ? ui.getTribe() : null;
   const map = { mapSize: settings.mapSize, mapType: settings.mapType };
   const opts = mode === 'bot'
@@ -726,6 +748,7 @@ function enterLocal() {
     app.channel = null;
   }
   history.replaceState(null, '', location.pathname);
+  ui.hideNews();
   ui.hideMenu();
   ui.hideWinner();
   document.getElementById('copyLinkBtn').classList.add('hidden');
@@ -782,7 +805,7 @@ async function startOnline() {
     if (error) { ui.toast(error, 'warn'); showMenu(); return; }
     adopt(match.game_state);
     app.myRole = role;
-    app.hasOpponent = !!match.player_2;
+    app.hasOpponent = allSeated(match);
     ui.hideMenu();
     render.syncBoard(app.state, viewer());
     focusHome();
@@ -790,17 +813,18 @@ async function startOnline() {
     if (!app.myRole) ui.toast('Spiel läuft bereits – du schaust zu.');
   } else {
     const settings = ui.getSettings();
-    const bots = settings.onlineBots;
-    const state = R.createGame(Math.floor(Math.random() * 2 ** 31), 2 + bots, {
+    const humans = settings.humans;
+    const bots = Math.min(settings.onlineBots, 5 - humans);
+    const state = R.createGame(Math.floor(Math.random() * 2 ** 31), humans + bots, {
       tribe: ui.getTribe(), stars: settings.stars, turnLimit: settings.turnLimit, aiLevel: settings.aiLevel,
       mapSize: settings.mapSize, mapType: settings.mapType,
-      ai: Array.from({ length: bots }, (_, k) => 'player_' + (k + 3))
+      ai: Array.from({ length: bots }, (_, k) => 'player_' + (k + humans + 1))
     });
     const { match, error } = await net.createMatch(state);
     if (error) { ui.toast(error, 'warn'); showMenu(); return; }
     adopt(match.game_state);
     app.myRole = 'player_1';
-    app.hasOpponent = false;
+    app.hasOpponent = allSeated(match);
     app.gameId = match.id;
     location.hash = match.id;
     ui.hideMenu();
@@ -817,7 +841,7 @@ async function startOnline() {
   }
   app.channel = net.subscribe(app.gameId, match => {
     if (!app.online || !match.game_state) return;
-    if (match.player_2) app.hasOpponent = true;
+    if (allSeated(match)) app.hasOpponent = true;
     // Nur echte Neuerungen übernehmen. Das Echo des eigenen Zuges (gleiche
     // rev) würde den Stand durch eine identische Kopie ersetzen und offene
     // Panels/Dialoge auf verwaiste Objekte zeigen lassen.
@@ -828,6 +852,21 @@ async function startOnline() {
     }
     refresh();
   });
+}
+
+// Haben alle menschlichen Plätze einen Spieler? (Öffentliche Antwort der
+// Datenbank: `joined`; Realtime liefert die Zeile mit `seats`; ältere Server
+// kennen nur player_2.)
+function allSeated(match) {
+  const st = match.game_state || app.state;
+  if (!st) return !!match.player_2;
+  const humans = (st.players || []).filter(p => !(st.ai || []).includes(p));
+  const joined = Array.isArray(match.joined) ? match.joined
+    : match.seats && typeof match.seats === 'object' ? Object.keys(match.seats)
+    : [match.player_1 ? 'player_1' : null, match.player_2 ? 'player_2' : null].filter(Boolean);
+  app.seated = humans.filter(h => joined.includes(h)).length;
+  app.humanSeats = humans.length;
+  return humans.every(h => joined.includes(h));
 }
 
 async function copyLink() {
@@ -857,6 +896,7 @@ function boot() {
     onFound: doFound,
     onBuildBridge: doBuildBridge,
     onBuildRoad: doBuildRoad,
+    onJump: (q, r) => render.cameraTo(q, r, true),
     onDestroyBridge: doDestroyBridge,
     onDisband: doDisband,
     onNextIdle: nextIdle,

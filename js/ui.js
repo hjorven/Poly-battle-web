@@ -15,7 +15,7 @@ import {
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
 
 const $ = id => document.getElementById(id);
-const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'normal', mapsize: 'normal', maptype: 'continents', onlinebots: '0' };
+const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'normal', mapsize: 'normal', maptype: 'continents', onlinebots: '0', humans: '2' };
 let handlers = {};
 let selectedTribe = null;
 
@@ -92,6 +92,7 @@ export function getSettings() {
     aiLevel: settings.ai,
     mapSize: MAP_SIZES[settings.mapsize] ? settings.mapsize : 'normal',
     mapType: MAP_TYPES[settings.maptype] ? settings.maptype : 'continents',
+    humans: Math.max(2, Math.min(5, Number(settings.humans) || 2)),
     onlineBots: Math.max(0, Math.min(3, Number(settings.onlinebots) || 0))
   };
 }
@@ -128,6 +129,7 @@ function buildSettings() {
   seg('mapsize', 'mapsize');
   seg('maptype', 'maptype');
   seg('onlinebots', 'onlinebots');
+  seg('humans', 'humans');
 }
 
 function hex(c) {
@@ -211,6 +213,26 @@ export function setSoundIcon(muted) {
   btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${SPEAKER}${muted ? CROSS : WAVES}</svg>`;
   btn.title = muted ? 'Ton ist aus – einschalten' : 'Ton ist an – ausschalten';
   btn.setAttribute('aria-label', btn.title);
+}
+
+// Rückblick: Liste {text, q?, r?}; antippen springt zum Ort.
+export function showNews(lines) {
+  const box = $('news');
+  const shown = lines.slice(0, 7);
+  box.innerHTML = `<h3>Seit deinem letzten Zug</h3><ul>${shown.map((l, i) =>
+    `<li><button data-news="${i}" ${l.q == null ? 'tabindex="-1"' : ''}>${esc(l.text)}</button></li>`).join('')}</ul>
+    ${lines.length > shown.length ? `<div class="news-more">und ${lines.length - shown.length} weitere</div>` : ''}
+    <button class="btn small" data-news-close>OK</button>`;
+  box.querySelectorAll('[data-news]').forEach(b => b.addEventListener('click', () => {
+    const l = shown[Number(b.dataset.news)];
+    if (l.q != null) handlers.onJump(l.q, l.r);
+  }));
+  box.querySelector('[data-news-close]').addEventListener('click', hideNews);
+  box.classList.remove('hidden');
+}
+
+export function hideNews() {
+  $('news').classList.add('hidden');
 }
 
 export function setEndTurn(enabled) {
