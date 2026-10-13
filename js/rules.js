@@ -779,17 +779,30 @@ export function unlockedUnits(state, player) {
   return UNIT_ORDER.filter(t => !UNITS[t].reward && (!UNITS[t].tech || state.techs[player].includes(UNITS[t].tech)));
 }
 
+// Häfen im eigenen Stadtgebiet; Schiffe entstehen auf einem freien davon.
+export function cityPorts(state, city) {
+  return cityTiles(state, city).filter(([q, r]) => improvementAt(state, q, r) === 'port');
+}
+
+export function spawnSpot(state, city, type) {
+  if (!hasAbility(type, 'water')) return unitAt(state, city.q, city.r) ? null : [city.q, city.r];
+  return cityPorts(state, city).find(([q, r]) => !unitAt(state, q, r)) || null;
+}
+
 export function canTrain(state, city, type, player) {
   if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
   if (city.owner !== player) return { ok: false, reason: 'Fremde Stadt' };
   if (city.trained) return { ok: false, reason: 'Bereits ausgebildet' };
-  if (unitAt(state, city.q, city.r)) return { ok: false, reason: 'Stadt besetzt' };
   const u = UNITS[type];
   if (!u) return { ok: false, reason: 'Unbekannte Einheit' };
   if (u.reward) return { ok: false, reason: 'Nur als Stadtbelohnung' };
   if (u.capital && !city.isCapital) return { ok: false, reason: 'Nur in der Hauptstadt' };
   if (u.tech && !state.techs[player].includes(u.tech)) return { ok: false, reason: 'Technologie fehlt' };
-  if (hasAbility(type, 'water') && !coastal(state, city)) return { ok: false, reason: 'Küstenstadt nötig' };
+  // Schiffe laufen im Hafen vom Stapel, Landeinheiten in der Stadt.
+  if (hasAbility(type, 'water')) {
+    if (!cityPorts(state, city).length) return { ok: false, reason: 'Hafen nötig' };
+    if (!spawnSpot(state, city, type)) return { ok: false, reason: 'Hafen besetzt' };
+  } else if (unitAt(state, city.q, city.r)) return { ok: false, reason: 'Stadt besetzt' };
   if (state.stars[player] < unitCost(state, player, type)) return { ok: false, reason: 'Zu wenig Sterne' };
   return { ok: true };
 }
@@ -798,11 +811,12 @@ let unitSeq = 0;
 export function trainUnit(state, city, type, player) {
   const chk = canTrain(state, city, type, player);
   if (!chk.ok) return chk;
+  const [sq, sr] = spawnSpot(state, city, type);
   state.stars[player] -= unitCost(state, player, type);
   city.trained = true;
   state.units.push({
     id: `${player.replace('_', '')}_${Date.now().toString(36)}_${unitSeq++}`,
-    owner: player, type, q: city.q, r: city.r,
+    owner: player, type, q: sq, r: sr,
     hp: maxHp(type), mp: maxMove(state, player, type), hasMoved: false, acted: false
   });
   updateExplored(state, player);

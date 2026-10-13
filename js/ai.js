@@ -113,9 +113,12 @@ function bridgeStep(state, player) {
 
 function bestBuilding(state, player) {
   const stars = state.stars[player];
+  // Ohne Hafen keine Schiffe: mit Segeln den ersten Hafen bevorzugen.
+  const needsPort = state.techs[player].includes('sailing') &&
+    !R.citiesFor(state, player).some(c => R.cityPorts(state, c).length);
   let best = null;
   for (const city of R.citiesFor(state, player)) {
-    if (city.pop < 2 && state.cities.filter(c => c.owner === player).length < 3) continue;
+    if (!needsPort && city.pop < 2 && state.cities.filter(c => c.owner === player).length < 3) continue;
     for (const [q, r] of R.cityTiles(state, city)) {
       if (R.improvementAt(state, q, r) || R.resourceAt(state, q, r)) continue;
       if (state.units.some(u => u.q === q && u.r === r)) continue;
@@ -124,7 +127,7 @@ function bestBuilding(state, player) {
         if (def.tech && !state.techs[player].includes(def.tech)) continue;
         if (stars < def.cost + 2) continue;
         if (!R.canImprove(state, city, type, q, r).ok) continue;
-        const score = def.pop / def.cost;
+        const score = def.pop / def.cost + (type === 'port' && needsPort ? 1 : 0);
         if (!best || score > best.score) best = { kind: 'improve', city, type, q, r, score };
       }
     }

@@ -161,7 +161,7 @@ export const TECHS = {
 
   farming: { name: 'Landwirtschaft', tier: 2, req: 'organization', desc: 'Farmen bauen (+1 Einkommen)' },
   shields: { name: 'Schildmacher', tier: 2, req: 'organization', desc: 'Verteidiger ausbilden' },
-  mining: { name: 'Bergbau', tier: 2, req: 'climbing', desc: 'Minerven bauen (+1 Einkommen)' },
+  mining: { name: 'Bergbau', tier: 2, req: 'climbing', desc: 'Minen bauen (+1 Einkommen)' },
   meditation: { name: 'Meditation', tier: 2, req: 'climbing', desc: 'Tempel bauen' },
   sailing: { name: 'Segeln', tier: 2, req: 'fishing', desc: 'Boote & Schiffe; Häfen; +1 Sicht' },
   ramming: { name: 'Rammen', tier: 2, req: 'fishing', desc: 'Zweig: Aquatismus' },
@@ -231,7 +231,7 @@ export const IMPROVEMENTS = {
   farm: { name: 'Farm', tech: 'farming', terrain: ['field'], cost: 6, pop: 1 },
   sawmill: { name: 'Sägewerk', tech: 'forestry', terrain: ['forest'], cost: 7, pop: 1 },
   mine: { name: 'Mine', tech: 'mining', terrain: ['mountain'], cost: 8, pop: 1 },
-  port: { name: 'Hafen', tech: 'sailing', terrain: ['water', 'ocean', 'ice'], cost: 7, pop: 1 },
+  port: { name: 'Hafen', tech: 'sailing', terrain: ['water', 'ocean'], cost: 7, pop: 1 },
   temple: { name: 'Tempel', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 }
 };
 
