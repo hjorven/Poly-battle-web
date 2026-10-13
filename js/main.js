@@ -18,9 +18,7 @@ const app = {
   online: false,
   // Wird bei jedem neuen/geladenen Spiel erhöht; eine noch laufende
   // KI-Schleife des alten Spiels erkennt daran, dass sie aufhören muss.
-  gen: 0,
-  // Rückgängig: Spielstände vor den Aktionen dieses Zuges (nur lokal).
-  undo: []
+  gen: 0
 };
 
 // Einen Spielstand übernehmen und seine Kartengröße aktivieren.
@@ -81,7 +79,6 @@ function refresh() {
   const idle = myTurn() ? R.idleUnits(app.state, actAs()) : [];
   ui.setIdle(idle.length);
   render.setIdleMarkers(idle);
-  ui.setUndo(canUndo());
   render.drawMinimap(app.state, viewer());
   updateSelection();
   checkWinnerUI();
@@ -175,10 +172,6 @@ async function saveOnline() {
   }
 }
 
-// Kampf, Eroberung und Ruinen decken Neues auf bzw. hängen vom Zufall ab –
-// danach ist kein Rückgängig mehr möglich.
-const FINAL_EVENTS = new Set(['damage', 'kill', 'convert', 'capture', 'ruin', 'retaliate', 'promote']);
-
 function announce(events) {
   for (const ev of events) {
     if (ev.kind === 'capture') {
@@ -204,7 +197,6 @@ function announce(events) {
 
 async function afterAction(events = []) {
   announce(events);
-  if (events.some(ev => FINAL_EVENTS.has(ev.kind))) app.undo = [];
   app.busy = false;
   refresh();
   const token = (app.state.round || 0) + ':' + app.state.turn;
@@ -224,41 +216,12 @@ async function afterAction(events = []) {
   offerDiplomacy();
 }
 
-// --- Rückgängig -------------------------------------------------------------
-
-function canUndo() {
-  return !app.online && myTurn() && app.undo.length > 0;
-}
-
-function pushUndo(snapshot) {
-  if (app.online) return;
-  app.undo.push(snapshot);
-  if (app.undo.length > 30) app.undo.shift();
-}
-
-function snap() {
-  return app.online ? null : JSON.stringify(app.state);
-}
-
-async function doUndo() {
-  if (!canUndo()) return;
-  adopt(JSON.parse(app.undo.pop()));
-  app.sel = null;
-  sfx('select');
-  ui.toast('Rückgängig gemacht');
-  await render.syncBoard(app.state, viewer());
-  persist();
-  refresh();
-}
-
 // --- Diplomatie -------------------------------------------------------------
 
 function doOfferPeace(to) {
   if (!myTurn()) return;
-  const before = snap();
   const res = R.offerPeace(app.state, actAs(), to);
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
-  pushUndo(before);
   const name = needName(app.state, to);
   if (res.accepted) { ui.toast(`Frieden mit ${name} geschlossen`, 'good'); sfx('peace'); }
   else if (res.pending) ui.toast(`Friedensangebot an ${name} gesendet`, 'good');
@@ -270,10 +233,8 @@ function doOfferPeace(to) {
 function doDeclareWar(to) {
   if (!myTurn()) return;
   ui.showConfirm(`${needName(app.state, to)} den Krieg erklären? Ein neuer Frieden ist frühestens in 3 Runden möglich.`, () => {
-    const before = snap();
     const res = R.declareWar(app.state, actAs(), to);
     if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
-    pushUndo(before);
     ui.toast(`Krieg mit ${needName(app.state, to)}!`, 'warn');
     sfx('war');
     ui.hideOverview();
@@ -292,7 +253,6 @@ function offerDiplomacy() {
     if (!res.ok) return;
     if (accept) { ui.toast(`Frieden mit ${needName(app.state, offer.from)} geschlossen`, 'good'); sfx('peace'); }
     else ui.toast('Angebot abgelehnt');
-    app.undo = [];
     afterAction();
   };
   ui.showConfirm(`${needName(app.state, offer.from)} bietet dir Frieden an. Solange er gilt, könnt ihr euch nicht angreifen und nicht die Städte des anderen betreten.`,
@@ -324,10 +284,8 @@ function offerReward() {
 async function doChooseReward(city, id) {
   city = liveCity(city);
   if (!city) return;
-  const before = snap();
   const res = R.chooseReward(app.state, city, id, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
-  pushUndo(before);
   app.busy = true;
   ui.toast(`${CITY_REWARDS[id].name} gewählt`, 'good');
   sfx('coin');
@@ -345,10 +303,8 @@ function viewer() {
 
 async function doMove(unit, q, r) {
   app.busy = true;
-  const before = snap();
   const res = R.moveUnit(app.state, unit, q, r);
   if (!res.ok) { app.busy = false; refresh(); return; }
-  pushUndo(before);
   if (!res.events.some(e => e.kind === 'embark')) sfx('move');
   app.sel = { kind: 'unit', id: unit.id };
   await render.syncBoard(app.state, viewer());
@@ -358,7 +314,6 @@ async function doMove(unit, q, r) {
 async function doAttack(attacker, defender) {
   app.busy = true;
   const { events } = R.attack(app.state, attacker, defender);
-  app.undo = [];
   sfx(events.some(e => e.kind === 'kill') ? 'kill' : 'attack');
   render.syncBoard(app.state, viewer());
   await render.playCombat(events);
@@ -370,10 +325,8 @@ async function doAttack(attacker, defender) {
 async function doTrain(city, type) {
   city = liveCity(city);
   if (!city) return;
-  const before = snap();
   const res = R.trainUnit(app.state, city, type, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
-  pushUndo(before);
   app.busy = true;
   ui.toast(`${UNITS[type].name} ausgebildet`, 'good');
   sfx('coin');
@@ -384,10 +337,8 @@ async function doTrain(city, type) {
 async function doBuyPop(city) {
   city = liveCity(city);
   if (!city) return;
-  const before = snap();
   const res = R.buyPop(app.state, city, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
-  pushUndo(before);
   app.busy = true;
   ui.toast('Bevölkerung wächst', 'good');
   sfx('coin');
@@ -398,10 +349,8 @@ async function doBuyPop(city) {
 async function doImprove(city, type, q, r) {
   city = liveCity(city);
   if (!city) return;
-  const before = snap();
   const res = R.improve(app.state, city, type, q, r, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
-  pushUndo(before);
   app.busy = true;
   const def = IMPROVEMENTS[type];
   ui.toast(`${def ? def.name + ' gebaut' : 'Gebäude gebaut'}`, 'good');
@@ -413,10 +362,8 @@ async function doImprove(city, type, q, r) {
 async function doFound(unit) {
   unit = liveUnit(unit);
   if (!unit) return;
-  const before = snap();
   const res = R.foundCity(app.state, unit, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
-  pushUndo(before);
   app.busy = true;
   ui.toast('Stadt gegründet', 'good');
   sfx('capture');
@@ -427,10 +374,8 @@ async function doFound(unit) {
 async function doBuildBridge(unit, dir) {
   unit = liveUnit(unit);
   if (!unit) return;
-  const before = snap();
   const res = R.buildBridge(app.state, unit, dir, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
-  pushUndo(before);
   app.busy = true;
   ui.toast('Brücke gebaut', 'good');
   sfx('build');
@@ -441,10 +386,8 @@ async function doBuildBridge(unit, dir) {
 async function doDestroyBridge(unit, q, r) {
   unit = liveUnit(unit);
   if (!unit) return;
-  const before = snap();
   const res = R.destroyBridge(app.state, unit, q, r, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
-  pushUndo(before);
   app.busy = true;
   ui.toast('Brücke eingerissen', 'good');
   sfx('splash');
@@ -457,10 +400,8 @@ function doDisband(unit) {
   ui.showConfirm(`${name} auflösen? Du erhältst ${R.disbandRefund(unit)} Sterne zurück.`, async () => {
     const u = liveUnit(unit);
     if (!u || !myTurn()) return;
-    const before = snap();
     const res = R.disbandUnit(app.state, u, actAs());
     if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
-    pushUndo(before);
     sfx('select');
     app.busy = true;
     app.sel = null;
@@ -477,7 +418,6 @@ function anyIdle(owner) {
 function doEndTurnNow() {
   app.busy = true;
   app.sel = null;
-  app.undo = [];
   R.endTurn(app.state);
   if (app.online) app.botDriver = true;
   sfx('turn');
@@ -507,10 +447,8 @@ async function doEndTurn() {
 }
 
 async function doResearch(techId) {
-  const before = snap();
   const res = R.research(app.state, techId, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
-  pushUndo(before);
   app.busy = true;
   ui.toast(`${TECHS[techId].name} erforscht`, 'good');
   sfx('research');
@@ -704,7 +642,6 @@ function startLocal(mode) {
       }
     : { turnLimit: settings.turnLimit, ...map };
   app.state = R.createGame(Math.floor(Math.random() * 2 ** 31), count, opts);
-  app.undo = [];
   enterLocal();
   persist();
 }
@@ -745,7 +682,6 @@ function continueGame() {
   app.busy = false;
   app.idleWarned = null;
   adopt(data.state);
-  app.undo = [];
   if (app.mode === 'hotseat') {
     enterLocal();
     ui.showHandover(needName(app.state, app.state.turn), () => { focusHome(); offerReward(); offerDiplomacy(); });
@@ -851,7 +787,6 @@ function boot() {
     onNextIdle: nextIdle,
     onSelectCity: (q, r) => { app.sel = { kind: 'city', q, r }; sfx('select'); refresh(); },
     onSelectUnit: id => { if (R.findUnit(app.state, id)) { app.sel = { kind: 'unit', id }; sfx('select'); refresh(); } },
-    onUndo: doUndo,
     onCamera: cmd => {
       if (cmd === 'rotL') render.rotateCamera(-1);
       else if (cmd === 'rotR') render.rotateCamera(1);
