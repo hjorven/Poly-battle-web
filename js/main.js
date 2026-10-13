@@ -14,7 +14,10 @@ const app = {
   gameId: null,
   sel: null,
   busy: false,
-  online: false
+  online: false,
+  // Wird bei jedem neuen/geladenen Spiel erhöht; eine noch laufende
+  // KI-Schleife des alten Spiels erkennt daran, dass sie aufhören muss.
+  gen: 0
 };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -44,7 +47,11 @@ function myTurn() {
 function statusText() {
   const st = app.state;
   if (!st) return 'Lade Spiel…';
-  if (st.winner) return `${needName(st, st.winner)} hat alle Städte erobert und gewinnt.`;
+  if (st.winner) {
+    return st.endReason === 'score'
+      ? `${needName(st, st.winner)} gewinnt nach Punkten.`
+      : `${needName(st, st.winner)} hat alle Städte erobert und gewinnt.`;
+  }
   if (app.mode === 'online') {
     if (!app.myRole) return `Zuschauer · Am Zug: ${needName(st, st.turn)}`;
     if (!app.hasOpponent) return 'Warte auf Mitspieler – teile den Link (Menü → Link kopieren).';
@@ -159,6 +166,17 @@ function actAs() {
   return ctx().actAs;
 }
 
+// Panels und Dialoge halten Objekte aus dem Stand, mit dem sie gezeichnet
+// wurden. Ersetzt ein Online-Update den Stand, würde eine Aktion sonst ein
+// verwaistes Objekt ändern – deshalb immer im aktuellen Stand nachschlagen.
+function liveCity(city) {
+  return city ? R.cityAt(app.state, city.q, city.r) : null;
+}
+
+function liveUnit(unit) {
+  return unit ? R.findUnit(app.state, unit.id) : null;
+}
+
 // Offene Stadt-Belohnung des aktiven Spielers direkt zur Auswahl anbieten.
 function offerReward() {
   if (!myTurn() || ui.isRewardOpen()) return;
@@ -167,6 +185,8 @@ function offerReward() {
 }
 
 async function doChooseReward(city, id) {
+  city = liveCity(city);
+  if (!city) return;
   const res = R.chooseReward(app.state, city, id, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
@@ -203,6 +223,8 @@ async function doAttack(attacker, defender) {
 }
 
 async function doTrain(city, type) {
+  city = liveCity(city);
+  if (!city) return;
   const res = R.trainUnit(app.state, city, type, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
@@ -212,6 +234,8 @@ async function doTrain(city, type) {
 }
 
 async function doBuyPop(city) {
+  city = liveCity(city);
+  if (!city) return;
   const res = R.buyPop(app.state, city, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
@@ -221,6 +245,8 @@ async function doBuyPop(city) {
 }
 
 async function doImprove(city, type, q, r) {
+  city = liveCity(city);
+  if (!city) return;
   const res = R.improve(app.state, city, type, q, r, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
@@ -231,6 +257,8 @@ async function doImprove(city, type, q, r) {
 }
 
 async function doFound(unit) {
+  unit = liveUnit(unit);
+  if (!unit) return;
   const res = R.foundCity(app.state, unit, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
@@ -283,14 +311,18 @@ async function doResearch(techId) {
 async function maybeBot() {
   if (app.mode !== 'bot' || app.busy || !app.state || app.state.winner) return;
   if (app.state.turn === 'player_1') return;
+  const gen = app.gen;
+  const stale = () => gen !== app.gen;
   app.busy = true;
   app.sel = null;
   refresh();
   await sleep(550);
+  if (stale()) return;
   while (app.state.turn !== 'player_1' && !app.state.winner && !humanDefeated()) {
     const player = app.state.turn;
     let steps = 0;
     while (app.state.turn === player && !app.state.winner) {
+      if (stale()) return;
       const step = botStep(app.state, player);
       if (!step) break;
       if (step.kind === 'attack') {
@@ -320,9 +352,11 @@ async function maybeBot() {
       }
       ui.updateStrip(app.state, ctx());
       await sleep(430);
+      if (stale()) return;
       steps++;
       if (steps > 220) break;
     }
+    if (stale()) return;
     if (app.state.turn === player && !app.state.winner) {
       R.endTurn(app.state);
       await render.syncBoard(app.state, viewer());
@@ -386,6 +420,7 @@ async function onHexPick(key) {
 }
 
 function startLocal(mode) {
+  app.gen++;
   app.mode = mode;
   app.online = false;
   app.gameId = null;
@@ -434,6 +469,7 @@ function focusHome() {
 function continueGame() {
   const data = loadGame();
   if (!data) { ui.setContinue(null); ui.toast('Kein Spielstand gefunden', 'warn'); return; }
+  app.gen++;
   app.mode = data.mode;
   app.online = false;
   app.gameId = null;
@@ -455,6 +491,7 @@ function continueGame() {
 }
 
 async function startOnline() {
+  app.gen++;
   app.mode = 'online';
   app.online = true;
   app.sel = null;
@@ -496,12 +533,15 @@ async function startOnline() {
   }
   app.channel = net.subscribe(app.gameId, match => {
     if (!app.online || !match.game_state) return;
-    // Veraltete oder eigene, bereits angewendete Stände ignorieren.
-    if ((match.game_state.rev || 0) < (app.state?.rev || 0)) return;
-    app.state = match.game_state;
     if (match.player_2) app.hasOpponent = true;
-    app.busy = false;
-    render.syncBoard(app.state, viewer());
+    // Nur echte Neuerungen übernehmen. Das Echo des eigenen Zuges (gleiche
+    // rev) würde den Stand durch eine identische Kopie ersetzen und offene
+    // Panels/Dialoge auf verwaiste Objekte zeigen lassen.
+    if ((match.game_state.rev || 0) > (app.state?.rev || 0)) {
+      app.state = match.game_state;
+      app.busy = false;
+      render.syncBoard(app.state, viewer());
+    }
     refresh();
   });
 }

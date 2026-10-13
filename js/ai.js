@@ -30,7 +30,7 @@ function bestBuilding(state, player) {
   let best = null;
   for (const city of R.citiesFor(state, player)) {
     if (city.pop < 2 && state.cities.filter(c => c.owner === player).length < 3) continue;
-    for (const [q, r] of R.territory(city)) {
+    for (const [q, r] of R.cityTiles(state, city)) {
       if (R.improvementAt(state, q, r) || R.resourceAt(state, q, r)) continue;
       if (state.units.some(u => u.q === q && u.r === r)) continue;
       for (const type of Object.keys(IMPROVEMENTS)) {

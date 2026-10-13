@@ -5,7 +5,7 @@ import {
 } from './config.js';
 import {
   cityIncome, techCost, tribeName, playerColor, maxHp, maxMove,
-  terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, territory,
+  terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking
 } from './rules.js';
 
@@ -271,7 +271,7 @@ export function showCityPanel(state, city, ctx) {
   const income = city.owner ? cityIncome(state, city) : 0;
   const occupied = state.units.some(u => u.q === city.q && u.r === city.r);
 
-  const cells = territory(city).map(([q, r]) => {
+  const cells = cityTiles(state, city).map(([q, r]) => {
     const tdef = TERRAIN[terrainAt(state, q, r)];
     const imp = improvementAt(state, q, r);
     const res = resourceAt(state, q, r);
@@ -310,7 +310,7 @@ export function showCityPanel(state, city, ctx) {
       <span class="cost">${city.pop + 2} Sterne</span>
     </button></div>`;
     if (city.trained) actions += `<div class="hint">Diese Stadt hat bereits diese Runde ausgebildet.</div>`;
-    if (occupied) actions += `<div class="hint">Einheit in der Stadt – zuerst wegziehen.</div>`;
+    if (occupied) actions += `<div class="hint">Einheit in der Stadt – zum Ausbilden zuerst wegziehen.</div>`;
     actions += buildRows(state, city, ctx);
   }
 
@@ -328,7 +328,7 @@ export function showCityPanel(state, city, ctx) {
     <div class="stat-row">
       <div class="stat">Stufe<b>${city.pop}/${MAX_POP}</b></div>
       <div class="stat">Einkommen<b>${income}/Runde</b></div>
-      <div class="stat">Gebiete<b>${territory(city).length}</b></div>
+      <div class="stat">Gebiete<b>${cityTiles(state, city).length}</b></div>
     </div>
     ${levelChips(city)}
     <div class="tile-grid">${cells}</div>
@@ -391,7 +391,7 @@ export function showHandover(name, onGo) {
 
 function buildRows(state, city, ctx) {
   const rows = [];
-  for (const [q, r] of territory(city)) {
+  for (const [q, r] of cityTiles(state, city)) {
     if (improvementAt(state, q, r) || resourceAt(state, q, r)) continue;
     const tile = terrainAt(state, q, r);
     const types = Object.keys(IMPROVEMENTS).filter(k => IMPROVEMENTS[k].terrain.includes(tile));
@@ -423,10 +423,8 @@ function trainReason(state, city, type, ctx) {
 
 function popReasonFor(state, city, ctx) {
   if (!ctx.myTurn) return 'Nicht dein Zug';
-  if (city.pop >= MAX_POP) return 'Maximum';
-  if (state.stars[ctx.actAs] < city.pop + 2) return 'Zu wenig Sterne';
-  if (state.units.some(u => u.q === city.q && u.r === city.r)) return 'Stadt besetzt';
-  return '';
+  const chk = canBuyPop(state, city, ctx.actAs);
+  return chk.ok ? '' : chk.reason;
 }
 
 const ROOTS = ['organization', 'climbing', 'fishing', 'hunting', 'riding'];
@@ -784,7 +782,7 @@ export function showOverview(state, ctx) {
     for (const c of myCities) {
       const row = document.createElement('button');
       row.className = 'btn action overview-row';
-      row.innerHTML = `<span>🏙️ ${c.isCapital ? 'Hauptstadt' : 'Stadt'} (${territory(c).length} Gebiete)<span class="sub">Bevölkerung ${c.pop} · +${cityIncome(state, c)}/Runde</span></span>`;
+      row.innerHTML = `<span>🏙️ ${c.isCapital ? 'Hauptstadt' : 'Stadt'} (${cityTiles(state, c).length} Gebiete)<span class="sub">Bevölkerung ${c.pop} · +${cityIncome(state, c)}/Runde</span></span>`;
       row.addEventListener('click', () => handlers.onFocusCity(c.q, c.r));
       menu.appendChild(row);
     }

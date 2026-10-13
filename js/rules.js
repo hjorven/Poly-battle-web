@@ -107,11 +107,30 @@ function inTerritory(city, q, r) {
   return d >= 1 && d <= territoryRadius(city);
 }
 
+// Stadt, zu der ein Feld gehört. Überlappen sich Gebiete (Grenzerweiterung),
+// gewinnt die nähere Stadt, bei Gleichstand die ältere – so zählt jedes Feld
+// nur für eine Stadt. Stadtfelder selbst gehören zu keinem Gebiet.
+export function tileCity(state, q, r) {
+  if (cityAt(state, q, r)) return null;
+  let best = null, bd = Infinity;
+  for (const c of state.cities) {
+    if (!inTerritory(c, q, r)) continue;
+    const d = hexDistance(c.q, c.r, q, r);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return best;
+}
+
+// Felder, die tatsächlich zu dieser Stadt gehören (Einkommen, Gebäude, Anzeige).
+export function cityTiles(state, city) {
+  return territory(city).filter(([q, r]) => tileCity(state, q, r) === city);
+}
+
 // Einkommen einer Stadt: Bevölkerung + gesammelte Ressourcen + Gebäude
 // im umliegenden Stadtterritorium.
 export function cityIncome(state, city) {
   let s = city.pop;
-  for (const [nq, nr] of territory(city)) {
+  for (const [nq, nr] of cityTiles(state, city)) {
     if (resourceAt(state, nq, nr)) s += 1;
     else {
       const imp = improvementAt(state, nq, nr);
@@ -518,7 +537,10 @@ export function canBuyPop(state, city, player) {
   if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
   if (city.owner !== player) return { ok: false, reason: 'Fremde Stadt' };
   if (city.pop >= MAX_POP) return { ok: false, reason: 'Maximale Bevölkerung' };
-  if (unitAt(state, city.q, city.r)) return { ok: false, reason: 'Stadt besetzt' };
+  // Nur eine feindliche Einheit (Belagerung) blockiert das Wachstum –
+  // die eigene Garnison darf in der Stadt stehen bleiben.
+  const occupant = unitAt(state, city.q, city.r);
+  if (occupant && occupant.owner !== player) return { ok: false, reason: 'Stadt belagert' };
   if (state.stars[player] < popCost(city)) return { ok: false, reason: 'Zu wenig Sterne' };
   return { ok: true };
 }
@@ -538,6 +560,8 @@ export function canImprove(state, city, type, q, r) {
   if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
   if (!def) return { ok: false, reason: 'Unbekanntes Gebäude' };
   if (!inTerritory(city, q, r)) return { ok: false, reason: 'Nicht im Stadtgebiet' };
+  if (cityAt(state, q, r)) return { ok: false, reason: 'Stadtfeld' };
+  if (tileCity(state, q, r) !== city) return { ok: false, reason: 'Gehört zu einer anderen Stadt' };
   if (!def.terrain.includes(terrainAt(state, q, r))) return { ok: false, reason: 'Falsches Gelände' };
   if (improvementAt(state, q, r)) return { ok: false, reason: 'Bereits bebaut' };
   if (resourceAt(state, q, r)) return { ok: false, reason: 'Ressource wird genutzt' };
@@ -1052,7 +1076,7 @@ export function score(state, player) {
   const imps = new Set();
   for (const c of mine) {
     s += SCORE.city + SCORE.pop * c.pop + SCORE.reward * Object.keys(c.rewards || {}).length;
-    for (const [q, r] of territory(c)) if (improvementAt(state, q, r)) imps.add(hk(q, r));
+    for (const [q, r] of cityTiles(state, c)) if (improvementAt(state, q, r)) imps.add(hk(q, r));
   }
   s += SCORE.improvement * imps.size;
   s += SCORE.tech * Math.max(0, (state.techs[player] || []).filter(t => t !== 'basic').length);
