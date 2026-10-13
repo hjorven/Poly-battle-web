@@ -123,7 +123,8 @@ export function initRender(canvas, opts = {}) {
     MIDDLE: THREE.MOUSE.DOLLY,
     RIGHT: THREE.MOUSE.ROTATE
   };
-  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+  // Zwei Finger: zoomen und drehen (Drehgeste), ein Finger: verschieben.
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
   controls.screenSpacePanning = false;
 
   canvas.addEventListener('pointerdown', e => {
@@ -813,24 +814,36 @@ function makeHpSprite() {
   return sprite;
 }
 
-function drawHp(sprite, hp, vet = false) {
+// Lebensanzeige als Plakette in Teamfarbe. Die Schrift wird je nach
+// Helligkeit schwarz oder weiß, ein dunkler Rand hebt sie auch auf grünem
+// Gelände ab. Gold = Veteran, Rot = kaum noch Leben.
+function luminance(c) {
+  const r = (c >> 16 & 255) / 255, g = (c >> 8 & 255) / 255, b = (c & 255) / 255;
+  const lin = v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function drawHp(sprite, hp, vet = false, color = 0x18181b) {
   const { canvas, texture } = sprite.userData;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, 128, 64);
-  // Veteranen: goldener Rahmen und Stern vor der Zahl.
-  ctx.fillStyle = vet ? 'rgba(120,80,0,0.85)' : 'rgba(10,12,16,0.72)';
-  roundRect(ctx, vet ? 8 : 24, 8, vet ? 112 : 80, 48, 14);
+  const x = vet ? 10 : 22, w = vet ? 108 : 84;
+  roundRect(ctx, x, 8, w, 48, 14);
+  ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
   ctx.fill();
-  if (vet) {
-    ctx.strokeStyle = '#facc15';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-  }
-  ctx.fillStyle = hp <= 3 ? '#ff7b7b' : '#ffffff';
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = hp <= 3 ? '#dc2626' : vet ? '#facc15' : 'rgba(9,9,11,0.9)';
+  ctx.stroke();
+  const light = luminance(color) > 0.35;
   ctx.font = 'bold 34px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(vet ? '★' + hp : String(hp), 64, 33);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = light ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)';
+  const text = vet ? '★' + hp : String(hp);
+  ctx.strokeText(text, 64, 33);
+  ctx.fillStyle = light ? '#09090b' : '#ffffff';
+  ctx.fillText(text, 64, 33);
   texture.needsUpdate = true;
 }
 
@@ -844,205 +857,329 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// --- Einheitenmodelle ------------------------------------------------------------
+// Alle Modelle blicken in +x-Richtung (für das Drehen in Lauf-/Angriffsrichtung).
+// Waffen, Schilde und Segel hängen an Händen bzw. Masten, nichts schwebt frei.
+
+const SKIN = 0xe8c39a, DARK = 0x3f3f46, WOOD = 0x8a5a33, WOOD_DARK = 0x5c3d22, STEEL = 0xd9dee5, IRON = 0x7d838c;
+const box = (w, h, d) => geo(`box${w}|${h}|${d}`, () => new THREE.BoxGeometry(w, h, d));
+const cyl = (rt, rb, h, seg = 6) => geo(`cyl${rt}|${rb}|${h}|${seg}`, () => new THREE.CylinderGeometry(rt, rb, h, seg));
+const cone = (r, h, seg = 6) => geo(`cone${r}|${h}|${seg}`, () => new THREE.ConeGeometry(r, h, seg));
+const ico = r => geo(`ico${r}`, () => new THREE.IcosahedronGeometry(r, 0));
+
 function unitBody(type, color) {
   const g = new THREE.Group();
-  const team = color;
   const teamMats = [];
-  const add = (mesh, x, y, z) => {
-    mesh.position.set(x, y, z);
-    mesh.castShadow = true;
-    g.add(mesh);
-    return mesh;
-  };
   const teamMat = () => {
-    const m = freshMat(team);
+    const m = freshMat(color);
     teamMats.push(m);
     return m;
   };
+  const put = (parent, geometry, material, x, y, z) => {
+    const m = new THREE.Mesh(geometry, material);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    parent.add(m);
+    return m;
+  };
+
+  // Figur mit Beinen, Rumpf, Kopf und zwei Armen. Gibt die Hand-Gruppen
+  // zurück: Was dort angehängt wird, steht aufrecht und sitzt in der Hand.
+  const person = ({ y0 = 0, scale = 1, legs = true, robe = false, armR = 0.7, armL = 0.7, torso = null } = {}) => {
+    const p = new THREE.Group();
+    p.position.y = y0;
+    p.scale.setScalar(scale);
+    g.add(p);
+    if (legs && !robe) {
+      for (const z of [-0.05, 0.05]) put(p, box(0.07, 0.17, 0.07), mat(DARK), 0, 0.085, z);
+    }
+    if (robe) put(p, cone(0.17, 0.42, 7), torso || teamMat(), 0, 0.21, 0);
+    else put(p, cyl(0.1, 0.12, 0.24), torso || teamMat(), 0, 0.29, 0);
+    put(p, ico(0.085), mat(SKIN), 0, 0.49, 0);
+    const hand = (side, swing) => {
+      const shoulder = new THREE.Group();
+      shoulder.position.set(0, 0.38, 0.15 * side);
+      shoulder.rotation.z = swing;
+      p.add(shoulder);
+      put(shoulder, box(0.055, 0.2, 0.055), teamMat(), 0, -0.1, 0);
+      const h = new THREE.Group();
+      h.position.set(0, -0.2, 0);
+      h.rotation.z = -swing; // Hand-Raum wieder aufrecht
+      shoulder.add(h);
+      return h;
+    };
+    return { p, right: hand(1, armR), left: hand(-1, armL), headY: 0.49 };
+  };
+  const helmet = (pp, c = 0xc3c8d0, h = 0.14) => put(pp.p, cone(0.1, h, 6), mat(c), 0, pp.headY + 0.08, 0);
+  const sword = (hand, len = 0.32) => {
+    const blade = put(hand, box(len, 0.035, 0.03), mat(STEEL), len / 2 + 0.02, 0, 0);
+    put(hand, box(0.025, 0.03, 0.1), mat(WOOD_DARK), 0.01, 0, 0);
+    hand.rotation.z += 0.6; // Klinge schräg nach oben
+    return blade;
+  };
+  const spear = (hand, len = 0.6) => {
+    put(hand, box(0.025, len, 0.025), mat(WOOD), 0, len * 0.3, 0);
+    put(hand, cone(0.035, 0.09, 4), mat(STEEL), 0, len * 0.8 + 0.04, 0);
+  };
+  const horse = c => {
+    put(g, box(0.44, 0.17, 0.17), mat(c), 0, 0.3, 0);
+    for (const x of [-0.16, 0.16]) for (const z of [-0.06, 0.06]) put(g, box(0.05, 0.23, 0.05), mat(c), x, 0.115, z);
+    const neck = put(g, box(0.09, 0.2, 0.09), mat(c), 0.2, 0.43, 0);
+    neck.rotation.z = -0.5;
+    put(g, box(0.17, 0.08, 0.08), mat(c), 0.3, 0.52, 0);
+    put(g, box(0.1, 0.04, 0.04), mat(DARK), -0.25, 0.34, 0).rotation.z = 0.6;
+  };
+  const hull = (len, wid, h, c) => {
+    put(g, box(len, h, wid), mat(c), 0, h / 2 + 0.02, 0);
+    const bow = put(g, cone(wid / 2, wid * 0.8, 4), mat(c), len / 2 + wid * 0.35, h / 2 + 0.02, 0);
+    bow.rotation.z = -Math.PI / 2;
+    bow.rotation.x = Math.PI / 4;
+    bow.scale.set(1, 1, h / wid * 1.4);
+    return h + 0.02;
+  };
+  const mast = (x, base, h, sailW, sailH) => {
+    put(g, cyl(0.018, 0.022, h, 5), mat(WOOD_DARK), x, base + h / 2, 0);
+    put(g, box(0.02, sailH, sailW), teamMat(), x + 0.025, base + h - sailH / 2 - 0.04, 0);
+  };
 
   if (type === 'warrior') {
-    add(new THREE.Mesh(geo('oct22', () => new THREE.OctahedronGeometry(0.22)), teamMat()), 0, 0.26, 0);
-    add(new THREE.Mesh(geo('helm', () => new THREE.ConeGeometry(0.14, 0.17, 6)), mat(0xc3c8d0)), 0, 0.5, 0);
-    const sword = add(new THREE.Mesh(geo('sword', () => new THREE.BoxGeometry(0.05, 0.36, 0.05)), mat(0xd9dee5)), 0.22, 0.32, 0);
-    sword.rotation.z = -0.5;
+    const pp = person();
+    helmet(pp);
+    sword(pp.right, 0.26);
+    put(pp.left, cyl(0.1, 0.1, 0.025, 8), mat(WOOD), 0.03, 0.02, 0).rotation.z = Math.PI / 2;
   } else if (type === 'archer') {
-    add(new THREE.Mesh(geo('cone19', () => new THREE.ConeGeometry(0.19, 0.44, 6)), teamMat()), 0, 0.22, 0);
-    add(new THREE.Mesh(geo('ico11', () => new THREE.IcosahedronGeometry(0.11, 0)), mat(0xe8c39a)), 0, 0.5, 0);
-    const bow = add(new THREE.Mesh(geo('bow', () => new THREE.TorusGeometry(0.17, 0.02, 5, 8, Math.PI)), mat(0x8b5a2b)), 0.2, 0.3, 0);
-    bow.rotation.y = Math.PI / 2;
+    const pp = person({ armL: 1.2 });
+    put(pp.p, cone(0.1, 0.13, 6), mat(0x4d7c3a), 0, pp.headY + 0.07, 0);
+    // Bogen senkrecht in der linken Hand, Wölbung nach vorn.
+    // Nach der Drehung liegt der Griff (Bogenmitte) bei +r: um -r versetzen,
+    // damit er genau in der Hand sitzt; die Sehne verbindet die Enden.
+    const r = 0.17;
+    const bow = put(pp.left, geo('bowArc', () => new THREE.TorusGeometry(r, 0.015, 4, 10, Math.PI)), mat(WOOD), -r + 0.03, 0, 0);
     bow.rotation.z = -Math.PI / 2;
+    put(pp.left, box(0.006, r * 2, 0.006), mat(0xeeeeee), -r + 0.03, 0, 0);
+    // Köcher auf dem Rücken.
+    put(pp.p, cyl(0.04, 0.035, 0.22, 6), mat(WOOD_DARK), -0.12, 0.33, 0.04).rotation.z = 0.3;
   } else if (type === 'rider') {
-    add(new THREE.Mesh(geo('horse', () => new THREE.BoxGeometry(0.46, 0.19, 0.2)), mat(0x7a5230)), 0, 0.17, 0);
-    add(new THREE.Mesh(geo('oct13', () => new THREE.OctahedronGeometry(0.13)), teamMat()), 0, 0.4, 0);
-    add(new THREE.Mesh(geo('ico9', () => new THREE.IcosahedronGeometry(0.09, 0)), mat(0xe8c39a)), 0, 0.58, 0);
+    horse(0x7a5230);
+    const pp = person({ y0: 0.27, legs: false });
+    spear(pp.right, 0.55);
   } else if (type === 'defender') {
-    add(new THREE.Mesh(geo('cylb', () => new THREE.CylinderGeometry(0.15, 0.19, 0.4, 6)), mat(0x7d838c)), 0, 0.2, 0);
-    add(new THREE.Mesh(geo('shield', () => new THREE.BoxGeometry(0.09, 0.36, 0.3)), teamMat()), 0.17, 0.26, 0);
-    add(new THREE.Mesh(geo('ico11', () => new THREE.IcosahedronGeometry(0.1, 0)), mat(0xe8c39a)), -0.02, 0.48, 0);
+    const pp = person({ armL: 1.0 });
+    helmet(pp, 0x9ca3af, 0.12);
+    put(pp.left, box(0.04, 0.32, 0.26), teamMat(), 0.04, 0.04, 0.05);
+    spear(pp.right, 0.62);
   } else if (type === 'swordsman') {
-    add(new THREE.Mesh(geo('oct25', () => new THREE.OctahedronGeometry(0.25)), teamMat()), 0, 0.3, 0);
-    add(new THREE.Mesh(geo('helmS', () => new THREE.ConeGeometry(0.16, 0.2, 6)), mat(0xc3c8d0)), 0, 0.56, 0);
-    const sw = add(new THREE.Mesh(geo('swordL', () => new THREE.BoxGeometry(0.06, 0.52, 0.06)), mat(0xe4e8ee)), 0.26, 0.4, 0);
-    sw.rotation.z = -0.6;
+    const pp = person({ scale: 1.15, torso: mat(IRON) });
+    helmet(pp, 0xc3c8d0, 0.16);
+    for (const z of [-0.12, 0.12]) put(pp.p, box(0.12, 0.05, 0.08), teamMat(), 0, 0.4, z);
+    put(pp.p, box(0.13, 0.12, 0.18), teamMat(), 0.02, 0.26, 0); // Wappenrock
+    sword(pp.right, 0.4);
   } else if (type === 'catapult') {
-    add(new THREE.Mesh(geo('catBase', () => new THREE.BoxGeometry(0.42, 0.13, 0.3)), mat(0x8b5a2b)), 0, 0.1, 0);
-    for (const sx of [-0.13, 0.13]) {
-      for (const sz of [-0.17, 0.17]) {
-        const w = new THREE.Mesh(geo('wheel', () => new THREE.CylinderGeometry(0.08, 0.08, 0.05, 8)), mat(0x4a4038));
-        w.rotation.x = Math.PI / 2;
-        add(w, sx, 0.08, sz);
-      }
+    put(g, box(0.46, 0.08, 0.3), mat(WOOD), 0, 0.13, 0);
+    put(g, box(0.4, 0.02, 0.22), teamMat(), 0, 0.18, 0);
+    for (const x of [-0.15, 0.15]) for (const z of [-0.17, 0.17]) {
+      put(g, cyl(0.08, 0.08, 0.04, 8), mat(0x4a4038), x, 0.08, z).rotation.x = Math.PI / 2;
     }
-    const arm = add(new THREE.Mesh(geo('catArm', () => new THREE.BoxGeometry(0.05, 0.4, 0.05)), mat(0x9c6b3a)), 0.08, 0.3, 0);
-    arm.rotation.z = 0.85;
-    add(new THREE.Mesh(geo('stone', () => new THREE.IcosahedronGeometry(0.08, 0)), mat(0x9b9b94)), 0.24, 0.46, 0);
-    add(new THREE.Mesh(geo('flagBox', () => new THREE.BoxGeometry(0.1, 0.1, 0.1)), teamMat()), -0.2, 0.2, 0);
+    for (const z of [-0.09, 0.09]) put(g, box(0.05, 0.2, 0.04), mat(WOOD_DARK), 0, 0.27, z);
+    // Wurfarm mit Schale und Stein – gespannt nach hinten geneigt.
+    const arm = new THREE.Group();
+    arm.position.set(0, 0.33, 0);
+    arm.rotation.z = 0.7;
+    g.add(arm);
+    put(arm, box(0.04, 0.42, 0.04), mat(WOOD_DARK), 0, 0.17, 0);
+    put(arm, box(0.1, 0.03, 0.1), mat(WOOD_DARK), 0, 0.38, 0);
+    put(arm, ico(0.06), mat(0x9b9b94), 0, 0.44, 0);
+    put(g, box(0.02, 0.3, 0.02), mat(WOOD_DARK), -0.2, 0.32, -0.12);
+    put(g, box(0.1, 0.07, 0.015), teamMat(), -0.15, 0.43, -0.12);
   } else if (type === 'mindbender') {
-    add(new THREE.Mesh(geo('robe', () => new THREE.ConeGeometry(0.2, 0.5, 6)), teamMat()), 0, 0.25, 0);
-    add(new THREE.Mesh(geo('ico11', () => new THREE.IcosahedronGeometry(0.1, 0)), mat(0xe8c39a)), 0, 0.52, 0);
-    add(new THREE.Mesh(geo('orb', () => new THREE.IcosahedronGeometry(0.07, 0)), mat(0xe0b84d)), 0.2, 0.42, 0);
+    const pp = person({ robe: true, armR: 0.3 });
+    put(pp.p, cone(0.1, 0.16, 6), teamMat(), 0, pp.headY + 0.08, 0);
+    put(pp.right, box(0.025, 0.55, 0.025), mat(WOOD), 0, 0.12, 0);
+    put(pp.right, ico(0.06), mat(0xe0b84d), 0, 0.42, 0);
   } else if (type === 'knight') {
-    add(new THREE.Mesh(geo('kHorse', () => new THREE.BoxGeometry(0.52, 0.22, 0.24)), mat(0x5b4636)), 0, 0.19, 0);
-    add(new THREE.Mesh(geo('kBody', () => new THREE.CylinderGeometry(0.14, 0.17, 0.36, 6)), teamMat()), 0, 0.44, 0);
-    add(new THREE.Mesh(geo('kHelm', () => new THREE.ConeGeometry(0.15, 0.22, 6)), mat(0xd9dee5)), 0, 0.7, 0);
-    const kl = add(new THREE.Mesh(geo('kLance', () => new THREE.BoxGeometry(0.05, 0.7, 0.05)), mat(0xf0f3f7)), 0.3, 0.45, 0);
-    kl.rotation.z = -0.9;
+    horse(0x5b4636);
+    put(g, box(0.3, 0.05, 0.2), teamMat(), 0, 0.4, 0); // Satteldecke
+    const pp = person({ y0: 0.29, legs: false, torso: mat(IRON) });
+    helmet(pp, STEEL, 0.17);
+    // Lanze waagerecht nach vorn.
+    put(pp.right, box(0.62, 0.03, 0.03), mat(0xf0f3f7), 0.2, 0, 0);
+    put(pp.right, cone(0.035, 0.1, 4), mat(STEEL), 0.55, 0, 0).rotation.z = -Math.PI / 2;
+    put(pp.left, box(0.03, 0.18, 0.14), teamMat(), 0.03, 0, 0);
   } else if (type === 'giant') {
-    add(new THREE.Mesh(geo('gBody', () => new THREE.CylinderGeometry(0.34, 0.42, 0.7, 7)), teamMat()), 0, 0.42, 0);
-    add(new THREE.Mesh(geo('gHead', () => new THREE.IcosahedronGeometry(0.2, 0)), mat(0xe8c39a)), 0, 0.9, 0);
-    add(new THREE.Mesh(geo('gArmL', () => new THREE.BoxGeometry(0.15, 0.6, 0.15)), teamMat()), -0.44, 0.45, 0);
-    add(new THREE.Mesh(geo('gArmR', () => new THREE.BoxGeometry(0.15, 0.6, 0.15)), teamMat()), 0.44, 0.45, 0);
-    add(new THREE.Mesh(geo('gClub', () => new THREE.CylinderGeometry(0.1, 0.14, 0.55, 6)), mat(0x6b4a2b)), 0.52, 0.85, 0);
+    const pp = person({ scale: 2.0, armR: 1.1 });
+    // Keule nach vorn-oben, Griff in der Hand.
+    const club = put(pp.right, cyl(0.045, 0.022, 0.3, 6), mat(0x6b4a2b), 0.1, 0.1, 0);
+    club.rotation.z = -0.8;
   } else if (type === 'boat') {
-    const hull = add(new THREE.Mesh(geo('bHull', () => boatHullGeo(0.34, 0.17)), mat(0x8a5a33)), 0, 0.14, 0);
-    add(new THREE.Mesh(geo('bMast', () => new THREE.CylinderGeometry(0.02, 0.02, 0.4, 5)), mat(0x5b4126)), 0, 0.48, 0);
-    const sail = add(new THREE.Mesh(geo('bSail', () => new THREE.BoxGeometry(0.02, 0.28, 0.24)), teamMat()), 0, 0.42, 0);
-    sail.rotation.y = Math.PI / 2;
+    const top = hull(0.42, 0.2, 0.1, WOOD);
+    mast(0, top, 0.42, 0.22, 0.26);
   } else if (type === 'ship') {
-    const hull = add(new THREE.Mesh(geo('sHull', () => boatHullGeo(0.46, 0.22)), mat(0x6b4a2b)), 0, 0.17, 0);
-    add(new THREE.Mesh(geo('sMast', () => new THREE.CylinderGeometry(0.025, 0.025, 0.52, 5)), mat(0x5b4126)), 0, 0.6, 0);
-    const sail = add(new THREE.Mesh(geo('sSail', () => new THREE.BoxGeometry(0.02, 0.34, 0.3)), teamMat()), 0, 0.52, 0);
-    sail.rotation.y = Math.PI / 2;
-    const rail = add(new THREE.Mesh(geo('sRail', () => new THREE.CylinderGeometry(0.2, 0.22, 0.14, 6, 1, true, 0, Math.PI * 1.35)), mat(0x9c6b3a)), 0, 0.24, 0);
-    rail.rotation.y = 0.9;
-    add(new THREE.Mesh(geo('sDeck', () => new THREE.CylinderGeometry(0.2, 0.2, 0.03, 6)), mat(0x8a5a33)), 0, 0.31, 0);
+    const top = hull(0.56, 0.26, 0.13, 0x6b4a2b);
+    put(g, box(0.14, 0.1, 0.2), mat(WOOD), -0.2, top + 0.05, 0);
+    mast(0.05, top, 0.55, 0.26, 0.32);
+    mast(-0.12, top, 0.42, 0.2, 0.22);
   } else if (type === 'battleship') {
-    add(new THREE.Mesh(geo('bsHull', () => boatHullGeo(0.6, 0.3)), mat(0x4a555e)), 0, 0.2, 0);
-    add(new THREE.Mesh(geo('bsDeck', () => new THREE.BoxGeometry(0.58, 0.07, 0.2)), mat(0x5c6670)), 0, 0.33, 0);
-    add(new THREE.Mesh(geo('bsTurret', () => new THREE.CylinderGeometry(0.09, 0.1, 0.1, 6)), mat(0x6b7580)), 0, 0.42, 0);
-    for (const sx of [-0.06, 0.06]) {
-      const cannon = add(new THREE.Mesh(geo('bsCannon', () => new THREE.CylinderGeometry(0.025, 0.025, 0.26, 6)), mat(0x333b42)), sx, 0.46, 0);
-      cannon.rotation.x = Math.PI / 2;
+    const top = hull(0.66, 0.26, 0.14, 0x4a555e);
+    put(g, box(0.5, 0.06, 0.2), mat(0x5c6670), -0.02, top + 0.03, 0);
+    put(g, cyl(0.09, 0.1, 0.1, 6), mat(0x6b7580), 0.12, top + 0.11, 0);
+    for (const z of [-0.04, 0.04]) {
+      put(g, cyl(0.022, 0.022, 0.26, 6), mat(0x333b42), 0.27, top + 0.13, z).rotation.z = -Math.PI / 2;
     }
-    add(new THREE.Mesh(geo('bsBridge', () => new THREE.BoxGeometry(0.16, 0.16, 0.14)), mat(0x5c6670)), 0.18, 0.44, 0);
-    add(new THREE.Mesh(geo('bsPole', () => new THREE.CylinderGeometry(0.012, 0.012, 0.32, 5)), mat(0x333b42)), -0.24, 0.5, 0);
-    add(new THREE.Mesh(geo('bsFlag', () => new THREE.BoxGeometry(0.12, 0.08, 0.02)), teamMat()), -0.19, 0.65, 0);
-  } else if (type === 'settler') {
-    // Siedler: Person mit Bündel auf dem Rücken und Wanderstab mit Fahne.
-    add(new THREE.Mesh(geo('stBody', () => new THREE.CylinderGeometry(0.11, 0.17, 0.4, 6)), teamMat()), 0, 0.2, 0);
-    add(new THREE.Mesh(geo('ico11', () => new THREE.IcosahedronGeometry(0.11, 0)), mat(0xe8c39a)), 0, 0.5, 0);
-    add(new THREE.Mesh(geo('stHat', () => new THREE.CylinderGeometry(0.15, 0.15, 0.025, 8)), mat(0xc9a25a)), 0, 0.58, 0);
-    add(new THREE.Mesh(geo('stHatTop', () => new THREE.CylinderGeometry(0.07, 0.08, 0.07, 8)), mat(0xc9a25a)), 0, 0.62, 0);
-    add(new THREE.Mesh(geo('stPack', () => new THREE.BoxGeometry(0.16, 0.2, 0.12)), mat(0x8a5a33)), -0.15, 0.3, 0);
-    add(new THREE.Mesh(geo('stRoll', () => new THREE.CylinderGeometry(0.045, 0.045, 0.2, 6)), mat(0xd8cfb8)), -0.15, 0.43, 0)
-      .rotation.x = Math.PI / 2;
-    add(new THREE.Mesh(geo('stStaff', () => new THREE.CylinderGeometry(0.015, 0.015, 0.62, 5)), mat(0x6b4a2b)), 0.18, 0.31, 0);
-    add(new THREE.Mesh(geo('stFlag', () => new THREE.BoxGeometry(0.02, 0.09, 0.13)), teamMat()), 0.18, 0.56, 0.07);
+    put(g, box(0.16, 0.16, 0.14), mat(0x5c6670), -0.16, top + 0.14, 0);
+    put(g, cyl(0.012, 0.012, 0.3, 5), mat(0x333b42), -0.16, top + 0.37, 0);
+    put(g, box(0.12, 0.08, 0.02), teamMat(), -0.1, top + 0.47, 0);
   } else if (type === 'spy') {
-    // Spion: Kapuzenmantel in Teamfarbe mit Fernrohr.
-    add(new THREE.Mesh(geo('spCloak', () => new THREE.ConeGeometry(0.17, 0.46, 7)), teamMat()), 0, 0.23, 0);
-    add(new THREE.Mesh(geo('ico9', () => new THREE.IcosahedronGeometry(0.09, 0)), mat(0xe8c39a)), 0, 0.5, 0);
-    add(new THREE.Mesh(geo('spHood', () => new THREE.ConeGeometry(0.12, 0.2, 7)), mat(0x27272a)), 0, 0.6, -0.01);
-    const glass = add(new THREE.Mesh(geo('spGlass', () => new THREE.CylinderGeometry(0.025, 0.035, 0.26, 6)), mat(0xc8a64a)), 0.12, 0.5, 0.06);
-    glass.rotation.z = -1.2;
+    const pp = person({ torso: mat(0x27272a), armR: 2.2 });
+    put(pp.p, cone(0.12, 0.2, 7), mat(0x27272a), 0, pp.headY + 0.06, -0.01);
+    put(pp.p, box(0.2, 0.06, 0.2), teamMat(), 0, 0.36, 0); // Schal in Teamfarbe
+    // Fernrohr vor dem Auge, von der rechten Hand gehalten.
+    put(pp.p, cyl(0.022, 0.03, 0.2, 6), mat(0xc8a64a), 0.15, pp.headY + 0.01, 0.06).rotation.z = -Math.PI / 2;
+  } else if (type === 'settler') {
+    const pp = person();
+    put(pp.p, cyl(0.15, 0.15, 0.025, 8), mat(0xc9a25a), 0, pp.headY + 0.07, 0);
+    put(pp.p, cyl(0.07, 0.08, 0.07, 8), mat(0xc9a25a), 0, pp.headY + 0.11, 0);
+    put(pp.p, box(0.12, 0.2, 0.16), mat(WOOD), -0.15, 0.31, 0);
+    put(pp.p, cyl(0.045, 0.045, 0.2, 6), mat(0xd8cfb8), -0.15, 0.44, 0).rotation.x = Math.PI / 2;
+    put(pp.right, box(0.02, 0.6, 0.02), mat(WOOD_DARK), 0, 0.12, 0);
+    put(pp.right, box(0.12, 0.08, 0.015), teamMat(), 0.07, 0.38, 0);
   } else {
     // Rückfallmodell, damit eine Einheit ohne eigenes Modell nie unsichtbar ist.
-    add(new THREE.Mesh(geo('oct22', () => new THREE.OctahedronGeometry(0.22)), teamMat()), 0, 0.26, 0);
+    person();
   }
 
   g.userData.teamMats = teamMats;
   return g;
 }
 
-function boatHullGeo(width, depth) {
-  const h = depth / 2;
-  const shape = new THREE.Shape();
-  shape.moveTo(-h, 0);
-  shape.lineTo(-h * 0.4, h);
-  shape.quadraticCurveTo(0, h * 1.2, h * 0.4, h);
-  shape.lineTo(h, 0);
-  shape.quadraticCurveTo(0, -h * 0.35, -h, 0);
-  const g = new THREE.ExtrudeGeometry(shape, {
-    depth: width * 0.4,
-    bevelEnabled: true,
-    bevelThickness: width * 0.1,
-    bevelSize: width * 0.07,
-    bevelSegments: 2
-  });
-  g.rotateY(Math.PI / 2);
-  g.center();
-  return g;
-}
+// --- Stadtmodelle -------------------------------------------------------------
+// `city` ist eine Ansicht (siehe cityView): owner, pop, wall, park, workshop,
+// isCapital. Jede Stufe (Bevölkerung 1–5) hat eigene Gebäude; Dächer und
+// Fahnen tragen die Teamfarbe.
 
-// `city` ist eine Ansicht (siehe cityView): owner, pop, wall.
 function buildCity(city, color) {
   const g = new THREE.Group();
-  const base = new THREE.Mesh(
-    geo('cityBase', () => new THREE.CylinderGeometry(0.62, 0.66, 0.12, 6)),
-    mat(color)
-  );
-  base.position.y = 0.06;
-  base.receiveShadow = true;
-  base.castShadow = true;
-  g.add(base);
+  const team = city.owner ? mat(color) : mat(0x8f939c);
+  const stone = mat(0xd6d3cb), stoneDark = mat(0x9ca3af), plaster = mat(0xe8e2d2);
+  const wood = mat(WOOD), woodDark = mat(WOOD_DARK), gold = mat(0xeab308);
+  const put = (geometry, material, x, y, z, ry = 0) => {
+    const m = new THREE.Mesh(geometry, material);
+    m.position.set(x, y, z);
+    m.rotation.y = ry;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  const ring = (n, rad, offset = 0) => Array.from({ length: n }, (_, i) => {
+    const a = offset + (i / n) * Math.PI * 2;
+    return [Math.cos(a) * rad, Math.sin(a) * rad, -a];
+  });
 
-  const tower = new THREE.Mesh(geo('cityTower', () => new THREE.CylinderGeometry(0.17, 0.2, 0.42, 6)), mat(0xe8e4d8));
-  tower.position.y = 0.33;
-  tower.castShadow = true;
-  g.add(tower);
+  // Sockel: Stadtplatz in Teamfarbe mit hellem Pflaster.
+  put(cyl(0.62, 0.66, 0.1, 6), city.owner ? mat(color) : mat(0xb9bdc6), 0, 0.05, 0);
+  put(cyl(0.5, 0.52, 0.02, 6), mat(0xcfc8b6), 0, 0.11, 0);
+  const Y = 0.12;
 
-  const roof = new THREE.Mesh(geo('cityRoof', () => new THREE.ConeGeometry(0.24, 0.2, 6)), mat(city.owner ? color : 0x8f939c));
-  roof.position.y = 0.62;
-  roof.castShadow = true;
-  g.add(roof);
+  const hut = (x, z, ry) => {
+    put(box(0.14, 0.1, 0.14), wood, x, Y + 0.05, z, ry);
+    put(cone(0.13, 0.12, 4), mat(0xb08d57), x, Y + 0.16, z, ry + Math.PI / 4);
+  };
+  const house = (x, z, ry, tall = false) => {
+    const h = tall ? 0.24 : 0.14;
+    put(box(0.16, h, 0.15), plaster, x, Y + h / 2, z, ry);
+    put(cone(0.14, 0.11, 4), team, x, Y + h + 0.055, z, ry + Math.PI / 4);
+    if (tall) put(box(0.165, 0.02, 0.155), woodDark, x, Y + h / 2, z, ry); // Fachwerk-Balken
+  };
+  const tower = (x, z, h, r = 0.1) => {
+    put(cyl(r, r * 1.15, h, 8), stone, x, Y + h / 2, z);
+    put(cone(r * 1.35, h * 0.4, 8), team, x, Y + h + h * 0.2, z);
+    return Y + h + h * 0.4;
+  };
+  const flag = (x, z, top, big = false) => {
+    if (!city.owner) return;
+    put(cyl(0.012, 0.012, 0.3, 5), mat(0x52525b), x, top + 0.15, z);
+    put(box(big ? 0.2 : 0.15, big ? 0.12 : 0.09, 0.015), team, x + (big ? 0.1 : 0.075), top + 0.24, z);
+  };
+  const crown = top => {
+    put(cyl(0.07, 0.07, 0.04, 8), gold, 0, top + 0.03, 0);
+    for (const [x, z] of ring(5, 0.06)) put(cone(0.02, 0.06, 4), gold, x, top + 0.08, z);
+  };
 
-  const houseGeo = geo('house', () => new THREE.BoxGeometry(0.15, 0.13, 0.15));
-  const houseMat = mat(0xdcd6c6);
-  for (let i = 0; i < city.pop; i++) {
-    const a = (i / Math.max(city.pop, 1)) * Math.PI * 2 + 0.6;
-    const h = new THREE.Mesh(houseGeo, houseMat);
-    h.position.set(Math.cos(a) * 0.4, 0.185, Math.sin(a) * 0.4);
-    h.rotation.y = a;
-    h.castShadow = true;
-    g.add(h);
+  const lvl = Math.max(1, Math.min(5, city.pop || 1));
+  let top = Y;
+  if (lvl === 1) {
+    // Kleine Siedlung: zwei Hütten und ein Lagerfeuer.
+    hut(-0.18, -0.12, 0.3);
+    hut(0.2, 0.08, -0.5);
+    put(cone(0.05, 0.1, 5), mat(0xf97316), -0.02, Y + 0.05, 0.22);
+    for (const ry of [0, 1.1, 2.2]) put(box(0.12, 0.025, 0.025), woodDark, -0.02, Y + 0.015, 0.22, ry);
+    top = Y + 0.22;
+    flag(0.2, 0.08, top - 0.02);
+  } else if (lvl === 2) {
+    // Dorf: Häuser um einen hölzernen Wachturm.
+    for (const [x, z, ry] of ring(3, 0.36, 0.5)) house(x, z, ry);
+    for (const [x, z] of ring(4, 0.07, Math.PI / 4)) put(box(0.025, 0.36, 0.025), woodDark, x, Y + 0.18, z);
+    put(box(0.2, 0.03, 0.2), wood, 0, Y + 0.36, 0);
+    put(cone(0.16, 0.12, 4), team, 0, Y + 0.44, 0, Math.PI / 4);
+    top = Y + 0.5;
+    flag(0, 0, top);
+  } else if (lvl === 3) {
+    // Kleinstadt: Steinturm, Häuser und ein Marktstand.
+    for (const [x, z, ry] of ring(4, 0.37, 0.3)) house(x, z, ry);
+    top = tower(0, 0, 0.42, 0.11);
+    put(box(0.16, 0.06, 0.1), wood, 0.05, Y + 0.06, 0.26);
+    put(box(0.2, 0.02, 0.14), team, 0.05, Y + 0.2, 0.26);
+    for (const x of [-0.04, 0.14]) put(box(0.015, 0.14, 0.015), woodDark, x, Y + 0.12, 0.31);
+    flag(0, 0, top);
+  } else if (lvl === 4) {
+    // Stadt: Halle in der Mitte, zweistöckige Häuser, ein Turm.
+    put(box(0.32, 0.2, 0.22), plaster, -0.02, Y + 0.1, 0);
+    put(cone(0.24, 0.14, 4), team, -0.02, Y + 0.27, 0, Math.PI / 4);
+    put(box(0.08, 0.12, 0.01), woodDark, 0.14, Y + 0.06, 0, Math.PI / 2);
+    house(-0.34, 0.22, 0.4, true);
+    house(0.3, 0.26, -0.3, true);
+    house(-0.3, -0.26, 0.9);
+    house(0.06, -0.38, 0.1);
+    top = tower(0.34, -0.18, 0.5, 0.09);
+    flag(0.34, -0.18, top);
+  } else {
+    // Metropole: Burgfried mit Zinnen, Ecktürme, viele Häuser.
+    put(box(0.3, 0.38, 0.3), stone, 0, Y + 0.19, 0);
+    for (const [x, z] of [[-0.12, -0.12], [0.12, -0.12], [-0.12, 0.12], [0.12, 0.12]]) {
+      put(box(0.07, 0.07, 0.07), stoneDark, x, Y + 0.415, z);
+    }
+    put(box(0.02, 0.16, 0.1), team, 0.16, Y + 0.22, 0); // Banner an der Front
+    top = Y + 0.45;
+    for (const [x, z] of [[-0.36, -0.2], [0.36, 0.2]]) tower(x, z, 0.52, 0.085);
+    for (const [x, z, ry] of ring(4, 0.42, Math.PI / 4)) house(x * 0.95, z * 0.95, ry, true);
+    flag(0, 0, top, true);
   }
+  if (city.isCapital && city.owner) crown(top + (lvl === 1 ? 0.0 : 0.02));
 
-  if (city.owner) {
-    const pole = new THREE.Mesh(geo('pole', () => new THREE.CylinderGeometry(0.015, 0.015, 0.4, 5)), mat(0x555a63));
-    pole.position.set(0.26, 0.72, 0);
-    g.add(pole);
-    const flag = new THREE.Mesh(geo('flag', () => new THREE.BoxGeometry(0.16, 0.1, 0.02)), mat(color));
-    flag.position.set(0.35, 0.85, 0);
-    g.add(flag);
+  // Belohnungen sichtbar machen.
+  if (city.park) {
+    for (const [x, z] of [[-0.45, 0.05], [-0.4, 0.2]]) {
+      put(cyl(0.015, 0.02, 0.08, 5), woodDark, x, Y + 0.04, z);
+      put(ico(0.07), mat(0x3e9140), x, Y + 0.12, z);
+    }
   }
-  // Stadtmauer (Belohnung): niedriger Steinring am Rand.
+  if (city.workshop) {
+    put(box(0.14, 0.12, 0.12), stoneDark, 0.42, Y + 0.06, -0.02);
+    put(box(0.04, 0.16, 0.04), mat(0x52525b), 0.46, Y + 0.16, 0.02);
+    put(ico(0.035), mat(0xd4d4d8), 0.47, Y + 0.28, 0.03);
+  }
+  // Stadtmauer (Belohnung): Steinring mit Zinnen am Rand.
   if (city.wall) {
-    const wallMat = mat(0x9ca3af);
-    const segGeo = geo('wallSeg', () => new THREE.BoxGeometry(0.34, 0.14, 0.07));
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
-      const seg = new THREE.Mesh(segGeo, wallMat);
-      seg.position.set(Math.cos(a) * 0.58, 0.19, Math.sin(a) * 0.58);
-      seg.rotation.y = -a + Math.PI / 2;
-      seg.castShadow = true;
-      g.add(seg);
+    for (const [x, z, ry] of ring(6, 0.58, Math.PI / 6)) {
+      put(box(0.34, 0.14, 0.07), stoneDark, x, Y + 0.07, z, ry + Math.PI / 2);
+      put(box(0.06, 0.05, 0.08), stoneDark, x, Y + 0.165, z, ry + Math.PI / 2);
     }
   }
   return g;
 }
 
 function cityKey(city) {
-  return `${city.owner}|${city.pop}|${city.wall ? 'w' : ''}`;
+  return [city.owner, city.pop, city.wall, city.park, city.workshop, city.isCapital].join('|');
 }
 
 function placeCityNode(state, city) {
@@ -1067,9 +1204,10 @@ function placeUnitNode(state, unit) {
   const key = hk(unit.q, unit.r);
   group.position.set(p.x, hexTop(key), p.z);
   const sprite = makeHpSprite();
-  drawHp(sprite, unit.hp, !!unit.vet);
+  drawHp(sprite, unit.hp, !!unit.vet, color);
   sprite.position.y = 0.95;
   group.add(sprite);
+  group.rotation.y = DEFAULT_FACING;
   scene.add(group);
   const node = { group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
   unitNodes.set(unit.id, node);
@@ -1083,6 +1221,21 @@ function placeUnitNode(state, unit) {
     ease: easeOutBack
   });
   return node;
+}
+
+// Modelle blicken in +x. Startblick schräg zur Kamera hin.
+const DEFAULT_FACING = -Math.PI / 3;
+const facingTo = (dx, dz) => Math.atan2(-dz, dx);
+
+// Einheit (über eine kurze Drehung auf kürzestem Weg) in Richtung dx/dz drehen.
+function turnNode(node, dx, dz, dur = 140) {
+  if (Math.abs(dx) + Math.abs(dz) < 1e-4) return;
+  const g = node.group;
+  const from = g.rotation.y;
+  let to = facingTo(dx, dz);
+  while (to - from > Math.PI) to -= Math.PI * 2;
+  while (to - from < -Math.PI) to += Math.PI * 2;
+  addTween({ dur, ease: easeOut, update: t => { g.rotation.y = from + (to - from) * t; } });
 }
 
 function removeUnitNode(id, node) {
@@ -1183,16 +1336,17 @@ export function syncBoard(state, viewer = null) {
       node = placeUnitNode(state, u);
       continue;
     }
-    if (node.hp !== u.hp || node.vet !== !!u.vet) {
-      node.hp = u.hp;
-      node.vet = !!u.vet;
-      drawHp(node.sprite, u.hp, node.vet);
-    }
     // Bekehrte Einheiten (Gedankenbeuger) wechseln den Besitzer.
     if (node.owner !== u.owner) {
       node.owner = u.owner;
       node.baseColor = ownerColor(u.owner);
       node.acted = null;
+      node.hp = null;
+    }
+    if (node.hp !== u.hp || node.vet !== !!u.vet) {
+      node.hp = u.hp;
+      node.vet = !!u.vet;
+      drawHp(node.sprite, u.hp, node.vet, node.baseColor);
     }
     if (node.acted !== u.acted) {
       node.acted = u.acted;
@@ -1208,6 +1362,7 @@ export function syncBoard(state, viewer = null) {
     if (pos.distanceToSquared(target) > 0.0004 && !node.moving) {
       node.moving = true;
       const from = pos.clone();
+      turnNode(node, target.x - from.x, target.z - from.z);
       promises.push(new Promise(resolve => {
         addTween({
           dur: 320,
@@ -1289,6 +1444,19 @@ function nodePos(id) {
 export function playCombat(events) {
   if (!initialized) return Promise.resolve();
   let flashCount = 0;
+  const hit = events.find(ev => ev.kind === 'damage');
+  if (hit) {
+    const a = unitNodes.get(hit.from), d = unitNodes.get(hit.to);
+    if (a && d) {
+      const ap = a.group.position, dp = d.group.position;
+      turnNode(a, dp.x - ap.x, dp.z - ap.z);
+      turnNode(d, ap.x - dp.x, ap.z - dp.z);
+      // Kurzer Ausfallschritt des Angreifers zum Ziel und zurück.
+      const base = ap.clone();
+      const dir = new THREE.Vector3(dp.x - ap.x, 0, dp.z - ap.z).normalize().multiplyScalar(0.28);
+      addTween({ dur: 260, update: t => { if (!a.moving) ap.copy(base).addScaledVector(dir, Math.sin(Math.PI * t)); } });
+    }
+  }
   for (const ev of events) {
     if (ev.kind === 'damage' || ev.kind === 'retaliate') {
       const node = unitNodes.get(ev.to);
@@ -1345,15 +1513,19 @@ export function setHighlights({ selected = null, move = null, attack = null, cit
   if (bridge) for (const [q, r] of bridge) addDisc(q, r, 'bridge');
 }
 
+// Zum Feld schwenken. Drehung und Neigung bleiben erhalten; `close` zoomt
+// näher heran.
 export function cameraTo(q, r, close = false) {
   if (!initialized) return;
   const p = toWorld(q, r);
   const fromT = controls.target.clone();
   const toT = new THREE.Vector3(p.x, 0, p.z);
   const fromP = camera.position.clone();
-  const off = close ? new THREE.Vector3(0, 11, 10) : new THREE.Vector3(-2, 19, 17);
+  const off = fromP.clone().sub(fromT);
+  let dist = close ? 14 : 26;
   // Hochformat (iPad/Handy hochkant): weiter weg, damit genug Breite sichtbar ist.
-  if (camera.aspect < 1) off.multiplyScalar(1 + (1 - camera.aspect) * 0.9);
+  if (camera.aspect < 1) dist *= 1 + (1 - camera.aspect) * 0.9;
+  off.setLength(dist);
   const toP = toT.clone().add(off);
   addTween({
     dur: 450,
@@ -1363,6 +1535,39 @@ export function cameraTo(q, r, close = false) {
       camera.position.lerpVectors(fromP, toP, t);
     }
   });
+}
+
+// Kamera um das Blickziel drehen (Winkel in Bogenmaß) bzw. neigen.
+function orbit(dTheta, dPhi, dur = 260) {
+  const t = controls.target.clone();
+  const sph = new THREE.Spherical().setFromVector3(camera.position.clone().sub(t));
+  const from = { theta: sph.theta, phi: sph.phi };
+  const to = {
+    theta: sph.theta + dTheta,
+    phi: THREE.MathUtils.clamp(sph.phi + dPhi, controls.minPolarAngle, controls.maxPolarAngle)
+  };
+  addTween({
+    dur, ease: easeOut,
+    update: k => {
+      const s2 = new THREE.Spherical(sph.radius, from.phi + (to.phi - from.phi) * k, from.theta + (to.theta - from.theta) * k);
+      camera.position.copy(t).add(new THREE.Vector3().setFromSpherical(s2));
+      camera.lookAt(t);
+    }
+  });
+}
+
+export function rotateCamera(steps) { if (initialized) orbit(steps * Math.PI / 4, 0); }
+export function tiltCamera(steps) { if (initialized) orbit(0, steps * 0.18); }
+
+// Zurück zur Standardansicht (Norden oben, mittlere Neigung).
+export function resetCamera() {
+  if (!initialized) return;
+  const sph = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+  const want = new THREE.Spherical().setFromVector3(new THREE.Vector3(-2, 19, 17));
+  let dTheta = want.theta - sph.theta;
+  while (dTheta > Math.PI) dTheta -= Math.PI * 2;
+  while (dTheta < -Math.PI) dTheta += Math.PI * 2;
+  orbit(dTheta, want.phi - sph.phi, 380);
 }
 
 export function worldOf(q, r) {
@@ -1380,4 +1585,12 @@ export function project(q, r) {
     x: rect.left + (v.x * 0.5 + 0.5) * rect.width,
     y: rect.top + (-v.y * 0.5 + 0.5) * rect.height
   };
+}
+
+// Nur für Tests/Entwicklung: Kamera direkt setzen (Konsole: __pb.cam(...)).
+export function debugCamera(x = 15, y = 3.2, z = 17.5, tx = 15, tz = 12) {
+  if (!initialized) return;
+  controls.target.set(tx, 0.5, tz);
+  camera.position.set(x, y, z);
+  controls.update();
 }

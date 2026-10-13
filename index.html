@@ -39,6 +39,13 @@
     <button id="menuBtn" class="btn ghost small" title="Menü">Menü</button>
     <button id="soundBtn" class="btn ghost small" title="Ton an/aus">🔊</button>
     <canvas id="minimap" width="220" height="150" title="Minikarte – antippen, um dorthin zu springen"></canvas>
+    <div id="camera-pad" aria-label="Kamera">
+      <button class="cam-btn" data-cam="rotL" title="Nach links drehen (Q)">↺</button>
+      <button class="cam-btn" data-cam="tiltUp" title="Steiler von oben (R)">▲</button>
+      <button class="cam-btn" data-cam="rotR" title="Nach rechts drehen (E)">↻</button>
+      <button class="cam-btn" data-cam="reset" title="Ansicht zurücksetzen (N)">N</button>
+      <button class="cam-btn" data-cam="tiltDown" title="Flacher (F)">▼</button>
+    </div>
   </main>
 
   <div id="menu-overlay" class="overlay hidden">
@@ -53,7 +60,7 @@
         <button id="copyLinkBtn" class="btn big hidden">Link zum Spiel kopieren</button>
       </div>
       <details class="menu-section" open id="tribe-box">
-        <summary>Dein Stamm (Gegen KI)</summary>
+        <summary>Dein Stamm (Gegen KI und Online)</summary>
         <div class="menu-body">
           <div id="tribe-pick" class="tribe-pick"></div>
         </div>
@@ -100,6 +107,15 @@
               <button data-bots="3" class="chip-btn">3</button>
               <button data-bots="4" class="chip-btn">4</button>
               <button data-bots="5" class="chip-btn">5</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">KI im Online-Spiel</span>
+            <div class="seg">
+              <button data-onlinebots="0" class="chip-btn">Keine</button>
+              <button data-onlinebots="1" class="chip-btn">1</button>
+              <button data-onlinebots="2" class="chip-btn">2</button>
+              <button data-onlinebots="3" class="chip-btn">3</button>
             </div>
           </div>
           <div class="setting-row">
