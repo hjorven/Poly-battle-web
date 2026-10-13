@@ -31,7 +31,7 @@ function flood(state, sq, sr) {
       const k = hk(nq, nr);
       if (seen.has(k)) continue;
       const def = TERRAIN[R.terrainAt(state, nq, nr)];
-      if (!def.walkable || def.enterTech) continue;
+      if (!R.bridgeAt(state, nq, nr) && (!def.walkable || def.enterTech)) continue;
       seen.add(k);
       queue.push([nq, nr]);
     }
@@ -45,7 +45,7 @@ function assertInvariants(state) {
     assert.ok(inBounds(u.q, u.r), 'unit out of bounds');
     const tile = R.terrainAt(state, u.q, u.r);
     const naval = (UNITS[u.type].abilities || []).includes('water');
-    assert.ok(naval ? (tile === 'water' || tile === 'ocean' || !!R.cityAt(state, u.q, u.r)) : TERRAIN[tile].walkable, 'unit on wrong terrain');
+    assert.ok(naval ? (tile === 'water' || tile === 'ocean' || !!R.cityAt(state, u.q, u.r)) : (TERRAIN[tile].walkable || R.bridgeAt(state, u.q, u.r)), 'unit on wrong terrain');
     const k = hk(u.q, u.r);
     assert.ok(!seen.has(k), 'two units on same tile: ' + k);
     seen.add(k);
@@ -334,7 +334,8 @@ test('Gedankenbeuger bekehrt statt zu töten', () => {
 test('Gedankenbeuger heilt benachbarte Verbündete um 4', () => {
   const st = makeState();
   const healer = unit('h', 'player_1', 'mindbender', 5, 5);
-  const hurt = unit('x', 'player_1', 'swordsman', 5, 6, { hp: 4 });
+  // acted: hat angegriffen, regeneriert also nicht selbst – nur der Heiler wirkt.
+  const hurt = unit('x', 'player_1', 'swordsman', 5, 6, { hp: 4, acted: true });
   st.units = [healer, hurt];
   st.turn = 'player_1';
   R.startTurn(st);
@@ -1097,6 +1098,167 @@ test('Bevölkerung kaufen: eigene Garnison in der Stadt stört nicht', () => {
     st.units.push({ id: 'g1', owner: 'player_1', type: 'warrior', q: c.q, r: c.r, hp: 10, mp: 1, acted: false, hasMoved: false });
   }
   assert.ok(R.canBuyPop(st, c, 'player_1').ok);
+});
+
+console.log('\n-- Wasser & Brücken --');
+
+const setT = (st, q, r, t) => { st.terrain[r * MAP_W + q] = t; };
+
+test('Kartenbau: alles Wasser hängt zusammen, Städte bleiben über Land/Brücken erreichbar', () => {
+  for (let seed = 1; seed <= 25; seed++) {
+    const st = R.createGame(seed, 2 + (seed % 4));
+    const wet = [];
+    forEachWet(st, (q, r) => wet.push([q, r]));
+    const seen = new Set([hk(...wet[0])]);
+    const queue = [wet[0]];
+    while (queue.length) {
+      const [q, r] = queue.pop();
+      for (const [nq, nr] of neighbors(q, r)) {
+        const t = R.terrainAt(st, nq, nr);
+        if ((t === 'water' || t === 'ocean') && !seen.has(hk(nq, nr))) { seen.add(hk(nq, nr)); queue.push([nq, nr]); }
+      }
+    }
+    assert.strictEqual(seen.size, wet.length, 'Seed ' + seed + ': getrenntes Gewässer');
+    for (const k of Object.keys(st.bridges)) {
+      const [q, r] = k.split(',').map(Number);
+      assert.strictEqual(R.terrainAt(st, q, r), 'water', 'Brücke nur über Flachwasser');
+    }
+  }
+});
+
+function forEachWet(st, fn) {
+  for (let r = 0; r < MAP_H; r++) for (let q = 0; q < MAP_W; q++) {
+    const t = R.terrainAt(st, q, r);
+    if (t === 'water' || t === 'ocean') fn(q, r);
+  }
+}
+
+test('Brücke bauen: 1 und 2 Felder, braucht Wege, kostet Sterne und den Zug', () => {
+  const st = makeState();
+  setT(st, 6, 5, 'water');
+  setT(st, 7, 5, 'water');
+  setT(st, 5, 6, 'water');
+  const w = unit('w', 'player_1', 'warrior', 5, 5);
+  st.units = [w];
+  const opts = R.bridgeOptions(st, w);
+  const east = opts.find(o => o.dir === 0);
+  assert.strictEqual(east.tiles.length, 2, 'zwei Felder nach Osten');
+  assert.strictEqual(east.cost, 10);
+  assert.ok(opts.some(o => o.tiles.length === 1), 'ein Feld nach Südosten');
+  assert.strictEqual(R.buildBridge(st, w, 0, 'player_1').ok, false, 'ohne Wege nicht');
+  st.techs.player_1.push('roads');
+  assert.ok(R.buildBridge(st, w, 0, 'player_1').ok);
+  assert.strictEqual(st.stars.player_1, 10);
+  assert.ok(R.bridgeAt(st, 6, 5) && R.bridgeAt(st, 7, 5));
+  assert.ok(w.acted && w.mp === 0, 'Zug verbraucht');
+  // Nächster Zug: über die Brücke laufen (Kosten 1 pro Feld).
+  w.acted = false; w.hasMoved = false; w.mp = 3;
+  const reach = R.reachableMap(st, w);
+  assert.strictEqual(reach.get(hk(8, 5)), 3, 'über 2 Brückenfelder ans andere Ufer');
+});
+
+test('Brücke über 3 Felder Wasser ist nicht möglich', () => {
+  const st = makeState();
+  for (const q of [6, 7, 8]) setT(st, q, 5, 'water');
+  const w = unit('w', 'player_1', 'warrior', 5, 5);
+  st.units = [w];
+  assert.ok(!R.bridgeOptions(st, w).some(o => o.dir === 0));
+});
+
+test('Schiffe fahren unter Brücken durch und reißen sie ein', () => {
+  const st = makeState();
+  for (let q = 3; q <= 9; q++) setT(st, q, 5, 'water');
+  st.bridges = { [hk(6, 5)]: 1 };
+  const boat = unit('b', 'player_1', 'boat', 4, 5, { mp: 3 });
+  st.units = [boat];
+  assert.ok(R.reachableMap(st, boat).has(hk(7, 5)), 'durch die Brücke hindurch');
+  assert.ok(R.moveUnit(st, boat, 5, 5).ok);
+  boat.acted = false;
+  assert.deepStrictEqual(R.destroyableBridges(st, boat), [[6, 5]]);
+  assert.ok(R.destroyBridge(st, boat, 6, 5, 'player_1').ok);
+  assert.ok(!R.bridgeAt(st, 6, 5));
+  assert.ok(boat.acted);
+});
+
+test('Brücke mit Einheit darauf kann nicht eingerissen werden', () => {
+  const st = makeState();
+  setT(st, 5, 5, 'water'); setT(st, 6, 5, 'water');
+  st.bridges = { [hk(6, 5)]: 0 };
+  const boat = unit('b', 'player_1', 'boat', 5, 5);
+  const w = unit('w', 'player_2', 'warrior', 6, 5);
+  st.units = [boat, w];
+  assert.strictEqual(R.destroyableBridges(st, boat).length, 0);
+});
+
+console.log('\n-- Spion, Auflösen, Heilung --');
+
+test('Spion: betritt Berge ohne Klettern, sieht von dort 3 Felder, greift nicht an', () => {
+  const st = makeState();
+  st.explored = { player_1: [] };
+  setT(st, 6, 5, 'mountain');
+  const spy = unit('s', 'player_1', 'spy', 5, 5);
+  const enemy = unit('e', 'player_2', 'warrior', 5, 6);
+  st.units = [spy, enemy];
+  assert.ok(R.reachableMap(st, spy).has(hk(6, 5)));
+  assert.strictEqual(R.attackTargets(st, spy).length, 0);
+  assert.strictEqual(R.unitSight(st, spy), 2);
+  spy.q = 6;
+  assert.strictEqual(R.unitSight(st, spy), 3);
+  assert.ok(R.isVisible(st, 'player_1', 9, 5));
+});
+
+test('Einheit auflösen erstattet die halben Kosten', () => {
+  const st = makeState();
+  const k = unit('k', 'player_1', 'knight', 5, 5);
+  st.units = [k];
+  const res = R.disbandUnit(st, k, 'player_1');
+  assert.ok(res.ok);
+  assert.strictEqual(res.refund, 4);
+  assert.strictEqual(st.stars.player_1, 24);
+  assert.strictEqual(st.units.length, 0);
+  assert.strictEqual(R.disbandUnit(st, unit('x', 'player_2', 'warrior', 1, 1), 'player_1').ok, false);
+});
+
+test('Regeneration: außer Reichweite heilt auch nach dem Ziehen, in Reichweite nicht', () => {
+  const st = makeState();
+  const safe = unit('a', 'player_1', 'swordsman', 2, 2, { hp: 5, hasMoved: true });
+  const near = unit('b', 'player_1', 'swordsman', 10, 10, { hp: 5, hasMoved: true });
+  const foe = unit('f', 'player_2', 'archer', 12, 10);
+  const fought = unit('c', 'player_1', 'swordsman', 2, 8, { hp: 5, acted: true });
+  st.units = [safe, near, foe, fought];
+  R.startTurn(st);
+  assert.strictEqual(safe.hp, 7, 'heilt +2 im Feld');
+  assert.strictEqual(near.hp, 5, 'Bogenschütze in Reichweite 2');
+  assert.strictEqual(fought.hp, 5, 'hat angegriffen');
+});
+
+console.log('\n-- Nebel & Tipps --');
+
+test('Gedächtnis: Stadt außer Sicht zeigt den zuletzt gesehenen Stand', () => {
+  const st = makeState();
+  st.explored = { player_1: [], player_2: [] };
+  const c = { q: 8, r: 5, owner: 'player_2', pop: 2, trained: false };
+  st.cities = [c, { q: 1, r: 1, owner: 'player_1', pop: 1 }];
+  const spy = unit('s', 'player_1', 'spy', 7, 5);
+  st.units = [spy];
+  R.updateExplored(st, 'player_1');
+  assert.ok(R.cityView(st, 'player_1', c).live);
+  spy.q = 2; spy.r = 2;
+  c.pop = 4; c.owner = 'player_3';
+  const v = R.cityView(st, 'player_1', c);
+  assert.strictEqual(v.live, false);
+  assert.strictEqual(v.pop, 2, 'alte Größe');
+  assert.strictEqual(v.owner, 'player_2', 'alter Besitzer');
+  assert.strictEqual(R.cityView(st, 'player_1', { q: 20, r: 12, owner: 'player_2', pop: 1 }), null, 'unentdeckt');
+});
+
+test('Bereite Einheiten: wer noch etwas tun kann', () => {
+  const st = makeState();
+  const a = unit('a', 'player_1', 'warrior', 5, 5);
+  const b = unit('b', 'player_1', 'warrior', 9, 9, { acted: true, mp: 0, hasMoved: true });
+  st.units = [a, b];
+  assert.deepStrictEqual(R.idleUnits(st, 'player_1').map(u => u.id), ['a']);
+  assert.ok(R.unitOptions(st, a).includes('ziehen'));
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);

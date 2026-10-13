@@ -31,6 +31,7 @@ function ctx() {
     mode: app.mode,
     myRole: app.myRole,
     actAs: app.mode === 'hotseat' ? (app.state ? app.state.turn : 'player_1') : (app.myRole || 'player_1'),
+    viewer: viewer(),
     myTurn: myTurn()
   };
 }
@@ -67,8 +68,23 @@ function refresh() {
   ui.updateStrip(app.state, ctx());
   ui.setStatus(statusText());
   ui.setEndTurn(myTurn());
+  const idle = myTurn() ? R.idleUnits(app.state, actAs()) : [];
+  ui.setIdle(idle.length);
+  render.setIdleMarkers(idle);
   updateSelection();
   checkWinnerUI();
+}
+
+// Reihum zur nächsten Einheit springen, die noch etwas tun kann.
+function nextIdle() {
+  if (!myTurn()) return;
+  const idle = R.idleUnits(app.state, actAs());
+  if (!idle.length) return;
+  const cur = app.sel && app.sel.kind === 'unit' ? idle.findIndex(u => u.id === app.sel.id) : -1;
+  const u = idle[(cur + 1) % idle.length];
+  app.sel = { kind: 'unit', id: u.id };
+  render.cameraTo(u.q, u.r, true);
+  refresh();
 }
 
 function updateSelection() {
@@ -86,10 +102,12 @@ function updateSelection() {
   if (app.sel.kind === 'unit') {
     const u = R.findUnit(st, app.sel.id);
     const canCommand = myTurn() && u.owner === ctx().actAs && !u.acted;
+    const canBridge = myTurn() && u.owner === ctx().actAs && !u.acted;
     render.setHighlights({
       selected: u.q + ',' + u.r,
       move: canCommand && u.mp > 0 ? R.reachableMap(st, u) : null,
-      attack: canCommand ? R.attackTargets(st, u) : null
+      attack: canCommand ? R.attackTargets(st, u) : null,
+      bridge: canBridge ? R.bridgeOptions(st, u).flatMap(o => o.tiles) : null
     });
     ui.showUnitPanel(st, u, ctx());
   } else {
@@ -267,8 +285,45 @@ async function doFound(unit) {
   await afterAction();
 }
 
+async function doBuildBridge(unit, dir) {
+  unit = liveUnit(unit);
+  if (!unit) return;
+  const res = R.buildBridge(app.state, unit, dir, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
+  app.busy = true;
+  ui.toast('Brücke gebaut', 'good');
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
+async function doDestroyBridge(unit, q, r) {
+  unit = liveUnit(unit);
+  if (!unit) return;
+  const res = R.destroyBridge(app.state, unit, q, r, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
+  app.busy = true;
+  ui.toast('Brücke eingerissen', 'good');
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
+function doDisband(unit) {
+  const name = UNITS[unit.type].name;
+  ui.showConfirm(`${name} auflösen? Du erhältst ${R.disbandRefund(unit)} Sterne zurück.`, async () => {
+    const u = liveUnit(unit);
+    if (!u || !myTurn()) return;
+    const res = R.disbandUnit(app.state, u, actAs());
+    if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
+    app.busy = true;
+    app.sel = null;
+    ui.toast(`${name} aufgelöst (+${res.refund} Sterne)`, 'good');
+    await render.syncBoard(app.state, viewer());
+    await afterAction();
+  });
+}
+
 function anyIdle(owner) {
-  return (app.state.units || []).some(u => u.owner === owner && !u.acted && u.mp > 0);
+  return R.idleUnits(app.state, owner).length > 0;
 }
 
 function doEndTurnNow() {
@@ -292,8 +347,9 @@ function doEndTurnNow() {
 
 async function doEndTurn() {
   if (!myTurn()) return;
-  if (app.mode !== 'hotseat' && anyIdle(actAs())) {
-    ui.showConfirm('Es sind noch Einheiten mit Aktionen übrig. Zug trotzdem beenden?', doEndTurnNow);
+  const idle = R.idleUnits(app.state, actAs());
+  if (app.mode !== 'hotseat' && idle.length) {
+    ui.showConfirm(`Noch bereit: ${ui.describeUnits(idle)}. Zug trotzdem beenden?`, doEndTurnNow);
     return;
   }
   await doEndTurnNow();
@@ -378,7 +434,7 @@ async function onHexPick(key) {
   const unit = rawUnit && (!v || rawUnit.owner === v || R.isVisible(st, v, q, r)) ? rawUnit : null;
   const rawCity = R.cityAt(st, q, r);
   // Städte im unentdeckten Nebel bleiben verborgen.
-  const city = rawCity && (!v || rawCity.owner === v || R.isExplored(st, v, q, r)) ? rawCity : null;
+  const city = rawCity && R.cityView(st, v, rawCity) ? rawCity : null;
 
   if (!myTurn()) {
     app.sel = unit ? { kind: 'unit', id: unit.id } : (city ? { kind: 'city', q, r } : null);
@@ -414,7 +470,7 @@ async function onHexPick(key) {
   }
 
   if (unit) app.sel = { kind: 'unit', id: unit.id };
-  else if (city && city.owner === actAs()) app.sel = { kind: 'city', q, r };
+  else if (city) app.sel = { kind: 'city', q, r };
   else app.sel = null;
   refresh();
 }
@@ -571,6 +627,10 @@ function boot() {
     onBuyPop: doBuyPop,
     onImprove: doImprove,
     onFound: doFound,
+    onBuildBridge: doBuildBridge,
+    onDestroyBridge: doDestroyBridge,
+    onDisband: doDisband,
+    onNextIdle: nextIdle,
     onChooseReward: doChooseReward,
     onClosePanel: () => { app.sel = null; refresh(); },
     onOpenOverview: () => { if (app.state) ui.showOverview(app.state, ctx()); },

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H } from './config.js';
-import { playerColor, isVisible } from './rules.js';
-import { toWorld, forEachHex, hk } from './hex.js';
+import { playerColor, isVisible, visibleKeys, cityView } from './rules.js';
+import { toWorld, forEachHex, hk, DIRS } from './hex.js';
 
 let colorMap = {};
 function ownerColor(owner) {
@@ -18,6 +18,7 @@ const tiles = new Map();
 const unitNodes = new Map();
 const cityNodes = new Map();
 let highlightGroup;
+let idleGroup;
 let selectedMesh = null;
 let selectedKey = null;
 let tweens = [];
@@ -100,6 +101,8 @@ export function initRender(canvas, opts = {}) {
 
   highlightGroup = new THREE.Group();
   scene.add(highlightGroup);
+  idleGroup = new THREE.Group();
+  scene.add(idleGroup);
 
   const bounds = mapBounds();
   const cx = (bounds.minX + bounds.maxX) / 2;
@@ -153,6 +156,8 @@ export function initRender(canvas, opts = {}) {
       const s = 1 + Math.sin(now / 220) * 0.06;
       selectedMesh.scale.set(s, 1, s);
     }
+    stepFog(now, dt);
+    stepIdleMarkers(now);
     controls.update();
     clampTarget();
     renderer.render(scene, camera);
@@ -296,6 +301,177 @@ function syncRuin(t, present) {
   t.ruinNode = n;
 }
 
+// --- Brücken ----------------------------------------------------------------
+
+function bridgeNode(axis) {
+  const g = new THREE.Group();
+  const wood = mat(0x8a5a33), dark = mat(0x5c3d22);
+  const deck = new THREE.Mesh(geo('brDeck', () => new THREE.BoxGeometry(1.78, 0.07, 0.44)), wood);
+  deck.castShadow = true;
+  deck.receiveShadow = true;
+  g.add(deck);
+  for (const z of [-0.2, 0.2]) {
+    const rail = new THREE.Mesh(geo('brRail', () => new THREE.BoxGeometry(1.7, 0.04, 0.04)), dark);
+    rail.position.set(0, 0.13, z);
+    g.add(rail);
+    for (const x of [-0.75, -0.25, 0.25, 0.75]) {
+      const post = new THREE.Mesh(geo('brPost', () => new THREE.BoxGeometry(0.04, 0.13, 0.04)), dark);
+      post.position.set(x, 0.07, z);
+      g.add(post);
+    }
+  }
+  for (const x of [-0.42, 0.42]) {
+    const pier = new THREE.Mesh(geo('brPier', () => new THREE.CylinderGeometry(0.05, 0.06, 0.4, 6)), dark);
+    pier.position.set(x, -0.2, 0);
+    g.add(pier);
+  }
+  // Brücke entlang der Achse zwischen den beiden Ufern ausrichten.
+  const [dq, dr] = DIRS[axis];
+  const w = toWorld(dq, dr);
+  g.rotation.y = -Math.atan2(w.z, w.x);
+  return g;
+}
+
+function syncBridge(t, axis) {
+  const want = axis == null ? null : axis;
+  if (!t || (t.bridgeAxis ?? null) === want) return;
+  if (t.bridgeNode) {
+    t.mesh.remove(t.bridgeNode);
+    t.decor = t.decor.filter(d => d !== t.bridgeNode);
+    t.bridgeNode = null;
+  }
+  t.bridgeAxis = want;
+  if (want == null) return;
+  const n = bridgeNode(want);
+  // Fahrbahn knapp über Ufer-Höhe (Land 0.5), relativ zur Kachelmitte.
+  n.position.y = 0.53 - TERRAIN[t.terrain].height / 2;
+  n.visible = t.seen;
+  t.mesh.add(n);
+  t.decor.push(n);
+  t.bridgeNode = n;
+}
+
+// --- Nebel ------------------------------------------------------------------
+// Unentdecktes Land liegt unter dichten, langsam treibenden Nebelschwaden;
+// entdecktes, aber gerade unbeobachtetes Land unter leichtem Dunst.
+
+let fogDense = null, fogHaze = null, fogTiles = [];
+const fogDummy = new THREE.Object3D();
+const FOG_LAYERS = 2;
+
+function fogTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const blob = (x, y, r, a) => {
+    const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, `rgba(255,255,255,${a})`);
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, 128, 128);
+  };
+  blob(64, 64, 62, 0.85);
+  blob(44, 52, 36, 0.5);
+  blob(84, 70, 34, 0.5);
+  blob(60, 86, 28, 0.4);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function buildFog() {
+  for (const m of [fogDense, fogHaze]) {
+    if (!m) continue;
+    scene.remove(m);
+    m.dispose();
+  }
+  const tex = geo('fogTex', fogTexture);
+  const plane = geo('fogPlane', () => new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2));
+  const n = tiles.size;
+  fogDense = new THREE.InstancedMesh(plane, new THREE.MeshBasicMaterial({
+    map: tex, color: 0xeef2f5, transparent: true, opacity: 0.95, depthWrite: false, fog: false
+  }), n * FOG_LAYERS);
+  fogHaze = new THREE.InstancedMesh(plane, new THREE.MeshBasicMaterial({
+    map: tex, color: 0xd5dee6, transparent: true, opacity: 0.42, depthWrite: false, fog: false
+  }), n);
+  fogDense.renderOrder = 12;
+  fogHaze.renderOrder = 11;
+  for (const m of [fogDense, fogHaze]) {
+    m.frustumCulled = false;
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(m);
+  }
+  fogTiles = [];
+  let i = 0;
+  for (const [key, t] of tiles) {
+    const [q, r] = key.split(',').map(Number);
+    const p = toWorld(q, r);
+    const h = (q * 928371 + r * 123457) % 1000 / 1000;
+    fogTiles.push({ t, x: p.x, z: p.z, dense: 1, haze: 0, phase: h * Math.PI * 2, rot: h * 6.28, i: i++ });
+  }
+}
+
+function stepFog(now, dt) {
+  if (!fogDense) return;
+  const k = Math.min(1, dt * 3.5);
+  const time = now / 1000;
+  for (const f of fogTiles) {
+    const wantDense = f.t.seen ? 0 : 1;
+    const wantHaze = f.t.seen && !f.t.lit ? 1 : 0;
+    f.dense += (wantDense - f.dense) * k;
+    f.haze += (wantHaze - f.haze) * k;
+    for (let l = 0; l < FOG_LAYERS; l++) {
+      const ph = f.phase + l * 2.1;
+      const sc = f.dense < 0.01 ? 0 : (2.5 + l * 0.5 + Math.sin(time * 0.3 + ph) * 0.15) * f.dense;
+      fogDummy.position.set(
+        f.x + Math.sin(time * 0.17 + ph) * 0.25,
+        1.25 + l * 0.35 + Math.sin(time * 0.4 + ph) * 0.05,
+        f.z + Math.cos(time * 0.13 + ph) * 0.25
+      );
+      fogDummy.rotation.set(0, f.rot + l + time * 0.03, 0);
+      fogDummy.scale.set(sc || 1e-4, 1, sc || 1e-4);
+      fogDummy.updateMatrix();
+      fogDense.setMatrixAt(f.i * FOG_LAYERS + l, fogDummy.matrix);
+    }
+    const hs = f.haze < 0.01 ? 1e-4 : 2.3 * f.haze;
+    fogDummy.position.set(f.x + Math.sin(time * 0.2 + f.phase) * 0.15, 1.02, f.z);
+    fogDummy.rotation.set(0, f.rot, 0);
+    fogDummy.scale.set(hs, 1, hs);
+    fogDummy.updateMatrix();
+    fogHaze.setMatrixAt(f.i, fogDummy.matrix);
+  }
+  fogDense.instanceMatrix.needsUpdate = true;
+  fogHaze.instanceMatrix.needsUpdate = true;
+}
+
+// --- Markierungen für Einheiten, die noch handeln können --------------------
+
+let idleMarkers = [];
+export function setIdleMarkers(units) {
+  if (!initialized) return;
+  while (idleGroup.children.length) idleGroup.remove(idleGroup.children[0]);
+  idleMarkers = [];
+  const markGeo = geo('idleMark', () => new THREE.OctahedronGeometry(0.11, 0));
+  const markMat = geo('idleMat', () => new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+  for (const u of units) {
+    const m = new THREE.Mesh(markGeo, markMat);
+    const p = toWorld(u.q, u.r);
+    m.position.set(p.x, hexTop(hk(u.q, u.r)) + 1.3, p.z);
+    m.scale.set(1, 1.6, 1);
+    m.userData.base = m.position.y;
+    m.userData.phase = (u.q * 7 + u.r * 3) % 10;
+    idleGroup.add(m);
+    idleMarkers.push(m);
+  }
+}
+
+function stepIdleMarkers(now) {
+  for (const m of idleMarkers) {
+    m.position.y = m.userData.base + Math.sin(now / 260 + m.userData.phase) * 0.06;
+    m.rotation.y = now / 600;
+  }
+}
+
 function improvementNode(type) {
   const g = new THREE.Group();
   if (type === 'farm') {
@@ -405,7 +581,7 @@ function buildTiles(state) {
       scene.add(mesh);
       tileMeshes.push(mesh);
       const decor = [];
-      tiles.set(hk(q, r), { mesh, baseMat, top: def.height, terrain: t, decor, seen: true, imp: null, impNode: null, ruinNode: null });
+      tiles.set(hk(q, r), { mesh, baseMat, top: def.height, terrain: t, decor, seen: true, lit: true, imp: null, impNode: null, ruinNode: null, bridgeAxis: null, bridgeNode: null });
 
       if (t === 'forest') {
         let s = (q * 73856093) ^ (r * 19349663);
@@ -659,6 +835,13 @@ function unitBody(type, color) {
       .rotation.x = Math.PI / 2;
     add(new THREE.Mesh(geo('stStaff', () => new THREE.CylinderGeometry(0.015, 0.015, 0.62, 5)), mat(0x6b4a2b)), 0.18, 0.31, 0);
     add(new THREE.Mesh(geo('stFlag', () => new THREE.BoxGeometry(0.02, 0.09, 0.13)), teamMat()), 0.18, 0.56, 0.07);
+  } else if (type === 'spy') {
+    // Spion: Kapuzenmantel in Teamfarbe mit Fernrohr.
+    add(new THREE.Mesh(geo('spCloak', () => new THREE.ConeGeometry(0.17, 0.46, 7)), teamMat()), 0, 0.23, 0);
+    add(new THREE.Mesh(geo('ico9', () => new THREE.IcosahedronGeometry(0.09, 0)), mat(0xe8c39a)), 0, 0.5, 0);
+    add(new THREE.Mesh(geo('spHood', () => new THREE.ConeGeometry(0.12, 0.2, 7)), mat(0x27272a)), 0, 0.6, -0.01);
+    const glass = add(new THREE.Mesh(geo('spGlass', () => new THREE.CylinderGeometry(0.025, 0.035, 0.26, 6)), mat(0xc8a64a)), 0.12, 0.5, 0.06);
+    glass.rotation.z = -1.2;
   } else {
     // Rückfallmodell, damit eine Einheit ohne eigenes Modell nie unsichtbar ist.
     add(new THREE.Mesh(geo('oct22', () => new THREE.OctahedronGeometry(0.22)), teamMat()), 0, 0.26, 0);
@@ -688,6 +871,7 @@ function boatHullGeo(width, depth) {
   return g;
 }
 
+// `city` ist eine Ansicht (siehe cityView): owner, pop, wall.
 function buildCity(city, color) {
   const g = new THREE.Group();
   const base = new THREE.Mesh(
@@ -729,7 +913,7 @@ function buildCity(city, color) {
     g.add(flag);
   }
   // Stadtmauer (Belohnung): niedriger Steinring am Rand.
-  if (city.rewards && Object.values(city.rewards).includes('wall')) {
+  if (city.wall) {
     const wallMat = mat(0x9ca3af);
     const segGeo = geo('wallSeg', () => new THREE.BoxGeometry(0.34, 0.14, 0.07));
     for (let i = 0; i < 6; i++) {
@@ -745,8 +929,7 @@ function buildCity(city, color) {
 }
 
 function cityKey(city) {
-  const walls = city.rewards && Object.values(city.rewards).includes('wall') ? 'w' : '';
-  return `${city.owner}|${city.pop}|${walls}`;
+  return `${city.owner}|${city.pop}|${city.wall ? 'w' : ''}`;
 }
 
 function placeCityNode(state, city) {
@@ -842,18 +1025,28 @@ export function syncBoard(state, viewer = null) {
   if (sig !== boardSignature) {
     clearBoard();
     buildTiles(state);
+    buildFog();
     boardSignature = sig;
   }
   const explored = exploredSet(state, viewer);
+  const visible = explored ? visibleKeys(state, viewer) : null;
   for (const [key, t] of tiles) {
     syncImprovement(t, state.improvements ? state.improvements[key] : null);
     syncRuin(t, state.ruins && state.ruins[key]);
+    syncBridge(t, state.bridges ? state.bridges[key] : null);
     const seen = !explored || explored.has(key);
     t.seen = seen;
+    t.lit = !visible || visible.has(key);
     t.mesh.material = seen ? t.baseMat : darkMatFor(t.terrain);
     if (t.decor) for (const d of t.decor) d.visible = seen;
   }
-  for (const c of state.cities) placeCityNode(state, c);
+  // Städte so zeigen, wie der Betrachter sie kennt (live oder aus dem Gedächtnis).
+  const cityViews = new Map();
+  for (const c of state.cities) {
+    const view = cityView(state, viewer, c);
+    cityViews.set(hk(c.q, c.r), view);
+    if (view) placeCityNode(state, view);
+  }
 
   const alive = new Set();
   const promises = [];
@@ -912,8 +1105,7 @@ export function syncBoard(state, viewer = null) {
   for (const c of state.cities) {
     const node = cityNodes.get(hk(c.q, c.r));
     if (!node) continue;
-    const seen = !explored || c.owner === viewer || explored.has(hk(c.q, c.r));
-    node.group.visible = !!seen;
+    node.group.visible = !!cityViews.get(hk(c.q, c.r));
   }
   for (const [id, node] of unitNodes) {
     if (alive.has(id) || node.dying) continue;
@@ -984,7 +1176,8 @@ export function playCombat(events) {
 const HL = {
   move: { color: 0xffffff, opacity: 0.34 },
   attack: { color: 0xff4d4d, opacity: 0.5 },
-  city: { color: 0xffe14d, opacity: 0.34 }
+  city: { color: 0xffe14d, opacity: 0.34 },
+  bridge: { color: 0x60a5fa, opacity: 0.45 }
 };
 
 const discGeo = () => geo('disc', () => new THREE.CylinderGeometry(0.8, 0.8, 0.07, 6));
@@ -999,7 +1192,7 @@ function discMat(kind) {
   return discMats.get(kind);
 }
 
-export function setHighlights({ selected = null, move = null, attack = null, city = null } = {}) {
+export function setHighlights({ selected = null, move = null, attack = null, city = null, bridge = null } = {}) {
   if (!initialized) return;
   while (highlightGroup.children.length) highlightGroup.remove(highlightGroup.children[0]);
   selectedMesh = null;
@@ -1022,6 +1215,7 @@ export function setHighlights({ selected = null, move = null, attack = null, cit
   if (move) for (const k of move.keys()) { const [q, r] = k.split(',').map(Number); addDisc(q, r, 'move'); }
   if (attack) for (const u of attack) addDisc(u.q, u.r, 'attack');
   if (city) addDisc(city.q, city.r, 'city');
+  if (bridge) for (const [q, r] of bridge) addDisc(q, r, 'bridge');
 }
 
 export function cameraTo(q, r, close = false) {
