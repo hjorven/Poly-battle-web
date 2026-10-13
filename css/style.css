@@ -614,3 +614,37 @@ button:focus-visible {
 .idle-btn:hover { background: #fef9c3; }
 .idle-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #facc15; margin-right: 6px; vertical-align: middle; }
 .panel .todo { color: #a16207; }
+
+/* Ton-Knopf neben dem Menü */
+#soundBtn { position: absolute; top: 12px; right: 84px; z-index: 10; }
+@media (hover: none) { #soundBtn { min-height: 44px; right: 96px; } }
+
+/* Minikarte unten rechts */
+#minimap {
+  position: absolute; right: 12px; bottom: 12px; z-index: 9;
+  width: 220px; height: 150px; border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  cursor: pointer; touch-action: none;
+}
+/* Schmal: unter den Menü-Knöpfen, damit das Panel unten sie nicht verdeckt */
+@media (max-width: 760px) { #minimap { width: 140px; height: 96px; top: 64px; bottom: auto; right: 8px; } }
+
+/* Diplomatie in der Übersicht */
+.dip-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.dip-row .dip-name { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.dip-row .dip-state { font-size: 12px; color: var(--muted, #71717a); }
+.dip-row .dip-state.peace { color: #15803d; }
+.dip-row .btn { padding: 6px 10px; font-size: 12px; }
+.tribe-perk { display: block; font-size: 11px; color: #a16207; margin-top: 2px; }
+.vet-badge { color: #a16207; font-weight: 700; }
+
+/* Schmale Bildschirme: Rückgängig/Bereit nur als Symbol + Zahl */
+@media (max-width: 760px) {
+  .top-actions .lbl { display: none; }
+  #idleBtn, #undoBtn { padding: 8px 9px; }
+}
+/* Sehr schmal (Handy hochkant): Schriftzug weglassen, damit „Zug beenden“ passt */
+@media (max-width: 480px) {
+  .brand { display: none; }
+}

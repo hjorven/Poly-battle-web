@@ -49,7 +49,7 @@ function assertInvariants(state) {
     const k = hk(u.q, u.r);
     assert.ok(!seen.has(k), 'two units on same tile: ' + k);
     seen.add(k);
-    assert.ok(u.hp >= 1 && u.hp <= UNITS[u.type].hp, 'hp out of range');
+    assert.ok(u.hp >= 1 && u.hp <= R.hpCap(u), 'hp out of range');
     assert.ok(UNITS[u.type], 'unknown unit type');
     assert.ok(state.stars[u.owner] >= 0, 'negative stars');
   }
@@ -831,7 +831,7 @@ test('KI-Partie läuft zu Ende (Simulation, mehrere Seeds)', () => {
       assert.ok(!res || res.ok !== false || step.kind === 'move', `KI-Schritt ${step.kind} gültig: ${res && res.reason}`);
     }
     assert.ok(guard < 20000, 'keine Endlosschleife');
-    for (const u of st.units) assert.ok(u.hp > 0 && u.hp <= UNITS[u.type].hp, 'LP im gültigen Bereich');
+    for (const u of st.units) assert.ok(u.hp > 0 && u.hp <= R.hpCap(u), 'LP im gültigen Bereich');
   }
 });
 
@@ -1041,7 +1041,7 @@ test('Komplette KI-Partien: jede Stärke, Perfektion bis zum Ende', () => {
     assert.ok(st.winner, lvl + ': Spiel endet');
     const pending = st.cities.filter(c => c.owner && R.pendingLevel(c) && st.ai.includes(c.owner) && c.owner !== st.turn);
     assert.ok(Object.keys(st.ruinsBy).length > 0, lvl + ': Ruinen werden erkundet');
-    for (const u of st.units) assert.ok(u.hp > 0 && u.hp <= UNITS[u.type].hp);
+    for (const u of st.units) assert.ok(u.hp > 0 && u.hp <= R.hpCap(u));
     console.log(`      (${lvl}: Sieger ${st.winner} durch ${st.endReason}, Runde ${st.round})`);
   }
 });
@@ -1259,6 +1259,183 @@ test('Bereite Einheiten: wer noch etwas tun kann', () => {
   st.units = [a, b];
   assert.deepStrictEqual(R.idleUnits(st, 'player_1').map(u => u.id), ['a']);
   assert.ok(R.unitOptions(st, a).includes('ziehen'));
+});
+
+console.log('\n-- Veteranen, Einschiffen, Kontrollzone --');
+
+test('Veteran: nach 3 Siegen befördert, +5 Leben und voll geheilt', () => {
+  const st = makeState();
+  const k = unit('k', 'player_1', 'swordsman', 5, 5, { kills: 2, hp: 6 });
+  const v = unit('v', 'player_2', 'warrior', 6, 5, { hp: 1 });
+  st.units = [k, v];
+  const res = R.attack(st, k, v);
+  assert.ok(res.events.some(e => e.kind === 'promote'));
+  assert.ok(k.vet);
+  assert.strictEqual(R.hpCap(k), 20);
+  assert.strictEqual(k.hp, 20);
+});
+
+test('Einschiffen über eigenen Hafen, an Land gehen beendet den Zug', () => {
+  const st = makeState();
+  for (let q = 6; q <= 9; q++) setT(st, q, 5, 'water');
+  st.cities = [{ q: 6, r: 4, owner: 'player_1', pop: 1, trained: false }];
+  st.improvements = { [hk(6, 5)]: 'port' };
+  const w = unit('w', 'player_1', 'warrior', 5, 5, { mp: 2 });
+  st.units = [w];
+  const reach = R.reachableMap(st, w);
+  assert.ok(reach.has(hk(6, 5)), 'Hafenfeld betretbar');
+  assert.ok(!reach.has(hk(7, 5)), 'nach dem Einschiffen geht es nicht weiter');
+  const res = R.moveUnit(st, w, 6, 5);
+  assert.ok(res.events.some(e => e.kind === 'embark'));
+  assert.strictEqual(w.type, 'boat');
+  assert.strictEqual(w.carry, 'warrior');
+  assert.strictEqual(w.mp, 0);
+  // Nächster Zug: über das Wasser und an Land.
+  w.mp = 2; w.hasMoved = false;
+  assert.ok(R.moveUnit(st, w, 8, 5).ok);
+  w.mp = 2; w.hasMoved = false;
+  const back = R.moveUnit(st, w, 10, 5);
+  assert.ok(back.events.some(e => e.kind === 'disembark'));
+  assert.strictEqual(w.type, 'warrior');
+  assert.ok(!w.carry);
+});
+
+test('Ohne eigenen Hafen kein Einschiffen; gebaute Boote nie an Land', () => {
+  const st = makeState();
+  setT(st, 6, 5, 'water');
+  const w = unit('w', 'player_1', 'warrior', 5, 5);
+  const b = unit('b', 'player_1', 'boat', 6, 5);
+  st.units = [w];
+  assert.ok(!R.reachableMap(st, w).has(hk(6, 5)));
+  st.units = [b];
+  assert.ok(!R.reachableMap(st, b).has(hk(5, 5)));
+});
+
+test('Kontrollzone: neben einem Gegner endet die Bewegung', () => {
+  // Schmaler Landweg in Reihe 5, sonst Wasser; der Gegner steht daneben.
+  const st = makeState();
+  st.terrain.fill('water');
+  for (let q = 3; q <= 9; q++) setT(st, q, 5, 'field');
+  setT(st, 6, 4, 'field');
+  const r = unit('r', 'player_1', 'rider', 4, 5, { mp: 3 });
+  st.units = [r];
+  assert.ok(R.reachableMap(st, r).has(hk(7, 5)), 'ohne Gegner frei');
+  st.units = [r, unit('e', 'player_2', 'warrior', 6, 4)];
+  const reach = R.reachableMap(st, r);
+  assert.ok(reach.has(hk(5, 5)), 'bis neben den Gegner');
+  assert.ok(!reach.has(hk(6, 5)) && !reach.has(hk(7, 5)), 'nicht daran vorbei');
+  r.q = 5;
+  assert.ok(R.reachableMap(st, r).has(hk(4, 5)), 'aus der Kontrollzone darf man wegziehen');
+});
+
+console.log('\n-- Diplomatie --');
+
+function dipState() {
+  const st = makeState();
+  st.ai = ['player_2'];
+  st.explored = { player_1: [], player_2: [] };
+  st.cities = [{ q: 2, r: 2, owner: 'player_1', pop: 1 }, { q: 9, r: 5, owner: 'player_2', pop: 1 }];
+  st.techs.player_1.push('diplomacy');
+  st.met = { player_1: ['player_2'], player_2: ['player_1'] };
+  return st;
+}
+
+test('Frieden: nur mit Diplomatie und nach Begegnung, KI nimmt an', () => {
+  const st = dipState();
+  st.met = {};
+  assert.strictEqual(R.offerPeace(st, 'player_1', 'player_2').ok, false, 'nicht begegnet');
+  st.met = { player_1: ['player_2'], player_2: ['player_1'] };
+  const res = R.offerPeace(st, 'player_1', 'player_2');
+  assert.ok(res.ok && res.accepted);
+  assert.ok(R.atPeace(st, 'player_1', 'player_2'));
+});
+
+test('Frieden: kein Angriff, keine Stadt betreten, keine Kontrollzone', () => {
+  const st = dipState();
+  R.offerPeace(st, 'player_1', 'player_2');
+  const a = unit('a', 'player_1', 'warrior', 8, 5, { mp: 2 });
+  const d = unit('d', 'player_2', 'warrior', 8, 6);
+  st.units = [a, d];
+  assert.strictEqual(R.attackTargets(st, a).length, 0);
+  assert.ok(!R.reachableMap(st, a).has(hk(9, 5)), 'Stadt des Partners tabu');
+  assert.ok(!R.inZoc(st, a, 7, 6));
+  R.declareWar(st, 'player_1', 'player_2');
+  assert.ok(R.attackTargets(st, a).length === 1, 'nach Kriegserklärung wieder Ziel');
+  assert.strictEqual(R.offerPeace(st, 'player_1', 'player_2').ok, false, 'Abkühlzeit');
+});
+
+test('Frieden zwischen Menschen: Angebot muss angenommen werden', () => {
+  const st = dipState();
+  st.ai = [];
+  const res = R.offerPeace(st, 'player_1', 'player_2');
+  assert.ok(res.pending);
+  assert.ok(!R.atPeace(st, 'player_1', 'player_2'));
+  assert.ok(R.respondPeace(st, 'player_2', 'player_1', true).ok);
+  assert.ok(R.atPeace(st, 'player_1', 'player_2'));
+});
+
+test('KI bricht Frieden, wenn sie sonst keine Ziele hat', () => {
+  const st = dipState();
+  R.offerPeace(st, 'player_1', 'player_2');
+  st.turn = 'player_2';
+  const step = botStep(st, 'player_2');
+  assert.strictEqual(step.kind, 'war');
+  assert.strictEqual(step.target, 'player_1');
+});
+
+console.log('\n-- Stämme, Karten, KI --');
+
+test('Stammes-Fähigkeiten: Kosten, Bewegung, Einkommen', () => {
+  const st = makeState();
+  st.tribes = { player_1: 'imperius', player_2: 'xinxi', player_3: 'luxidoor', player_4: 'kickoo' };
+  assert.strictEqual(R.unitCost(st, 'player_1', 'warrior'), 1);
+  assert.strictEqual(R.unitCost(st, 'player_2', 'warrior'), 2);
+  setT(st, 6, 5, 'mountain');
+  st.techs.player_2.push('climbing');
+  assert.strictEqual(R.moveCost(st, unit('x', 'player_2', 'warrior', 5, 5), 6, 5), 1);
+  assert.strictEqual(R.moveCost(st, unit('y', 'player_1', 'warrior', 5, 5), 6, 5), 2);
+  const cap = { q: 3, r: 3, owner: 'player_3', pop: 1, isCapital: true };
+  st.cities = [cap];
+  assert.strictEqual(R.cityIncome(st, cap), 3);
+  assert.strictEqual(R.maxMove(st, 'player_4', 'boat'), 3);
+});
+
+test('Kartengrößen und -typen: richtige Größe, Wasser verbunden, Städte erreichbar', () => {
+  for (const mapSize of ['small', 'normal', 'large']) {
+    for (const mapType of ['continents', 'pangaea', 'archipelago']) {
+      const st = R.createGame(42, 4, { mapSize, mapType });
+      assert.strictEqual(st.terrain.length, MAP_W * MAP_H, mapSize);
+      const c1 = st.cities.find(c => c.owner === 'player_1');
+      const reach = flood(st, c1.q, c1.r);
+      for (const c of st.cities.filter(c => c.owner)) assert.ok(reach.has(hk(c.q, c.r)), `${mapSize}/${mapType}: Hauptstadt erreichbar`);
+    }
+  }
+  R.createGame(1, 4); // Standardgröße für die restlichen Tests
+  assert.strictEqual(MAP_W, 26);
+});
+
+test('Pangäa hat mehr Land als Archipel', () => {
+  const land = st => st.terrain.filter(t => t !== 'water' && t !== 'ocean').length;
+  let p = 0, a = 0;
+  for (let s = 1; s <= 5; s++) {
+    p += land(R.createGame(s, 4, { mapType: 'pangaea' }));
+    a += land(R.createGame(s, 4, { mapType: 'archipelago' }));
+  }
+  R.createGame(1, 4);
+  assert.ok(p > a, `Pangäa ${p} > Archipel ${a}`);
+});
+
+test('KI besetzt eine leere, bedrohte Stadt', () => {
+  const st = makeState();
+  st.ai = ['player_1'];
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1, trained: true };
+  st.cities = [city, { q: 15, r: 10, owner: 'player_2', pop: 1 }];
+  const guard = unit('g', 'player_1', 'warrior', 4, 5);
+  const foe = unit('f', 'player_2', 'warrior', 7, 5);
+  st.units = [guard, foe];
+  const step = botStep(st, 'player_1');
+  assert.strictEqual(step.kind, 'move');
+  assert.deepStrictEqual([step.q, step.r], [5, 5]);
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);

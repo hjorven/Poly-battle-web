@@ -158,6 +158,7 @@ export function initRender(canvas, opts = {}) {
     }
     stepFog(now, dt);
     stepIdleMarkers(now);
+    stepMinimap(now);
     controls.update();
     clampTarget();
     renderer.render(scene, camera);
@@ -166,14 +167,20 @@ export function initRender(canvas, opts = {}) {
   return true;
 }
 
+// Ausdehnung der Karte in Weltkoordinaten; zwischengespeichert, weil die
+// Kamera sie in jedem Frame braucht (neu berechnet bei neuer Kartengröße).
+let boundsCache = null;
 function mapBounds() {
+  const key = MAP_W + 'x' + MAP_H;
+  if (boundsCache && boundsCache.key === key) return boundsCache;
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   forEachHex((q, r) => {
     const p = toWorld(q, r);
     minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
     minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
   });
-  return { minX, maxX, minZ, maxZ };
+  boundsCache = { key, minX, maxX, minZ, maxZ };
+  return boundsCache;
 }
 
 function clampTarget() {
@@ -444,6 +451,106 @@ function stepFog(now, dt) {
   fogHaze.instanceMatrix.needsUpdate = true;
 }
 
+// --- Minikarte --------------------------------------------------------------
+
+let mini = null;
+export function initMinimap(canvas, onJump) {
+  mini = { canvas, ctx: canvas.getContext('2d'), state: null, viewer: null, last: 0, onJump };
+  const jump = e => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width * canvas.width;
+    const y = (e.clientY - rect.top) / rect.height * canvas.height;
+    const { scale, ox, oz } = miniFrame();
+    const key = fromWorldKey((x - ox) / scale, (y - oz) / scale);
+    if (key && mini.onJump) mini.onJump(key);
+  };
+  canvas.addEventListener('pointerdown', e => { e.stopPropagation(); jump(e); });
+}
+
+function fromWorldKey(x, z) {
+  // Nächste Kachel suchen (Karte ist klein, ein Durchlauf reicht).
+  let best = null, bd = Infinity;
+  forEachHex((q, r) => {
+    const p = toWorld(q, r);
+    const d = (p.x - x) ** 2 + (p.z - z) ** 2;
+    if (d < bd) { bd = d; best = [q, r]; }
+  });
+  return best && bd < 4 ? best : null;
+}
+
+function miniFrame() {
+  const b = mapBounds();
+  const W = mini.canvas.width, H = mini.canvas.height, pad = 6;
+  const scale = Math.min((W - pad * 2) / (b.maxX - b.minX + 2), (H - pad * 2) / (b.maxZ - b.minZ + 2));
+  const ox = (W - (b.maxX - b.minX) * scale) / 2 - b.minX * scale;
+  const oz = (H - (b.maxZ - b.minZ) * scale) / 2 - b.minZ * scale;
+  return { scale, ox, oz };
+}
+
+const cssColor = c => '#' + c.toString(16).padStart(6, '0');
+
+export function drawMinimap(state, viewer) {
+  if (!mini || !state) return;
+  mini.state = state;
+  mini.viewer = viewer;
+  paintMinimap();
+}
+
+function paintMinimap() {
+  const { ctx, canvas, state, viewer } = mini;
+  if (!state || !initialized) return;
+  const { scale, ox, oz } = miniFrame();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#1e3a5f';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const explored = viewer && state.explored && state.explored[viewer] ? new Set(state.explored[viewer]) : null;
+  const visible = explored ? visibleKeys(state, viewer) : null;
+  const rad = scale * 0.9;
+  const dot = (q, r, size, color) => {
+    const p = toWorld(q, r);
+    ctx.fillStyle = color;
+    ctx.fillRect(ox + p.x * scale - size / 2, oz + p.z * scale - size / 2, size, size);
+  };
+  forEachHex((q, r) => {
+    const k = hk(q, r);
+    const p = toWorld(q, r);
+    if (explored && !explored.has(k)) ctx.fillStyle = '#374151';
+    else ctx.fillStyle = cssColor(TERRAIN[state.terrain[r * MAP_W + q]].color);
+    ctx.beginPath();
+    ctx.arc(ox + p.x * scale, oz + p.z * scale, rad, 0, Math.PI * 2);
+    ctx.fill();
+    if (visible && explored.has(k) && !visible.has(k)) {
+      ctx.fillStyle = 'rgba(15,23,42,0.35)';
+      ctx.fill();
+    }
+    if (state.bridges && state.bridges[k] != null && (!explored || explored.has(k))) dot(q, r, rad, '#8a5a33');
+  });
+  for (const c of state.cities) {
+    const v = cityView(state, viewer, c);
+    if (!v) continue;
+    dot(c.q, c.r, rad * 2.4, '#111827');
+    dot(c.q, c.r, rad * 1.7, v.owner ? cssColor(ownerColor(v.owner)) : '#d4d4d8');
+  }
+  for (const u of state.units) {
+    if (explored && u.owner !== viewer && !isVisible(state, viewer, u.q, u.r)) continue;
+    dot(u.q, u.r, rad * 1.3, u.owner === viewer ? '#ffffff' : '#ef4444');
+  }
+  // Kameraausschnitt als Rahmen um das Blickziel.
+  const t = controls.target;
+  const span = camera.position.distanceTo(t) * 0.55;
+  ctx.strokeStyle = '#facc15';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(ox + (t.x - span * camera.aspect * 0.6) * scale, oz + (t.z - span * 0.45) * scale,
+    span * camera.aspect * 1.2 * scale, span * 0.9 * scale);
+}
+
+// Der Kamerarahmen folgt dem Schwenken – etwa viermal pro Sekunde.
+function stepMinimap(now) {
+  if (!mini || !mini.state || now - mini.last < 250) return;
+  mini.last = now;
+  paintMinimap();
+}
+
 // --- Markierungen für Einheiten, die noch handeln können --------------------
 
 let idleMarkers = [];
@@ -679,7 +786,7 @@ function clearBoard() {
 
 let boardSignature = null;
 function terrainSignature(state) {
-  return state.terrain.join('|');
+  return MAP_W + 'x' + MAP_H + ':' + state.terrain.join('|');
 }
 
 function hexTop(key) {
@@ -706,18 +813,24 @@ function makeHpSprite() {
   return sprite;
 }
 
-function drawHp(sprite, hp) {
+function drawHp(sprite, hp, vet = false) {
   const { canvas, texture } = sprite.userData;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, 128, 64);
-  ctx.fillStyle = 'rgba(10,12,16,0.72)';
-  roundRect(ctx, 24, 8, 80, 48, 14);
+  // Veteranen: goldener Rahmen und Stern vor der Zahl.
+  ctx.fillStyle = vet ? 'rgba(120,80,0,0.85)' : 'rgba(10,12,16,0.72)';
+  roundRect(ctx, vet ? 8 : 24, 8, vet ? 112 : 80, 48, 14);
   ctx.fill();
+  if (vet) {
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
   ctx.fillStyle = hp <= 3 ? '#ff7b7b' : '#ffffff';
   ctx.font = 'bold 34px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(hp), 64, 33);
+  ctx.fillText(vet ? '★' + hp : String(hp), 64, 33);
   texture.needsUpdate = true;
 }
 
@@ -954,11 +1067,11 @@ function placeUnitNode(state, unit) {
   const key = hk(unit.q, unit.r);
   group.position.set(p.x, hexTop(key), p.z);
   const sprite = makeHpSprite();
-  drawHp(sprite, unit.hp);
+  drawHp(sprite, unit.hp, !!unit.vet);
   sprite.position.y = 0.95;
   group.add(sprite);
   scene.add(group);
-  const node = { group, sprite, hp: unit.hp, acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
+  const node = { group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
   unitNodes.set(unit.id, node);
   if (unit.acted) {
     for (const m of node.group.userData.teamMats) m.color.multiplyScalar(0.55);
@@ -970,6 +1083,14 @@ function placeUnitNode(state, unit) {
     ease: easeOutBack
   });
   return node;
+}
+
+function removeUnitNode(id, node) {
+  scene.remove(node.group);
+  node.sprite.userData.texture?.dispose();
+  node.sprite.material.dispose();
+  for (const m of node.group.userData.teamMats) m.dispose();
+  unitNodes.delete(id);
 }
 
 function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
@@ -1053,13 +1174,19 @@ export function syncBoard(state, viewer = null) {
   for (const u of state.units) {
     alive.add(u.id);
     let node = unitNodes.get(u.id);
+    // Ein-/Ausschiffen wechselt den Typ: Modell neu aufbauen.
+    if (node && node.type !== u.type) {
+      removeUnitNode(u.id, node);
+      node = null;
+    }
     if (!node) {
       node = placeUnitNode(state, u);
       continue;
     }
-    if (node.hp !== u.hp) {
+    if (node.hp !== u.hp || node.vet !== !!u.vet) {
       node.hp = u.hp;
-      drawHp(node.sprite, u.hp);
+      node.vet = !!u.vet;
+      drawHp(node.sprite, u.hp, node.vet);
     }
     // Bekehrte Einheiten (Gedankenbeuger) wechseln den Besitzer.
     if (node.owner !== u.owner) {

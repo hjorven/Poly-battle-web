@@ -19,6 +19,14 @@ Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im
 - **Spion**: Günstiger Späher (Bewegung 2, Sicht 2, auf Bergen 3), betritt Berge ohne Klettern, greift nicht an.
 - **Einheiten auflösen** (halbe Kosten zurück) und **Regeneration**: Einheiten heilen zu Rundenbeginn, wenn sie nicht angegriffen haben und kein Gegner sie erreichen kann.
 - **Tipps**: Der Knopf „N bereit“ springt reihum zu Einheiten, die noch handeln können; diese tragen eine gelbe Markierung.
+- **Veteranen**: Nach 3 Siegen wird eine Einheit befördert (+5 Leben, voll geheilt, ★ an der Lebensanzeige).
+- **Einschiffen**: Landeinheiten fahren über einen eigenen Hafen aufs Wasser und als Boot weiter; an Land gehen beendet den Zug.
+- **Kontrollzonen**: Wer neben eine feindliche Einheit zieht, muss dort anhalten.
+- **Diplomatie**: Mit „Diplomatie“ lässt sich Stämmen, denen man begegnet ist, Frieden anbieten (Übersicht). Im Frieden kein Angriff und kein Betreten der Städte des anderen; Kriegserklärung jederzeit, danach 3 Runden Pause.
+- **Stammes-Fähigkeiten**: Jeder Stamm hat eine Besonderheit (z. B. Xin-Xi: Berge kosten 1 Bewegung, Kickoo: Schiffe +1 Bewegung, Luxidoor: Hauptstadt +2 Sterne).
+- **Karten**: Größe Klein/Normal/Groß und Typ Kontinente/Pangäa/Archipel in den Spieleinstellungen.
+- **Komfort**: Minikarte (antippen springt dorthin), Rückgängig für Aktionen im laufenden Zug (nicht nach Kampf, Eroberung oder Ruinen; nicht online), Soundeffekte (🔊 schaltet stumm).
+- **KI**: verteidigt bedrohte Städte, schickt Spione, baut Schiffe und Brücken und bricht Frieden, wenn sie sonst keine Ziele hat. Züge im Nebel laufen ohne Animation durch.
 - **Sieg**: Wer als Letzter noch Städte besitzt (alle anderen eliminiert), gewinnt. Verlierst du gegen die KI deine letzte Stadt, endet die Partie mit „Besiegt".
 - **Spielstand**: Partien gegen die KI und Hotseat-Partien werden nach jeder Aktion im Browser gespeichert und lassen sich über „Weiterspielen" im Menü fortsetzen.
 
