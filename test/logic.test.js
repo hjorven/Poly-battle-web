@@ -558,7 +558,7 @@ test('Tempel bringt +2 Einkommen und nutzt Meditation', () => {
 
 console.log('\n-- Marine --');
 
-test('Marine: nur auf Wasser, Küstenstadt nötig', () => {
+test('Marine: nur auf Wasser, Hafen nötig', () => {
   const st = makeState();
   st.terrain[5 * MAP_W + 6] = 'water';
   const boat = unit('b', 'player_1', 'boat', 5, 5);
@@ -575,10 +575,16 @@ test('Marine: nur auf Wasser, Küstenstadt nötig', () => {
   st.turn = 'player_1';
   st.stars.player_1 = 50;
   st.techs.player_1.push('fishing', 'sailing');
-  assert.ok(R.canTrain(st, city, 'boat', 'player_1').ok, 'Küstenstadt erlaubt Boote');
-  const inland = { q: 2, r: 2, owner: 'player_1', pop: 1, trained: false };
-  st.cities = [inland];
-  assert.strictEqual(R.canTrain(st, inland, 'boat', 'player_1').reason, 'Küstenstadt nötig');
+  assert.strictEqual(R.canTrain(st, city, 'boat', 'player_1').reason, 'Hafen nötig', 'Küste allein reicht nicht');
+  st.improvements = { '6,5': 'port' };
+  assert.ok(R.canTrain(st, city, 'boat', 'player_1').ok, 'mit Hafen erlaubt');
+  // Einheit in der Stadt stört nicht – das Boot entsteht im Hafen.
+  st.units = [unit('w', 'player_1', 'warrior', 5, 5)];
+  assert.ok(R.trainUnit(st, city, 'boat', 'player_1').ok);
+  const built = st.units.find(u => u.type === 'boat');
+  assert.deepStrictEqual([built.q, built.r], [6, 5], 'Boot liegt im Hafen');
+  city.trained = false;
+  assert.strictEqual(R.canTrain(st, city, 'boat', 'player_1').reason, 'Hafen besetzt');
 });
 
 test('Aquatismus gibt Verteidigungsbonus auf Wasser', () => {
