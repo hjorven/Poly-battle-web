@@ -717,3 +717,18 @@ button:focus-visible {
 #news li button:hover, #news li button:focus-visible { background: #f4f4f5; }
 #news .news-more { color: #71717a; font-size: 12px; }
 @media (max-width: 760px) { #news { top: 108px; left: 8px; width: calc(100% - 16px); } }
+
+/* Tutorial-Karte */
+#tutor {
+  position: absolute; left: 50%; transform: translateX(-50%); top: 64px; z-index: 31;
+  width: min(460px, calc(100% - 24px)); background: #18181b; color: #fafafa;
+  border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); font-size: 14px; line-height: 1.45;
+}
+#tutor .tu-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; color: #a1a1aa; }
+#tutor .tu-text { margin: 0 0 10px; }
+#tutor .tu-bar { height: 4px; background: #3f3f46; border-radius: 2px; overflow: hidden; margin-bottom: 10px; }
+#tutor .tu-bar div { height: 100%; background: #facc15; }
+#tutor .tu-btns { display: flex; gap: 8px; justify-content: flex-end; }
+#tutor .btn { background: #27272a; color: #fafafa; border-color: #3f3f46; }
+#tutor .btn.primary { background: #facc15; color: #18181b; border-color: #facc15; }
+@media (max-width: 760px) { #tutor { top: auto; bottom: 120px; } }
