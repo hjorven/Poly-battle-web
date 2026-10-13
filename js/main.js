@@ -66,6 +66,7 @@ function statusText() {
     if (!app.myRole) return `Zuschauer · Am Zug: ${needName(st, st.turn)}`;
     if (!app.hasOpponent) return 'Warte auf Mitspieler – teile den Link (Menü → Link kopieren).';
     if (myTurn()) return `Du bist am Zug (${needName(st, app.myRole)})`;
+    if (R.isBot(st, st.turn)) return `KI zieht (${needName(st, st.turn)}) …`;
     return `Gegner ist am Zug (${needName(st, st.turn)})`;
   }
   if (app.mode === 'bot') return myTurn() ? 'Du bist am Zug' : 'Die KI denkt nach …';
@@ -212,10 +213,15 @@ async function afterAction(events = []) {
     ui.toast('Alle Einheiten erledigt – Zug beenden', 'good');
   }
   persist();
+  if (botsToRun()) {
+    // KI-Züge laufen hier; maybeBot speichert online am Ende selbst.
+    await maybeBot();
+    return;
+  }
+  app.botDriver = false;
   await saveOnline();
   offerReward();
   offerDiplomacy();
-  if (!app.state.winner) await maybeBot();
 }
 
 // --- Rückgängig -------------------------------------------------------------
@@ -473,6 +479,7 @@ function doEndTurnNow() {
   app.sel = null;
   app.undo = [];
   R.endTurn(app.state);
+  if (app.online) app.botDriver = true;
   sfx('turn');
   // Hotseat: erst Übergabe-Bildschirm, dann die Sicht des nächsten Spielers.
   if (app.mode === 'hotseat' && !app.state.winner) {
@@ -514,7 +521,7 @@ async function doResearch(techId) {
 // Spielt sich der KI-Schritt in Sichtweite des Menschen ab? Nur dann wird er
 // animiert – Züge im Nebel laufen ohne Pause durch.
 function botStepVisible(step) {
-  const seen = (q, r) => R.isVisible(app.state, 'player_1', q, r);
+  const seen = (q, r) => R.isVisible(app.state, viewer() || 'player_1', q, r);
   const spots = [];
   for (const o of [step.unit, step.attacker, step.defender, step.city]) if (o) spots.push([o.q, o.r]);
   if (step.q != null) spots.push([step.q, step.r]);
@@ -524,7 +531,7 @@ function botStepVisible(step) {
 // Einen KI-Schritt ausführen und für den Menschen sichtbar machen.
 // Gibt zurück, ob er sichtbar war (dann folgt eine kurze Pause).
 async function playBotStep(step, player) {
-  const human = 'player_1';
+  const human = viewer() || 'player_1';
   const seen = (q, r) => R.isVisible(app.state, human, q, r);
   const visibleBefore = botStepVisible(step);
   const res = applyStep(app.state, step, player) || {};
@@ -554,17 +561,25 @@ async function playBotStep(step, player) {
   return step.kind !== 'research';
 }
 
+// Ist gerade eine KI am Zug, die dieses Gerät rechnen soll? Lokal immer;
+// online nur auf dem Gerät, das gerade seinen Zug beendet hat.
+function botsToRun() {
+  const st = app.state;
+  if (!st || st.winner || !R.isBot(st, st.turn)) return false;
+  if (app.mode === 'bot') return true;
+  return app.mode === 'online' && app.botDriver;
+}
+
 async function maybeBot() {
-  if (app.mode !== 'bot' || app.busy || !app.state || app.state.winner) return;
-  if (app.state.turn === 'player_1') return;
+  if (app.busy || !botsToRun()) return;
   const gen = app.gen;
   const stale = () => gen !== app.gen;
   app.busy = true;
   app.sel = null;
   refresh();
-  await sleep(550);
+  await sleep(250);
   if (stale()) return;
-  while (app.state.turn !== 'player_1' && !app.state.winner && !humanDefeated()) {
+  while (R.isBot(app.state, app.state.turn) && !app.state.winner && !humanDefeated()) {
     const player = app.state.turn;
     let steps = 0;
     while (app.state.turn === player && !app.state.winner) {
@@ -584,7 +599,7 @@ async function maybeBot() {
       ui.updateStrip(app.state, ctx());
       // Sichtbare Schritte kurz zeigen; unsichtbare nur gelegentlich dem
       // Browser Luft lassen, damit die Seite bedienbar bleibt.
-      if (shown) await sleep(430);
+      if (shown) await sleep(260);
       else if (steps % 8 === 0) await sleep(0);
       if (stale()) return;
       steps++;
@@ -599,7 +614,15 @@ async function maybeBot() {
   }
   app.busy = false;
   persist();
+  // Online: erst jetzt (nach allen KI-Zügen) den Stand speichern – der Server
+  // nimmt Speicherungen nur vom Spieler an, der zuletzt am Zug war.
+  if (app.online) {
+    app.botDriver = false;
+    await saveOnline();
+  }
   refresh();
+  offerReward();
+  offerDiplomacy();
 }
 
 async function onHexPick(key) {
@@ -613,6 +636,13 @@ async function onHexPick(key) {
   const rawCity = R.cityAt(st, q, r);
   // Städte im unentdeckten Nebel bleiben verborgen.
   const city = rawCity && R.cityView(st, v, rawCity) ? rawCity : null;
+
+  // Einheit in einer Stadt: erneutes Antippen wechselt zwischen beiden Menüs.
+  const prev = app.sel;
+  if (unit && city && prev) {
+    if (prev.kind === 'unit' && prev.id === unit.id) { app.sel = { kind: 'city', q, r }; refresh(); return; }
+    if (prev.kind === 'city' && prev.q === q && prev.r === r) { app.sel = { kind: 'unit', id: unit.id }; refresh(); return; }
+  }
 
   if (!myTurn()) {
     app.sel = unit ? { kind: 'unit', id: unit.id } : (city ? { kind: 'city', q, r } : null);
@@ -749,7 +779,13 @@ async function startOnline() {
     refresh();
     if (!app.myRole) ui.toast('Spiel läuft bereits – du schaust zu.');
   } else {
-    const state = R.createGame(Math.floor(Math.random() * 2 ** 31), 2);
+    const settings = ui.getSettings();
+    const bots = settings.onlineBots;
+    const state = R.createGame(Math.floor(Math.random() * 2 ** 31), 2 + bots, {
+      tribe: ui.getTribe(), stars: settings.stars, turnLimit: settings.turnLimit, aiLevel: settings.aiLevel,
+      mapSize: settings.mapSize, mapType: settings.mapType,
+      ai: Array.from({ length: bots }, (_, k) => 'player_' + (k + 3))
+    });
     const { match, error } = await net.createMatch(state);
     if (error) { ui.toast(error, 'warn'); showMenu(); return; }
     adopt(match.game_state);
@@ -813,7 +849,16 @@ function boot() {
     onDestroyBridge: doDestroyBridge,
     onDisband: doDisband,
     onNextIdle: nextIdle,
+    onSelectCity: (q, r) => { app.sel = { kind: 'city', q, r }; sfx('select'); refresh(); },
+    onSelectUnit: id => { if (R.findUnit(app.state, id)) { app.sel = { kind: 'unit', id }; sfx('select'); refresh(); } },
     onUndo: doUndo,
+    onCamera: cmd => {
+      if (cmd === 'rotL') render.rotateCamera(-1);
+      else if (cmd === 'rotR') render.rotateCamera(1);
+      else if (cmd === 'tiltUp') render.tiltCamera(-1);
+      else if (cmd === 'tiltDown') render.tiltCamera(1);
+      else render.resetCamera();
+    },
     onToggleSound: () => { setMuted(!isMuted()); ui.setSoundIcon(isMuted()); if (!isMuted()) sfx('select'); },
     onOfferPeace: doOfferPeace,
     onDeclareWar: doDeclareWar,
@@ -849,7 +894,7 @@ function boot() {
   if (location.hash.length > 1) startOnline();
   else showMenu();
 
-  window.__pb = { app, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); } };
+  window.__pb = { app, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera };
 }
 
 boot();

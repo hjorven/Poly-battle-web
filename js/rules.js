@@ -50,10 +50,12 @@ export function unitCost(state, player, type) {
 // Frieden zwischen zwei Stämmen: kein Angriff, kein Betreten der Städte des
 // anderen, keine Kontrollzone. Frieden braucht die Technologie Diplomatie.
 
-const pairKey = (a, b) => [a, b].sort().join('|');
+const pairKey = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
 
 export function atPeace(state, a, b) {
-  return !!(a && b && a !== b && state.peace && state.peace[pairKey(a, b)] != null);
+  if (!a || !b || a === b || !state.peace) return false;
+  for (const _ in state.peace) return state.peace[pairKey(a, b)] != null;
+  return false;
 }
 
 // Feind = anderer Besitzer, mit dem kein Frieden herrscht (neutral zählt mit).
@@ -417,7 +419,10 @@ export function updateExplored(state, player) {
 // er erst, wenn wieder eine Einheit oder Stadt hinschaut.
 
 function citySnapshot(c) {
-  return { owner: c.owner, pop: c.pop, wall: hasReward(c, 'wall'), isCapital: !!c.isCapital };
+  return {
+    owner: c.owner, pop: c.pop, wall: hasReward(c, 'wall'), isCapital: !!c.isCapital,
+    park: hasReward(c, 'park'), workshop: hasReward(c, 'workshop')
+  };
 }
 
 function rememberCities(state, player, keys) {
@@ -566,33 +571,49 @@ export function canAttackNow(state, unit) {
   return true;
 }
 
+// Belegte Felder einmal einsammeln statt für jedes Nachbarfeld alle
+// Einheiten zu durchsuchen (reachableMap/inZoc sind die KI-Hotspots).
+function occupancy(state) {
+  const occ = new Map();
+  for (const u of state.units) occ.set(hk(u.q, u.r), u);
+  return occ;
+}
+
 export function reachableMap(state, unit) {
   const out = new Map();
   if (unit.mp <= 0) return out;
   if (unit.acted && !(hasAbility(unit.type, 'escape') || hasAbility(unit.type, 'persist'))) return out;
   const budget = unit.mp;
+  const occ = occupancy(state);
+  const zocCache = new Map();
+  const zoc = (q, r) => {
+    const k = hk(q, r);
+    if (!zocCache.has(k)) zocCache.set(k, inZoc(state, unit, q, r, occ));
+    return zocCache.get(k);
+  };
   const dist = new Map([[hk(unit.q, unit.r), 0]]);
-  const queue = [[unit.q, unit.r, 0]];
-  while (queue.length) {
-    queue.sort((a, b) => a[2] - b[2]);
-    const [q, r, cost] = queue.shift();
-    if (cost > (dist.get(hk(q, r)) ?? Infinity)) continue;
-    for (const [nq, nr] of neighbors(q, r)) {
-      if (unitAt(state, nq, nr)) continue;
-      const tile = terrainAt(state, nq, nr);
-      if (!canEnter(state, unit, tile, nq, nr)) continue;
-      const c = cityAt(state, nq, nr);
-      if (c && atPeace(state, unit.owner, c.owner)) continue;
-      const switching = switchesDomain(state, unit, nq, nr);
-      // Ein- und Ausschiffen verbraucht die restliche Bewegung.
-      const nc = switching ? Math.max(cost + 1, budget) : cost + moveCost(state, unit, nq, nr);
-      if (nc > budget) continue;
-      const k = hk(nq, nr);
-      if (nc < (dist.get(k) ?? Infinity)) {
-        dist.set(k, nc);
-        // Kontrollzone: Neben einem Feind endet der Zug; auch nach dem
-        // Wechsel zwischen Land und Wasser geht es nicht weiter.
-        if (!switching && !inZoc(state, unit, nq, nr)) queue.push([nq, nr, nc]);
+  // Kosten sind kleine ganze Zahlen: Eimer je Kostenstufe statt Sortieren.
+  const buckets = [[[unit.q, unit.r]]];
+  for (let cost = 0; cost < buckets.length; cost++) {
+    for (const [q, r] of buckets[cost] || []) {
+      if (cost > (dist.get(hk(q, r)) ?? Infinity)) continue;
+      for (const [nq, nr] of neighbors(q, r)) {
+        const k = hk(nq, nr);
+        if (occ.has(k)) continue;
+        const tile = terrainAt(state, nq, nr);
+        if (!canEnter(state, unit, tile, nq, nr)) continue;
+        const c = cityAt(state, nq, nr);
+        if (c && atPeace(state, unit.owner, c.owner)) continue;
+        const switching = switchesDomain(state, unit, nq, nr);
+        // Ein- und Ausschiffen verbraucht die restliche Bewegung.
+        const nc = switching ? Math.max(cost + 1, budget) : cost + moveCost(state, unit, nq, nr);
+        if (nc > budget) continue;
+        if (nc < (dist.get(k) ?? Infinity)) {
+          dist.set(k, nc);
+          // Kontrollzone: Neben einem Feind endet der Zug; auch nach dem
+          // Wechsel zwischen Land und Wasser geht es nicht weiter.
+          if (!switching && !zoc(nq, nr)) (buckets[nc] || (buckets[nc] = [])).push([nq, nr]);
+        }
       }
     }
   }
@@ -602,9 +623,9 @@ export function reachableMap(state, unit) {
 }
 
 // Kontrollzone: Ein Feld neben einer feindlichen Einheit beendet die Bewegung.
-export function inZoc(state, unit, q, r) {
+export function inZoc(state, unit, q, r, occ = null) {
   return neighbors(q, r).some(([nq, nr]) => {
-    const e = unitAt(state, nq, nr);
+    const e = occ ? occ.get(hk(nq, nr)) : unitAt(state, nq, nr);
     return e && e !== unit && hostile(state, unit.owner, e.owner);
   });
 }
