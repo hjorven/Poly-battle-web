@@ -112,6 +112,16 @@ function bridgeStep(state, player) {
 }
 
 function bestBuilding(state, player) {
+  // Freigeschaltete Monumente sofort errichten – bevorzugt in kleinen Städten.
+  const monuments = R.readyMonuments(state, player);
+  if (monuments.length) {
+    const cities = R.citiesFor(state, player).slice().sort((a, b) => a.pop - b.pop);
+    for (const city of cities) {
+      for (const [q, r] of R.cityTiles(state, city)) {
+        if (R.canImprove(state, city, monuments[0], q, r).ok) return { kind: 'improve', city, type: monuments[0], q, r, score: 99 };
+      }
+    }
+  }
   const stars = state.stars[player];
   // Ohne Hafen keine Schiffe: mit Segeln den ersten Hafen bevorzugen.
   const needsPort = state.techs[player].includes('sailing') &&
@@ -126,7 +136,7 @@ function bestBuilding(state, player) {
       if (state.units.some(u => u.q === q && u.r === r)) continue;
       for (const type of Object.keys(IMPROVEMENTS)) {
         const def = IMPROVEMENTS[type];
-        if (def.tech && !state.techs[player].includes(def.tech)) continue;
+        if (def.monument || (def.tech && !state.techs[player].includes(def.tech))) continue;
         if (type === 'port' && hasPort) continue;
         if (stars < def.cost + 2) continue;
         if (!R.canImprove(state, city, type, q, r).ok) continue;

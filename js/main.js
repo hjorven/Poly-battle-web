@@ -83,12 +83,28 @@ function refresh() {
   ui.setIdle(idle.length);
   render.setIdleMarkers(idle);
   warnThreats();
+  announceMonuments();
   render.drawMinimap(app.state, viewer());
   updateSelection();
   checkWinnerUI();
 }
 
 // Bedrohte Städte rot markieren und einmal pro Zug darauf hinweisen.
+// Neu freigeschaltete Monumente einmal ankündigen.
+function announceMonuments() {
+  if (!myTurn()) return;
+  const p = actAs();
+  R.checkMonuments(app.state, p);
+  if (!app.monAnnounced) app.monAnnounced = new Set();
+  for (const t of R.readyMonuments(app.state, p)) {
+    const key = `${app.gen}:${p}:${t}`;
+    if (app.monAnnounced.has(key)) continue;
+    app.monAnnounced.add(key);
+    ui.toast(`Monument freigeschaltet: ${IMPROVEMENTS[t].name} – im Stadtmenü auf einem freien Feld errichten (+3 Bevölkerung)`, 'good');
+    sfx('promote');
+  }
+}
+
 function warnThreats() {
   const mine = myTurn() && !app.state.winner;
   const threats = mine ? R.threatenedCities(app.state, actAs()) : [];

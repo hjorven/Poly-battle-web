@@ -696,3 +696,11 @@ button:focus-visible {
 /* Kleine Inline-Symbole (Stern, Haken) */
 .ico { display: inline-block; vertical-align: -1px; }
 .vet-badge .ico, .uc-main .ico, .tribe-perk .ico { color: #ca8a04; }
+
+/* Monumente in der Übersicht */
+.monument-list { display: grid; gap: 6px; margin-bottom: 8px; }
+.monument { display: grid; grid-template-columns: 12px 1fr; column-gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; opacity: 0.7; }
+.monument .sub { grid-column: 2; font-size: 12px; color: var(--muted, #71717a); }
+.monument.ready { opacity: 1; border-color: #f59e0b; }
+.monument.done { opacity: 1; background: rgba(34, 197, 94, 0.08); }
+.mon-dot { width: 12px; height: 12px; border-radius: 50%; }

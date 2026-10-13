@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H } from './config.js';
+import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H, MONUMENTS } from './config.js';
 import { playerColor, isVisible, visibleKeys, cityView, lighthouseKeys, lighthouseFound } from './rules.js';
 import { toWorld, forEachHex, hk, DIRS } from './hex.js';
 
@@ -767,6 +767,29 @@ function improvementNode(type) {
     const tip = new THREE.Mesh(geo('tpTip', () => new THREE.ConeGeometry(0.02, 0.07, 5)), mat(0xc8a64a));
     tip.position.y = 0.32;
     g.add(tip);
+  } else if (MONUMENTS[type]) {
+    // Monument: gestufter Sockel, Säule und ein Wahrzeichen in eigener Farbe.
+    const stone = mat(0xe7e2d6), accent = mat(MONUMENTS[type].color);
+    const s1 = new THREE.Mesh(geo('mnStep1', () => new THREE.CylinderGeometry(0.3, 0.33, 0.06, 6)), stone);
+    s1.position.y = 0.03;
+    const s2 = new THREE.Mesh(geo('mnStep2', () => new THREE.CylinderGeometry(0.22, 0.25, 0.06, 6)), stone);
+    s2.position.y = 0.09;
+    const col = new THREE.Mesh(geo('mnCol', () => new THREE.CylinderGeometry(0.07, 0.09, 0.42, 6)), stone);
+    col.position.y = 0.33;
+    const cap = new THREE.Mesh(geo('mnCap', () => new THREE.BoxGeometry(0.2, 0.04, 0.2)), accent);
+    cap.position.y = 0.56;
+    g.add(s1, s2, col, cap);
+    const emblems = {
+      m_wisdom: () => new THREE.SphereGeometry(0.09, 10, 8),
+      m_valor: () => new THREE.ConeGeometry(0.07, 0.24, 4),
+      m_eye: () => new THREE.TorusGeometry(0.08, 0.03, 6, 14),
+      m_treasury: () => new THREE.BoxGeometry(0.15, 0.11, 0.11),
+      m_park: () => new THREE.IcosahedronGeometry(0.11, 0),
+      m_palace: () => new THREE.SphereGeometry(0.1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2)
+    };
+    const em = new THREE.Mesh(geo('mnEm' + type, emblems[type]), accent);
+    em.position.y = type === 'm_palace' ? 0.58 : 0.67;
+    g.add(em);
   }
   for (const m of g.children) m.castShadow = true;
   return g;
