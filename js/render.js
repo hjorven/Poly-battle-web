@@ -648,6 +648,20 @@ function unitBody(type, color) {
     add(new THREE.Mesh(geo('bsBridge', () => new THREE.BoxGeometry(0.16, 0.16, 0.14)), mat(0x5c6670)), 0.18, 0.44, 0);
     add(new THREE.Mesh(geo('bsPole', () => new THREE.CylinderGeometry(0.012, 0.012, 0.32, 5)), mat(0x333b42)), -0.24, 0.5, 0);
     add(new THREE.Mesh(geo('bsFlag', () => new THREE.BoxGeometry(0.12, 0.08, 0.02)), teamMat()), -0.19, 0.65, 0);
+  } else if (type === 'settler') {
+    // Siedler: Person mit Bündel auf dem Rücken und Wanderstab mit Fahne.
+    add(new THREE.Mesh(geo('stBody', () => new THREE.CylinderGeometry(0.11, 0.17, 0.4, 6)), teamMat()), 0, 0.2, 0);
+    add(new THREE.Mesh(geo('ico11', () => new THREE.IcosahedronGeometry(0.11, 0)), mat(0xe8c39a)), 0, 0.5, 0);
+    add(new THREE.Mesh(geo('stHat', () => new THREE.CylinderGeometry(0.15, 0.15, 0.025, 8)), mat(0xc9a25a)), 0, 0.58, 0);
+    add(new THREE.Mesh(geo('stHatTop', () => new THREE.CylinderGeometry(0.07, 0.08, 0.07, 8)), mat(0xc9a25a)), 0, 0.62, 0);
+    add(new THREE.Mesh(geo('stPack', () => new THREE.BoxGeometry(0.16, 0.2, 0.12)), mat(0x8a5a33)), -0.15, 0.3, 0);
+    add(new THREE.Mesh(geo('stRoll', () => new THREE.CylinderGeometry(0.045, 0.045, 0.2, 6)), mat(0xd8cfb8)), -0.15, 0.43, 0)
+      .rotation.x = Math.PI / 2;
+    add(new THREE.Mesh(geo('stStaff', () => new THREE.CylinderGeometry(0.015, 0.015, 0.62, 5)), mat(0x6b4a2b)), 0.18, 0.31, 0);
+    add(new THREE.Mesh(geo('stFlag', () => new THREE.BoxGeometry(0.02, 0.09, 0.13)), teamMat()), 0.18, 0.56, 0.07);
+  } else {
+    // Rückfallmodell, damit eine Einheit ohne eigenes Modell nie unsichtbar ist.
+    add(new THREE.Mesh(geo('oct22', () => new THREE.OctahedronGeometry(0.22)), teamMat()), 0, 0.26, 0);
   }
 
   g.userData.teamMats = teamMats;
