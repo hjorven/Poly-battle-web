@@ -4,7 +4,7 @@ import {
   UNITS, TERRAIN, MAP_W, MAP_H, START_STARS, MAX_POP, TRIBES,
   RESOURCES, IMPROVEMENTS
 } from '../js/config.js';
-import { hk, hexDistance, neighbors, inBounds } from '../js/hex.js';
+import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
 import { saveGame, loadGame, saveInfo, clearSave } from '../js/save.js';
 
@@ -1418,6 +1418,23 @@ test('Kartengrößen und -typen: richtige Größe, Wasser verbunden, Städte err
   }
   R.createGame(1, 4); // Standardgröße für die restlichen Tests
   assert.strictEqual(MAP_W, 26);
+});
+
+test('Hauptstadt steht mitten in freiem Land, nicht am Rand', () => {
+  for (const mapType of ['continents', 'pangaea', 'archipelago']) {
+    for (const n of [2, 4, 5]) {
+      for (let seed = 1; seed <= 10; seed++) {
+        const st = R.createGame(seed * 31, n, { mapType, mapSize: 'small' });
+        for (const c of st.cities.filter(c => c.isCapital)) {
+          assert.ok(Math.min(c.q, c.r, MAP_W - 1 - c.q, MAP_H - 1 - c.r) >= 3, `${mapType}: Abstand zum Rand`);
+          let land = 0;
+          forEachHex((q, r) => { if (hexDistance(q, r, c.q, c.r) <= 2 && R.terrainAt(st, q, r) === 'field') land++; });
+          assert.strictEqual(land, 19, `${mapType}/${n}/${seed}: Land um die Hauptstadt`);
+        }
+      }
+    }
+  }
+  R.createGame(1, 4);
 });
 
 test('Pangäa hat mehr Land als Archipel', () => {
