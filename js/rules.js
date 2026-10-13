@@ -4,7 +4,7 @@ import {
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
-  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -40,10 +40,28 @@ export function perkOf(state, player) {
   return t && t.perk ? t.perk.id : null;
 }
 
+// Summe eines Stufe-4-Bonus über alle erforschten Technologien, z. B.
+// techBonus(state, p, 'move', 'rider').
+export function techBonus(state, player, kind, type = null) {
+  let sum = 0;
+  for (const t of (state.techs && state.techs[player]) || []) {
+    const b = TECH_BONUS[t] && TECH_BONUS[t][kind];
+    if (b == null) continue;
+    sum += type == null ? b : (b[type] || 0);
+  }
+  return sum;
+}
+
 export function unitCost(state, player, type) {
-  const base = UNITS[type].cost;
+  let cost = UNITS[type].cost;
   const perk = perkOf(state, player);
-  return perk && PERK_DISCOUNT[perk] === type ? Math.max(1, base - 1) : base;
+  if (perk && PERK_DISCOUNT[perk] === type) cost -= 1;
+  cost -= techBonus(state, player, 'unitDiscount', type);
+  return Math.max(1, cost);
+}
+
+export function attackOf(state, unit) {
+  return UNITS[unit.type].atk + (unit.owner ? techBonus(state, unit.owner, 'atk', unit.type) : 0);
 }
 
 // --- Diplomatie ---------------------------------------------------------------
@@ -274,6 +292,9 @@ export function incomeFor(state, player) {
   const techs = state.techs[player] || [];
   if (techs.includes('construction')) s += cities;
   if (techs.includes('trade')) s += cities;
+  if (techs.includes('banking')) s += cities;
+  if (techs.includes('scholarship')) s += citiesFor(state, player).filter(c => c.pop >= 3).length;
+  if (techs.includes('harbors')) s += citiesFor(state, player).reduce((a, c) => a + cityPorts(state, c).length, 0);
   if (perkOf(state, player) === 'traders') s += Math.floor(cities / 2);
   if (isBot(state, player)) {
     const lvl = AI_LEVELS[state.aiLevel] || AI_LEVELS.normal;
@@ -287,8 +308,9 @@ export function isBot(state, player) {
 }
 
 export function maxMove(state, owner, type) {
-  const base = UNITS[type].move;
-  return hasAbility(type, 'water') && perkOf(state, owner) === 'seafarer' ? base + 1 : base;
+  let base = UNITS[type].move + techBonus(state, owner, 'move', type);
+  if (hasAbility(type, 'water') && perkOf(state, owner) === 'seafarer') base += 1;
+  return base;
 }
 
 export function ownLand(state, owner, q, r) {
@@ -366,13 +388,13 @@ export function defenceBonus(state, defender) {
 // Echte Kampfformel (BattleHelpers / Community-Wiki).
 // damage = Schaden am Verteidiger, retaliation = Schaden am Angreifer.
 export function battleResults(state, attacker, defender) {
-  const A = UNITS[attacker.type];
+  const atk = attackOf(state, attacker);
   const D = UNITS[defender.type];
-  const af = A.atk * (attacker.hp / hpCap(attacker));
+  const af = atk * (attacker.hp / hpCap(attacker));
   const df = D.def * (defender.hp / hpCap(defender)) * defenceBonus(state, defender);
   const total = af + df;
   if (total <= 0) return { damage: 0, retaliation: 0 };
-  const damage = Math.round((af / total) * A.atk * ACCELERATOR);
+  const damage = Math.round((af / total) * atk * ACCELERATOR);
   const retaliation = Math.round((df / total) * D.def * ACCELERATOR);
   return { damage, retaliation };
 }
@@ -387,6 +409,7 @@ export function unitSight(state, u) {
   }
   if (hasTech(state, u.owner, 'sailing')) radius += 1;
   if ((u.type === 'rider' || u.type === 'knight') && perkOf(state, u.owner) === 'lookouts') radius += 1;
+  radius += techBonus(state, u.owner, 'sight', u.type);
   return radius;
 }
 
@@ -503,6 +526,16 @@ export function threatened(state, u) {
   );
 }
 
+// Eigene Städte, die eine sichtbare feindliche Kampfeinheit im nächsten Zug
+// erreichen und angreifen könnte (Bewegung + Reichweite, ohne Gelände).
+export function threatenedCities(state, player) {
+  const foes = state.units.filter(e => hostile(state, player, e.owner) && canEverAttack(e.type) &&
+    isVisible(state, player, e.q, e.r));
+  if (!foes.length) return [];
+  return citiesFor(state, player).filter(c => foes.some(e =>
+    hexDistance(e.q, e.r, c.q, c.r) <= maxMove(state, e.owner, e.type) + UNITS[e.type].range));
+}
+
 // Heilt zu Rundenbeginn: Verschanzer, die nichts getan haben (wie bisher),
 // und jede Einheit, die nicht angegriffen hat und außer Reichweite aller
 // Gegner steht – auch wenn sie sich bewegt hat.
@@ -514,7 +547,7 @@ export function canRegenerate(state, u) {
 
 export function startTurn(state) {
   const p = state.turn;
-  const spirit = hasTech(state, p, 'spiritualism') ? 1 : 0;
+  const spirit = (hasTech(state, p, 'spiritualism') ? 1 : 0) + techBonus(state, p, 'heal');
 
   for (const u of state.units) {
     if (u.owner !== p || !canRegenerate(state, u)) continue;
@@ -833,8 +866,9 @@ export function trainUnit(state, city, type, player) {
   return { ok: true };
 }
 
-export function popCost(city) {
-  return city.pop + 2;
+export function popCost(city, state = null) {
+  const discount = state && city.owner ? techBonus(state, city.owner, 'popDiscount') : 0;
+  return Math.max(1, city.pop + 2 - discount);
 }
 
 export function canBuyPop(state, city, player) {
@@ -845,14 +879,14 @@ export function canBuyPop(state, city, player) {
   // die eigene Garnison darf in der Stadt stehen bleiben.
   const occupant = unitAt(state, city.q, city.r);
   if (occupant && occupant.owner !== player) return { ok: false, reason: 'Stadt belagert' };
-  if (state.stars[player] < popCost(city)) return { ok: false, reason: 'Zu wenig Sterne' };
+  if (state.stars[player] < popCost(city, state)) return { ok: false, reason: 'Zu wenig Sterne' };
   return { ok: true };
 }
 
 export function buyPop(state, city, player) {
   const chk = canBuyPop(state, city, player);
   if (!chk.ok) return chk;
-  state.stars[player] -= popCost(city);
+  state.stars[player] -= popCost(city, state);
   growCity(state, city, 1);
   return { ok: true };
 }
