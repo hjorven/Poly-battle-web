@@ -234,8 +234,11 @@ export function tribeColor(tribeId) {
   return t ? t.color : COLORS.neutral;
 }
 
-export function researchCost(tier, cityCount, hasPhilosophy = false) {
-  let cost = tier * (1 + cityCount);
+// Kosten: Stufenfaktor × (1 + Städte) + 2 je bereits erforschter Technologie.
+// Späte Stufen sind deutlich teurer, damit nicht jeder den ganzen Baum hat.
+const TIER_FACTOR = [1, 2, 4, 6];
+export function researchCost(tier, cityCount, hasPhilosophy = false, known = 0) {
+  let cost = TIER_FACTOR[tier - 1] * (1 + cityCount) + 2 * known;
   if (hasPhilosophy) cost = Math.ceil(cost * 0.8);
   return cost;
 }
