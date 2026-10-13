@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H, MONUMENTS } from './config.js';
-import { playerColor, isVisible, visibleKeys, cityView, lighthouseKeys, lighthouseFound } from './rules.js';
+import { playerColor, isVisible, visibleKeys, cityView, lighthouseKeys, lighthouseFound, roadAt, onRoadNet } from './rules.js';
 import { toWorld, forEachHex, hk, DIRS } from './hex.js';
 
 let colorMap = {};
@@ -381,6 +381,54 @@ function syncLighthouses(state, viewer) {
 
 function stepLighthouses(dt) {
   for (const g of lightNodes.values()) if (g.userData.beam.visible) g.userData.beam.rotation.y += dt * 0.9;
+}
+
+// --- Straßen -------------------------------------------------------------------
+// Je Straßenfeld ein Knoten: Mittelstück plus Arme zu benachbarten Straßen,
+// Städten und Brücken. Neu gebaut, wenn sich die Nachbarschaft ändert.
+
+const ROAD_COLOR = 0xb4875a;
+
+function roadNode(arms) {
+  const g = new THREE.Group();
+  const m = mat(ROAD_COLOR);
+  const hub = new THREE.Mesh(geo('rdHub', () => new THREE.CylinderGeometry(0.13, 0.13, 0.02, 8)), m);
+  hub.position.y = 0.01;
+  g.add(hub);
+  const len = Math.sqrt(3) / 2 * HEX_SIZE;
+  for (const d of arms) {
+    const [dq, dr] = DIRS[d];
+    const p = toWorld(dq, dr);
+    const arm = new THREE.Mesh(geo('rdArm', () => new THREE.BoxGeometry(len, 0.02, 0.18).translate(len / 2, 0, 0)), m);
+    arm.rotation.y = -Math.atan2(p.z, p.x);
+    arm.position.y = 0.01;
+    g.add(arm);
+  }
+  for (const c of g.children) c.receiveShadow = true;
+  return g;
+}
+
+function syncRoad(state, key, t) {
+  const [q, r] = key.split(',').map(Number);
+  let sig = '';
+  if (roadAt(state, q, r)) {
+    sig = 'r';
+    DIRS.forEach(([dq, dr], d) => { if (onRoadNet(state, q + dq, r + dr)) sig += d; });
+  }
+  if (t.roadSig === sig) return;
+  if (t.roadNode) {
+    t.mesh.remove(t.roadNode);
+    t.decor = t.decor.filter(d => d !== t.roadNode);
+    t.roadNode = null;
+  }
+  t.roadSig = sig;
+  if (!sig) return;
+  const n = roadNode([...sig.slice(1)].map(Number));
+  n.position.y = TERRAIN[t.terrain].height / 2 + 0.005;
+  n.visible = t.seen;
+  t.mesh.add(n);
+  t.decor.push(n);
+  t.roadNode = n;
 }
 
 // --- Brücken ----------------------------------------------------------------
@@ -1467,6 +1515,7 @@ export function syncBoard(state, viewer = null) {
     syncImprovement(t, state.improvements ? state.improvements[key] : null);
     syncRuin(t, state.ruins && state.ruins[key]);
     syncBridge(t, state.bridges ? state.bridges[key] : null);
+    syncRoad(state, key, t);
     const seen = !explored || explored.has(key);
     t.seen = seen;
     t.lit = !visible || visible.has(key);

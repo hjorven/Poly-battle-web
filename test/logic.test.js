@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import * as R from '../js/rules.js';
 import {
   UNITS, TERRAIN, MAP_W, MAP_H, START_STARS, MAX_POP, TRIBES,
-  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE, TECHS, MONUMENT_POP
+  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE, TECHS, MONUMENT_POP, ROAD
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
@@ -253,6 +253,32 @@ test('Monumente: Erfolg schaltet frei, einmal bauen, +3 Bevölkerung, Punkte', (
   assert.ok(!R.improve(st, city, 'm_treasury', 4, 5, 'player_1').ok);
   st.killsBy = { player_1: 10 };
   assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), ['m_valor']);
+});
+
+test('Straßen: halbe Bewegung, Bau im Gebiet oder per Einheit, nicht in fremdem Gebiet', () => {
+  const st = makeState();
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }, { q: 12, r: 5, owner: 'player_2', pop: 1 }];
+  st.stars.player_1 = 30;
+  assert.ok(!R.canBuildRoad(st, 'player_1', 6, 5).ok, 'ohne Wege');
+  st.techs.player_1.push('riding', 'roads');
+  assert.ok(R.buildRoad(st, 'player_1', 6, 5).ok, 'im eigenen Gebiet über das Stadtmenü');
+  assert.strictEqual(st.stars.player_1, 30 - ROAD.cost);
+  assert.ok(!R.canBuildRoad(st, 'player_1', 8, 5).ok, 'außerhalb nur mit Einheit');
+  const w = unit('w', 'player_1', 'warrior', 7, 5);
+  st.units = [w];
+  assert.ok(R.buildRoad(st, 'player_1', 7, 5, w).ok, 'Einheit baut auf neutralem Land');
+  assert.strictEqual(w.mp, 0, 'Bewegung verbraucht');
+  assert.ok(!R.canBuildRoad(st, 'player_1', 11, 5, true).ok, 'fremdes Gebiet');
+  // Stadt (5,5) -> Straße (6,5) -> Straße (7,5): je 0,5
+  const r = unit('r', 'player_1', 'warrior', 5, 5);
+  st.units = [r];
+  const reach = R.reachableMap(st, r);
+  assert.strictEqual(reach.get(hk(6, 5)), 0.5);
+  assert.strictEqual(reach.get(hk(7, 5)), 1);
+  assert.ok(!reach.has(hk(8, 5)), 'abseits der Straße volle Kosten');
+  assert.ok(R.moveUnit(st, r, 6, 5).ok);
+  assert.strictEqual(r.mp, 0.5);
+  assert.ok(R.reachableMap(st, r).has(hk(7, 5)), 'halber Schritt reicht für das nächste Straßenfeld');
 });
 
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
@@ -1257,10 +1283,11 @@ test('Brücke bauen: 1 und 2 Felder, braucht Wege, kostet Sterne und den Zug', (
   assert.strictEqual(st.stars.player_1, 10);
   assert.ok(R.bridgeAt(st, 6, 5) && R.bridgeAt(st, 7, 5));
   assert.ok(w.acted && w.mp === 0, 'Zug verbraucht');
-  // Nächster Zug: über die Brücke laufen (Kosten 1 pro Feld).
+  // Nächster Zug: über die Brücke laufen (1 aufs erste Feld, Brücke zu Brücke
+  // wie Straße 0,5, dann 1 ans Ufer).
   w.acted = false; w.hasMoved = false; w.mp = 3;
   const reach = R.reachableMap(st, w);
-  assert.strictEqual(reach.get(hk(8, 5)), 3, 'über 2 Brückenfelder ans andere Ufer');
+  assert.strictEqual(reach.get(hk(8, 5)), 2.5, 'über 2 Brückenfelder ans andere Ufer');
 });
 
 test('Brücke über 3 Felder Wasser ist nicht möglich', () => {

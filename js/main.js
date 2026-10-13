@@ -412,6 +412,17 @@ async function doImprove(city, type, q, r) {
   await afterAction();
 }
 
+async function doBuildRoad(q, r, unit) {
+  if (unit) { unit = liveUnit(unit); if (!unit) return; }
+  const res = R.buildRoad(app.state, actAs(), q, r, unit);
+  if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  app.busy = true;
+  ui.toast('Straße gebaut', 'good');
+  sfx('build');
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
 async function doFound(unit) {
   unit = liveUnit(unit);
   if (!unit) return;
@@ -845,6 +856,7 @@ function boot() {
     onImprove: doImprove,
     onFound: doFound,
     onBuildBridge: doBuildBridge,
+    onBuildRoad: doBuildRoad,
     onDestroyBridge: doDestroyBridge,
     onDisband: doDisband,
     onNextIdle: nextIdle,

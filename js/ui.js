@@ -1,10 +1,10 @@
 import {
   UNITS, UNIT_ORDER, TECHS, NAMES, MAX_POP,
-  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS, MONUMENTS,
+  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS, MONUMENTS, ROAD,
   CITY_REWARDS, GAME_MODES, BRIDGE, MAP_SIZES, MAP_TYPES
 } from './config.js';
 import {
-  cityIncome, techCost, tribeName, playerColor, maxHp, maxMove, attackOf, popCost, monumentReady,
+  cityIncome, techCost, tribeName, playerColor, maxHp, maxMove, attackOf, popCost, monumentReady, canBuildRoad, roadAt,
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
@@ -273,7 +273,7 @@ export function showUnitChip(state, unit, ctx) {
   chip.innerHTML = `
     <span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>
     <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ' + STAR_ICON : ''}</b>
-      <span class="uc-sub">Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${unit.mp}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}</span></span>
+      <span class="uc-sub">Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}</span></span>
     <button class="btn ghost small" data-details>Details</button>`;
   chip.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
   chip.classList.remove('hidden');
@@ -337,6 +337,16 @@ export function showUnitPanel(state, unit, ctx) {
       }
       extra += `</div>`;
     }
+    // Straße auf dem eigenen Feld (auch außerhalb des Gebiets).
+    if (!unit.carry && !UNITS[unit.type].abilities.includes('water') && state.techs[ctx.actAs].includes(ROAD.tech) && !roadAt(state, unit.q, unit.r)) {
+      const chk = canBuildRoad(state, ctx.actAs, unit.q, unit.r, true);
+      const spent = unit.mp <= 0 && unit.hasMoved;
+      if (!(chk.reason === 'Städte sind schon angebunden')) {
+        extra += `<div class="action-list"><button class="btn action" data-road ${chk.ok && !spent ? '' : 'disabled'}>
+          <span>Straße bauen<span class="sub">${spent ? 'Keine Bewegung mehr' : chk.ok ? 'Auf diesem Feld · verbraucht die restliche Bewegung' : chk.reason}</span></span>
+          <span class="cost">${ROAD.cost} Sterne</span></button></div>`;
+      }
+    }
     const breakable = destroyableBridges(state, unit);
     if (breakable.length) {
       extra += `<div class="action-list">${breakable.map(([q, r]) =>
@@ -371,7 +381,7 @@ export function showUnitPanel(state, unit, ctx) {
       <div class="stat">Leben<b>${unit.hp}/${cap}</b></div>
       <div class="stat">Angriff<b>${attackOf(state, unit)}</b></div>
       <div class="stat">Verteidigung<b>${def.def}</b></div>
-      <div class="stat">Bewegung<b>${unit.mp}/${maxMove(state, unit.owner, unit.type)}</b></div>
+      <div class="stat">Bewegung<b>${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}</b></div>
       <div class="stat">Reichweite<b>${def.range}</b></div>
     </div>
     <div class="ability-row">${abilityChips(unit.type)}</div>
@@ -386,6 +396,8 @@ export function showUnitPanel(state, unit, ctx) {
     <div class="hint">${hint}</div>
   `);
   wirePanel($('panel'));
+  const roadBtn = $('panel').querySelector('[data-road]');
+  if (roadBtn) roadBtn.addEventListener('click', () => handlers.onBuildRoad(unit.q, unit.r, unit));
   const foundBtn = $('panel').querySelector('[data-found]');
   if (foundBtn) foundBtn.addEventListener('click', () => handlers.onFound(unit));
   $('panel').querySelectorAll('[data-bridge]').forEach(btn => {
@@ -432,6 +444,7 @@ export function showCityPanel(state, city, ctx) {
     const res = resourceAt(state, q, r);
     let tag = tdef.name, cls = '';
     if (imp) { tag = IMPROVEMENTS[imp].name; cls = 'built'; }
+    if (roadAt(state, q, r)) tag += ' + Straße';
     else if (res) { tag = RESOURCES[res].name; cls = 'res'; }
     return `<span class="tile-chip ${cls}">${tag}</span>`;
   }).join('');
@@ -502,6 +515,12 @@ export function showCityPanel(state, city, ctx) {
   if (rwBtn) rwBtn.addEventListener('click', () => showReward(state, city, ctx));
   const popBtn = $('panel').querySelector('[data-buypop]');
   if (popBtn) popBtn.addEventListener('click', () => handlers.onBuyPop(city));
+  $('panel').querySelectorAll('[data-buildroad]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const [q, r] = btn.dataset.buildroad.split(',').map(Number);
+      handlers.onBuildRoad(q, r, null);
+    });
+  });
   $('panel').querySelectorAll('[data-improve]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onImprove(city, btn.dataset.improve, Number(btn.dataset.q), Number(btn.dataset.r)));
   });
@@ -572,12 +591,14 @@ export function showHandover(name, onGo) {
 
 function buildRows(state, city, ctx) {
   const rows = [];
+  const roadsKnown = city.owner && state.techs[city.owner].includes(ROAD.tech);
   for (const [q, r] of cityTiles(state, city)) {
-    if (improvementAt(state, q, r) || resourceAt(state, q, r)) continue;
     const tile = terrainAt(state, q, r);
-    const types = Object.keys(IMPROVEMENTS).filter(k => IMPROVEMENTS[k].terrain.includes(tile) &&
-      (!IMPROVEMENTS[k].monument || monumentReady(state, city.owner, k)));
-    if (!types.length) continue;
+    const free = !improvementAt(state, q, r) && !resourceAt(state, q, r);
+    const types = free ? Object.keys(IMPROVEMENTS).filter(k => IMPROVEMENTS[k].terrain.includes(tile) &&
+      (!IMPROVEMENTS[k].monument || monumentReady(state, city.owner, k))) : [];
+    const road = roadsKnown && TERRAIN[tile].walkable && !roadAt(state, q, r);
+    if (!types.length && !road) continue;
     const cellName = TERRAIN[tile].name;
     const btns = types.map(t => {
       const d = IMPROVEMENTS[t];
@@ -589,7 +610,11 @@ function buildRows(state, city, ctx) {
       if (!ctx.myTurn && !reason) reason = 'Nicht dein Zug';
       const locked = !ctx.myTurn;
       return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.name} <span class="cost">${d.monument ? 'frei' : d.cost}</span></button>`;
-    }).join('');
+    }).join('') + (road ? (() => {
+      const chk = canBuildRoad(state, city.owner, q, r);
+      const reason = !ctx.myTurn ? 'Nicht dein Zug' : chk.ok ? '' : chk.reason;
+      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-buildroad="${q},${r}" ${ctx.myTurn ? '' : 'disabled'} title="${reason || 'Straße: halbe Bewegung'}">Straße <span class="cost">${ROAD.cost}</span></button>`;
+    })() : '');
     rows.push(`<div class="build-row"><span class="build-tile">${cellName}</span><span class="build-btns">${btns}</span></div>`);
   }
   if (!rows.length) return '';
@@ -1006,6 +1031,7 @@ export function hideConfirm() {
   $('confirm-overlay').classList.add('hidden');
 }
 
+const fmtMp = n => String(n).replace('.', ',');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function unitStatus(u, actAs) {
