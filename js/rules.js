@@ -4,7 +4,7 @@ import {
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
-  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -373,6 +373,47 @@ export function bridgeAt(state, q, r) {
   return !!(state.bridges && state.bridges[hk(q, r)] != null);
 }
 
+export function roadAt(state, q, r) {
+  return !!(state.roads && state.roads[hk(q, r)]);
+}
+
+// Teil des Straßennetzes: Straße, Stadt oder Brücke.
+export function onRoadNet(state, q, r) {
+  return roadAt(state, q, r) || !!cityAt(state, q, r) || bridgeAt(state, q, r);
+}
+
+// Straße auf (q, r) möglich? `byUnit`: Bau durch eine Einheit vor Ort statt
+// über das Stadtmenü (dann auch außerhalb des eigenen Gebiets erlaubt).
+export function canBuildRoad(state, player, q, r, byUnit = false) {
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (!hasTech(state, player, ROAD.tech)) return { ok: false, reason: `Technologie fehlt: ${TECHS[ROAD.tech].name}` };
+  if (!inBounds(q, r)) return { ok: false, reason: 'Außerhalb der Karte' };
+  const t = TERRAIN[terrainAt(state, q, r)];
+  if (!t.walkable) return { ok: false, reason: 'Nur auf Land' };
+  if (roadAt(state, q, r)) return { ok: false, reason: 'Hier ist schon eine Straße' };
+  if (cityAt(state, q, r)) return { ok: false, reason: 'Städte sind schon angebunden' };
+  const owner = tileCity(state, q, r);
+  if (owner && owner.owner && owner.owner !== player) return { ok: false, reason: 'Fremdes Gebiet' };
+  if (!byUnit && !(owner && owner.owner === player)) return { ok: false, reason: 'Nicht im eigenen Gebiet' };
+  if (state.stars[player] < ROAD.cost) return { ok: false, reason: 'Zu wenig Sterne' };
+  return { ok: true };
+}
+
+export function buildRoad(state, player, q, r, unit = null) {
+  if (unit) {
+    if (unit.owner !== player || unit.q !== q || unit.r !== r) return { ok: false, reason: 'Einheit steht nicht hier' };
+    if (unit.carry || hasAbility(unit.type, 'water')) return { ok: false, reason: 'Nur Landeinheiten' };
+    if (unit.mp <= 0 && unit.hasMoved) return { ok: false, reason: 'Keine Bewegung mehr' };
+  }
+  const chk = canBuildRoad(state, player, q, r, !!unit);
+  if (!chk.ok) return chk;
+  if (!state.roads) state.roads = {};
+  state.roads[hk(q, r)] = true;
+  state.stars[player] -= ROAD.cost;
+  if (unit) { unit.mp = 0; unit.hasMoved = true; }
+  return { ok: true };
+}
+
 export function defenceBonus(state, defender) {
   const tile = terrainAt(state, defender.q, defender.r);
   const t = TERRAIN[tile];
@@ -625,7 +666,9 @@ export function reachableMap(state, unit) {
   const out = new Map();
   if (unit.mp <= 0) return out;
   if (unit.acted && !(hasAbility(unit.type, 'escape') || hasAbility(unit.type, 'persist'))) return out;
-  const budget = unit.mp;
+  // Intern in halben Schritten rechnen (Straße zu Straße = 1 halber Schritt).
+  const budget = Math.round(unit.mp * 2);
+  const land = !hasAbility(unit.type, 'water');
   const occ = occupancy(state);
   const zocCache = new Map();
   const zoc = (q, r) => {
@@ -648,7 +691,9 @@ export function reachableMap(state, unit) {
         if (c && atPeace(state, unit.owner, c.owner)) continue;
         const switching = switchesDomain(state, unit, nq, nr);
         // Ein- und Ausschiffen verbraucht die restliche Bewegung.
-        const nc = switching ? Math.max(cost + 1, budget) : cost + moveCost(state, unit, nq, nr);
+        const road = land && onRoadNet(state, q, r) && onRoadNet(state, nq, nr);
+        const step = road ? 1 : moveCost(state, unit, nq, nr) * 2;
+        const nc = switching ? Math.max(cost + 2, budget) : cost + step;
         if (nc > budget) continue;
         if (nc < (dist.get(k) ?? Infinity)) {
           dist.set(k, nc);
@@ -660,7 +705,7 @@ export function reachableMap(state, unit) {
     }
   }
   dist.delete(hk(unit.q, unit.r));
-  for (const [k, v] of dist) out.set(k, v);
+  for (const [k, v] of dist) out.set(k, v / 2);
   return out;
 }
 

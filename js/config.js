@@ -167,7 +167,7 @@ export const TECHS = {
   ramming: { name: 'Rammen', tier: 2, req: 'fishing', desc: 'Zweig: Aquatismus' },
   archery: { name: 'Bogenschießen', tier: 2, req: 'hunting', desc: 'Bogenschützen; Wald-Verteidigung' },
   forestry: { name: 'Forstwirtschaft', tier: 2, req: 'hunting', desc: 'Sägewerke bauen (+1 Einkommen)' },
-  roads: { name: 'Wege', tier: 2, req: 'riding', desc: 'Im eigenen Gebiet kostet Wald und Berg nur 1 Bewegung; Brücken bauen' },
+  roads: { name: 'Wege', tier: 2, req: 'riding', desc: 'Straßen (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1' },
   freespirit: { name: 'Freier Geist', tier: 2, req: 'riding', desc: 'Zweig: Ritterlichkeit' },
 
   construction: { name: 'Baukunst', tier: 3, req: 'farming', desc: '+1 Stern pro Stadt' },
@@ -284,6 +284,10 @@ export const MONUMENT_POP = 3;
 // Landeinheiten bauen Brücken über 1–2 Felder Flachwasser; Schiffe fahren
 // darunter durch oder reißen sie ein.
 export const BRIDGE = { tech: 'roads', costPerTile: 5, maxLen: 2 };
+// Straßen: Schritt von Straße zu Straße (Städte und Brücken zählen mit) kostet
+// halbe Bewegung. Bau im eigenen Gebiet über das Stadtmenü, sonst mit einer
+// Einheit auf dem Feld (nicht in fremdem Gebiet).
+export const ROAD = { tech: 'roads', cost: 3 };
 // Auflösen einer Einheit erstattet diesen Anteil der Kosten.
 export const DISBAND_REFUND = 0.5;
 
