@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import * as R from '../js/rules.js';
 import {
   UNITS, TERRAIN, MAP_W, MAP_H, START_STARS, MAX_POP, TRIBES,
-  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE, TECHS
+  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE, TECHS, MONUMENT_POP, ROAD, BOUNTY
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
@@ -231,6 +231,95 @@ test('Stufe 4: Boni wirken (Kosten, Angriff, Bewegung, Einkommen, Heilung)', () 
   R.startTurn(st);
   assert.strictEqual(hurt.hp, 2 + 2 + 2, 'Heilkunst: +2');
   for (const [id, t] of Object.entries(TECHS)) if (t.tier === 4) assert.strictEqual(TECHS[t.req].tier, 3, id);
+});
+
+test('Monumente: Erfolg schaltet frei, einmal bauen, +3 Bevölkerung, Punkte', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1 };
+  st.cities = [city];
+  assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), []);
+  assert.ok(!R.canImprove(st, city, 'm_treasury', 6, 5).ok, 'noch gesperrt');
+  st.stars.player_1 = 100;
+  assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), ['m_treasury']);
+  st.stars.player_1 = 5;
+  assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), [], 'bleibt freigeschaltet, nicht doppelt');
+  assert.ok(R.monumentReady(st, 'player_1', 'm_treasury'));
+  const before = R.score(st, 'player_1');
+  assert.ok(R.improve(st, city, 'm_treasury', 6, 5, 'player_1').ok);
+  assert.strictEqual(st.stars.player_1, 5, 'kostenlos');
+  assert.strictEqual(city.pop, 1 + MONUMENT_POP);
+  assert.ok(R.score(st, 'player_1') >= before + SCORE.monument);
+  assert.ok(!R.monumentReady(st, 'player_1', 'm_treasury'), 'nur einmal');
+  assert.ok(!R.improve(st, city, 'm_treasury', 4, 5, 'player_1').ok);
+  st.killsBy = { player_1: 10 };
+  assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), ['m_valor']);
+});
+
+test('Straßen: halbe Bewegung, Bau im Gebiet oder per Einheit, nicht in fremdem Gebiet', () => {
+  const st = makeState();
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }, { q: 12, r: 5, owner: 'player_2', pop: 1 }];
+  st.stars.player_1 = 30;
+  assert.ok(!R.canBuildRoad(st, 'player_1', 6, 5).ok, 'ohne Wege');
+  st.techs.player_1.push('riding', 'roads');
+  assert.ok(R.buildRoad(st, 'player_1', 6, 5).ok, 'im eigenen Gebiet über das Stadtmenü');
+  assert.strictEqual(st.stars.player_1, 30 - ROAD.cost);
+  assert.ok(!R.canBuildRoad(st, 'player_1', 8, 5).ok, 'außerhalb nur mit Einheit');
+  const w = unit('w', 'player_1', 'warrior', 7, 5);
+  st.units = [w];
+  assert.ok(R.buildRoad(st, 'player_1', 7, 5, w).ok, 'Einheit baut auf neutralem Land');
+  assert.strictEqual(w.mp, 0, 'Bewegung verbraucht');
+  assert.ok(!R.canBuildRoad(st, 'player_1', 11, 5, true).ok, 'fremdes Gebiet');
+  // Stadt (5,5) -> Straße (6,5) -> Straße (7,5): je 0,5
+  const r = unit('r', 'player_1', 'warrior', 5, 5);
+  st.units = [r];
+  const reach = R.reachableMap(st, r);
+  assert.strictEqual(reach.get(hk(6, 5)), 0.5);
+  assert.strictEqual(reach.get(hk(7, 5)), 1);
+  assert.ok(!reach.has(hk(8, 5)), 'abseits der Straße volle Kosten');
+  assert.ok(R.moveUnit(st, r, 6, 5).ok);
+  assert.strictEqual(r.mp, 0.5);
+  assert.ok(R.reachableMap(st, r).has(hk(7, 5)), 'halber Schritt reicht für das nächste Straßenfeld');
+});
+
+test('Rückblick: Verluste anderer Spieler werden einmal gemeldet', () => {
+  const st = makeState();
+  st.turn = 'player_2';
+  const a = unit('a', 'player_2', 'swordsman', 5, 5), d = unit('d', 'player_1', 'warrior', 6, 5, { hp: 1 });
+  const h = unit('h', 'player_1', 'defender', 7, 5); // neben dem Feld, auf das der Sieger nachrückt
+  st.units = [a, d, h];
+  assert.ok(R.attack(st, a, d).killed);
+  a.acted = false; a.hasMoved = false;
+  R.attack(st, a, h);
+  const news = R.takeNews(st, 'player_1');
+  assert.deepStrictEqual(news.map(e => e.kind), ['unitLost', 'hit']);
+  assert.strictEqual(news[0].by, 'player_2');
+  assert.deepStrictEqual(R.takeNews(st, 'player_1'), [], 'nur einmal');
+  assert.deepStrictEqual(R.takeNews(st, 'player_2'), [], 'eigene Taten nicht');
+});
+
+test('Schonfrist: KI greift Menschen anfangs nicht an, bis sie angegriffen wird; Beute', () => {
+  const st = makeState();
+  st.ai = ['player_2'];
+  st.aiLevel = 'normal';
+  st.cities = [{ q: 2, r: 2, owner: 'player_1', pop: 1 }, { q: 12, r: 12, owner: 'player_2', pop: 1 }];
+  const mine = unit('m', 'player_1', 'warrior', 6, 5, { hp: 3 });
+  const bot = unit('b', 'player_2', 'swordsman', 5, 5);
+  st.units = [mine, bot];
+  st.turn = 'player_2';
+  assert.ok(R.graceProtects(st, 'player_2', 'player_1'));
+  assert.ok(!R.graceProtects(st, 'player_1', 'player_2'), 'Menschen sind nicht gebunden');
+  const step = botStep(st, 'player_2');
+  assert.ok(!step || step.kind !== 'attack', 'kein Angriff in der Schonfrist');
+  st.round = 7;
+  assert.ok(!R.graceProtects(st, 'player_2', 'player_1'), 'nach Runde 6 vorbei');
+  st.round = 2;
+  st.turn = 'player_1';
+  const stars = st.stars.player_1;
+  bot.hp = 1;
+  const res = R.attack(st, mine, bot);
+  assert.ok(res.events.some(e => e.kind === 'provoke' && e.player === 'player_2'));
+  assert.ok(!R.graceProtects(st, 'player_2', 'player_1'), 'angegriffen: Schonfrist dieser KI vorbei');
+  assert.strictEqual(st.stars.player_1, stars + BOUNTY, 'Beute');
 });
 
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
@@ -510,18 +599,20 @@ test('Forschung: Voraussetzungen, Kostenskalierung, Philosophie-Rabatt', () => {
   st.stars.player_1 = 100;
 
   assert.ok(!R.research(st, 'shields', 'player_1').ok, 'Voraussetzung Organisation fehlt');
-  assert.strictEqual(R.techCost(st, 'organization', 'player_1'), 2, 'Tier1 * (1 + 1 Stadt)');
+  assert.strictEqual(R.techCost(st, 'organization', 'player_1'), 2, 'Tier1 * (1 + 1 Stadt), noch nichts erforscht');
   assert.ok(R.research(st, 'organization', 'player_1').ok);
   assert.ok(!R.research(st, 'organization', 'player_1').ok, 'nicht doppelt');
   assert.ok(R.research(st, 'shields', 'player_1').ok, 'Voraussetzung erfüllt');
 
   st.cities.push({ q: 5, r: 5, owner: 'player_1', pop: 1, trained: false });
-  assert.strictEqual(R.techCost(st, 'hunting', 'player_1'), 3, 'Tier1 * (1 + 2 Städte)');
+  assert.strictEqual(R.techCost(st, 'hunting', 'player_1'), 3 + 2 * 2, 'Tier1 * (1 + 2 Städte) + 2 je bekannter Technik');
+  assert.strictEqual(R.techCost(st, 'smithery', 'player_1'), 4 * 3 + 2 * 2, 'Stufe 3: Faktor 4');
+  assert.strictEqual(R.techCost(st, 'banking', 'player_1'), 6 * 3 + 2 * 2, 'Stufe 4: Faktor 6');
 
   const before = R.techCost(st, 'philosophy', 'player_1');
   st.techs.player_1.push('philosophy');
   const after = R.techCost(st, 'philosophy', 'player_1');
-  assert.strictEqual(after, Math.ceil(before * 0.8));
+  assert.strictEqual(after, Math.ceil((before + 2) * 0.8));
 });
 
 test('Zug beenden: Rotation, Einkommen, Rundenzähler, Verschanzen-Heilung', () => {
@@ -1233,10 +1324,11 @@ test('Brücke bauen: 1 und 2 Felder, braucht Wege, kostet Sterne und den Zug', (
   assert.strictEqual(st.stars.player_1, 10);
   assert.ok(R.bridgeAt(st, 6, 5) && R.bridgeAt(st, 7, 5));
   assert.ok(w.acted && w.mp === 0, 'Zug verbraucht');
-  // Nächster Zug: über die Brücke laufen (Kosten 1 pro Feld).
+  // Nächster Zug: über die Brücke laufen (1 aufs erste Feld, Brücke zu Brücke
+  // wie Straße 0,5, dann 1 ans Ufer).
   w.acted = false; w.hasMoved = false; w.mp = 3;
   const reach = R.reachableMap(st, w);
-  assert.strictEqual(reach.get(hk(8, 5)), 3, 'über 2 Brückenfelder ans andere Ufer');
+  assert.strictEqual(reach.get(hk(8, 5)), 2.5, 'über 2 Brückenfelder ans andere Ufer');
 });
 
 test('Brücke über 3 Felder Wasser ist nicht möglich', () => {

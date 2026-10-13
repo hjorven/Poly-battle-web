@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H } from './config.js';
-import { playerColor, isVisible, visibleKeys, cityView, lighthouseKeys, lighthouseFound } from './rules.js';
+import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H, MONUMENTS } from './config.js';
+import { playerColor, isVisible, visibleKeys, cityView, lighthouseKeys, lighthouseFound, roadAt, onRoadNet } from './rules.js';
 import { toWorld, forEachHex, hk, DIRS } from './hex.js';
 
 let colorMap = {};
@@ -381,6 +381,54 @@ function syncLighthouses(state, viewer) {
 
 function stepLighthouses(dt) {
   for (const g of lightNodes.values()) if (g.userData.beam.visible) g.userData.beam.rotation.y += dt * 0.9;
+}
+
+// --- Straßen -------------------------------------------------------------------
+// Je Straßenfeld ein Knoten: Mittelstück plus Arme zu benachbarten Straßen,
+// Städten und Brücken. Neu gebaut, wenn sich die Nachbarschaft ändert.
+
+const ROAD_COLOR = 0xb4875a;
+
+function roadNode(arms) {
+  const g = new THREE.Group();
+  const m = mat(ROAD_COLOR);
+  const hub = new THREE.Mesh(geo('rdHub', () => new THREE.CylinderGeometry(0.13, 0.13, 0.02, 8)), m);
+  hub.position.y = 0.01;
+  g.add(hub);
+  const len = Math.sqrt(3) / 2 * HEX_SIZE;
+  for (const d of arms) {
+    const [dq, dr] = DIRS[d];
+    const p = toWorld(dq, dr);
+    const arm = new THREE.Mesh(geo('rdArm', () => new THREE.BoxGeometry(len, 0.02, 0.18).translate(len / 2, 0, 0)), m);
+    arm.rotation.y = -Math.atan2(p.z, p.x);
+    arm.position.y = 0.01;
+    g.add(arm);
+  }
+  for (const c of g.children) c.receiveShadow = true;
+  return g;
+}
+
+function syncRoad(state, key, t) {
+  const [q, r] = key.split(',').map(Number);
+  let sig = '';
+  if (roadAt(state, q, r)) {
+    sig = 'r';
+    DIRS.forEach(([dq, dr], d) => { if (onRoadNet(state, q + dq, r + dr)) sig += d; });
+  }
+  if (t.roadSig === sig) return;
+  if (t.roadNode) {
+    t.mesh.remove(t.roadNode);
+    t.decor = t.decor.filter(d => d !== t.roadNode);
+    t.roadNode = null;
+  }
+  t.roadSig = sig;
+  if (!sig) return;
+  const n = roadNode([...sig.slice(1)].map(Number));
+  n.position.y = TERRAIN[t.terrain].height / 2 + 0.005;
+  n.visible = t.seen;
+  t.mesh.add(n);
+  t.decor.push(n);
+  t.roadNode = n;
 }
 
 // --- Brücken ----------------------------------------------------------------
@@ -767,6 +815,29 @@ function improvementNode(type) {
     const tip = new THREE.Mesh(geo('tpTip', () => new THREE.ConeGeometry(0.02, 0.07, 5)), mat(0xc8a64a));
     tip.position.y = 0.32;
     g.add(tip);
+  } else if (MONUMENTS[type]) {
+    // Monument: gestufter Sockel, Säule und ein Wahrzeichen in eigener Farbe.
+    const stone = mat(0xe7e2d6), accent = mat(MONUMENTS[type].color);
+    const s1 = new THREE.Mesh(geo('mnStep1', () => new THREE.CylinderGeometry(0.3, 0.33, 0.06, 6)), stone);
+    s1.position.y = 0.03;
+    const s2 = new THREE.Mesh(geo('mnStep2', () => new THREE.CylinderGeometry(0.22, 0.25, 0.06, 6)), stone);
+    s2.position.y = 0.09;
+    const col = new THREE.Mesh(geo('mnCol', () => new THREE.CylinderGeometry(0.07, 0.09, 0.42, 6)), stone);
+    col.position.y = 0.33;
+    const cap = new THREE.Mesh(geo('mnCap', () => new THREE.BoxGeometry(0.2, 0.04, 0.2)), accent);
+    cap.position.y = 0.56;
+    g.add(s1, s2, col, cap);
+    const emblems = {
+      m_wisdom: () => new THREE.SphereGeometry(0.09, 10, 8),
+      m_valor: () => new THREE.ConeGeometry(0.07, 0.24, 4),
+      m_eye: () => new THREE.TorusGeometry(0.08, 0.03, 6, 14),
+      m_treasury: () => new THREE.BoxGeometry(0.15, 0.11, 0.11),
+      m_park: () => new THREE.IcosahedronGeometry(0.11, 0),
+      m_palace: () => new THREE.SphereGeometry(0.1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2)
+    };
+    const em = new THREE.Mesh(geo('mnEm' + type, emblems[type]), accent);
+    em.position.y = type === 'm_palace' ? 0.58 : 0.67;
+    g.add(em);
   }
   for (const m of g.children) m.castShadow = true;
   return g;
@@ -961,10 +1032,25 @@ function drawHp(sprite, hp, vet = false, color = 0x18181b) {
   ctx.textBaseline = 'middle';
   ctx.lineWidth = 4;
   ctx.strokeStyle = light ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)';
-  const text = vet ? '★' + hp : String(hp);
-  ctx.strokeText(text, 64, 33);
+  const text = String(hp);
+  const tx = vet ? 76 : 64;
+  ctx.strokeText(text, tx, 33);
   ctx.fillStyle = light ? '#09090b' : '#ffffff';
-  ctx.fillText(text, 64, 33);
+  ctx.fillText(text, tx, 33);
+  // Veteranen: gezeichneter Stern statt Schriftzeichen.
+  if (vet) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? 6.5 : 15;
+      ctx.lineTo(36 + Math.cos(a) * rad, 32 + Math.sin(a) * rad);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#facc15';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(9,9,11,0.8)';
+    ctx.stroke();
+    ctx.fill();
+  }
   texture.needsUpdate = true;
 }
 
@@ -1429,6 +1515,7 @@ export function syncBoard(state, viewer = null) {
     syncImprovement(t, state.improvements ? state.improvements[key] : null);
     syncRuin(t, state.ruins && state.ruins[key]);
     syncBridge(t, state.bridges ? state.bridges[key] : null);
+    syncRoad(state, key, t);
     const seen = !explored || explored.has(key);
     t.seen = seen;
     t.lit = !visible || visible.has(key);
@@ -1559,6 +1646,42 @@ function floatText(worldPos, text, color) {
   });
 }
 
+// Kleines Feuerwerk über einem Feld (Eroberung, Wachstum, Monument).
+export function celebrate(q, r, color = 0xfacc15, big = false) {
+  if (!initialized) return;
+  const p = worldOf(q, r);
+  const group = new THREE.Group();
+  group.position.copy(p).add(new THREE.Vector3(0, 0.6, 0));
+  const n = big ? 34 : 18;
+  const colors = [color, 0xffffff, 0xfde68a];
+  const parts = [];
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(geo('confetti', () => new THREE.BoxGeometry(0.07, 0.07, 0.07)),
+      new THREE.MeshBasicMaterial({ color: colors[i % colors.length], transparent: true }));
+    const a = Math.random() * Math.PI * 2, up = 1.6 + Math.random() * (big ? 2.2 : 1.2), out = 0.6 + Math.random() * (big ? 1.4 : 0.8);
+    m.userData.v = new THREE.Vector3(Math.cos(a) * out, up, Math.sin(a) * out);
+    group.add(m);
+    parts.push(m);
+  }
+  scene.add(group);
+  effects.push({
+    start: performance.now(), dur: big ? 1400 : 1000,
+    update: t => {
+      for (const m of parts) {
+        m.position.set(m.userData.v.x * t, m.userData.v.y * t - 2.2 * t * t, m.userData.v.z * t);
+        m.rotation.x = m.rotation.y = t * 9;
+        m.material.opacity = 1 - Math.max(0, t - 0.5) * 2;
+      }
+      if (t >= 1) { scene.remove(group); for (const m of parts) m.material.dispose(); }
+    }
+  });
+}
+
+export function floatAt(q, r, text, color = '#facc15') {
+  if (!initialized) return;
+  floatText(worldOf(q, r), text, color);
+}
+
 function nodePos(id) {
   const n = unitNodes.get(id);
   return n ? n.group.position.clone() : new THREE.Vector3();
@@ -1682,6 +1805,31 @@ function orbit(dTheta, dPhi, dur = 260) {
       camera.lookAt(t);
     }
   });
+}
+
+// Kamera in Blickrichtung verschieben (Pfeiltasten): dx nach rechts, dz nach vorn.
+export function panCamera(dx, dz) {
+  if (!initialized) return;
+  const fwd = controls.target.clone().sub(camera.position).setY(0).normalize();
+  const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+  const step = right.multiplyScalar(dx * 3).add(fwd.multiplyScalar(dz * 3));
+  const fromT = controls.target.clone(), fromP = camera.position.clone();
+  addTween({
+    dur: 180, ease: easeOut,
+    update: k => {
+      controls.target.copy(fromT).addScaledVector(step, k);
+      camera.position.copy(fromP).addScaledVector(step, k);
+    }
+  });
+}
+
+// Näher heran (factor < 1) oder weiter weg (factor > 1), in den Zoomgrenzen.
+export function zoomCamera(factor) {
+  if (!initialized) return;
+  const off = camera.position.clone().sub(controls.target);
+  const len = THREE.MathUtils.clamp(off.length() * factor, controls.minDistance || 4, controls.maxDistance || 80);
+  const from = camera.position.clone(), to = controls.target.clone().add(off.setLength(len));
+  addTween({ dur: 180, ease: easeOut, update: k => camera.position.lerpVectors(from, to, k) });
 }
 
 export function rotateCamera(steps) { if (initialized) orbit(steps * Math.PI / 4, 0); }

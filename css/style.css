@@ -667,6 +667,7 @@ button:focus-visible {
   width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.92); font-size: 16px; font-weight: 700; color: var(--text);
   cursor: pointer; touch-action: manipulation;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
 }
 .cam-btn:hover { background: #fff; }
 @media (max-width: 760px) {
@@ -691,3 +692,48 @@ button:focus-visible {
 @media (max-width: 760px) {
   #unit-chip { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); max-width: none; }
 }
+
+/* Kleine Inline-Symbole (Stern, Haken) */
+.ico { display: inline-block; vertical-align: -1px; }
+.vet-badge .ico, .uc-main .ico, .tribe-perk .ico { color: #ca8a04; }
+
+/* Monumente in der Übersicht */
+.monument-list { display: grid; gap: 6px; margin-bottom: 8px; }
+.monument { display: grid; grid-template-columns: 12px 1fr; column-gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; opacity: 0.7; }
+.monument .sub { grid-column: 2; font-size: 12px; color: var(--muted, #71717a); }
+.monument.ready { opacity: 1; border-color: #f59e0b; }
+.monument.done { opacity: 1; background: rgba(34, 197, 94, 0.08); }
+.mon-dot { width: 12px; height: 12px; border-radius: 50%; }
+
+/* Rückblick: was seit dem letzten eigenen Zug passiert ist */
+#news {
+  position: absolute; left: 12px; top: 64px; z-index: 30; width: min(340px, calc(100% - 24px));
+  background: #fff; border: 1px solid var(--border); border-left: 4px solid #dc2626; border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); padding: 10px 12px; font-size: 14px;
+}
+#news h3 { margin: 0 0 6px; font-size: 14px; }
+#news ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
+#news li button { all: unset; cursor: pointer; display: block; width: 100%; padding: 3px 4px; border-radius: 4px; }
+#news li button:hover, #news li button:focus-visible { background: #f4f4f5; }
+#news .news-more { color: #71717a; font-size: 12px; }
+@media (max-width: 760px) { #news { top: 108px; left: 8px; width: calc(100% - 16px); } }
+
+/* Tutorial-Karte */
+#tutor {
+  position: absolute; left: 50%; transform: translateX(-50%); top: 64px; z-index: 31;
+  width: min(460px, calc(100% - 24px)); background: #18181b; color: #fafafa;
+  border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); font-size: 14px; line-height: 1.45;
+}
+#tutor .tu-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; color: #a1a1aa; }
+#tutor .tu-text { margin: 0 0 10px; }
+#tutor .tu-bar { height: 4px; background: #3f3f46; border-radius: 2px; overflow: hidden; margin-bottom: 10px; }
+#tutor .tu-bar div { height: 100%; background: #facc15; }
+#tutor .tu-btns { display: flex; gap: 8px; justify-content: flex-end; }
+#tutor .btn { background: #27272a; color: #fafafa; border-color: #3f3f46; }
+#tutor .btn.primary { background: #facc15; color: #18181b; border-color: #facc15; }
+@media (max-width: 760px) { #tutor { top: auto; bottom: 120px; } }
+
+/* Niederlage: was man geschafft hat */
+.achieve { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 8px 0; }
+.achieve span { background: #fef3c7; color: #78350f; border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; }
+.tip { font-size: 14px; color: #3f3f46; margin: 8px 0 0; }

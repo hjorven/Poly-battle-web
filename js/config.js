@@ -167,7 +167,7 @@ export const TECHS = {
   ramming: { name: 'Rammen', tier: 2, req: 'fishing', desc: 'Zweig: Aquatismus' },
   archery: { name: 'Bogenschießen', tier: 2, req: 'hunting', desc: 'Bogenschützen; Wald-Verteidigung' },
   forestry: { name: 'Forstwirtschaft', tier: 2, req: 'hunting', desc: 'Sägewerke bauen (+1 Einkommen)' },
-  roads: { name: 'Wege', tier: 2, req: 'riding', desc: 'Im eigenen Gebiet kostet Wald und Berg nur 1 Bewegung; Brücken bauen' },
+  roads: { name: 'Wege', tier: 2, req: 'riding', desc: 'Straßen (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1' },
   freespirit: { name: 'Freier Geist', tier: 2, req: 'riding', desc: 'Zweig: Ritterlichkeit' },
 
   construction: { name: 'Baukunst', tier: 3, req: 'farming', desc: '+1 Stern pro Stadt' },
@@ -217,7 +217,7 @@ export const TRIBES = {
   bardur: { name: 'Bardur', color: 0x352514, startTechs: ['hunting'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Waldstämme des Nordens.', perk: { id: 'woodland', name: 'Waldvolk', desc: 'Wald kostet nur 1 Bewegung.' } },
   xinxi: { name: 'Xin-Xi', color: 0xcc0000, startTechs: ['climbing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Bergvolk der Berge.', perk: { id: 'mountaineer', name: 'Bergsteiger', desc: 'Berge kosten nur 1 Bewegung.' } },
   kickoo: { name: 'Kickoo', color: 0x00ff00, startTechs: ['fishing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Inselvolk der Südsee.', perk: { id: 'seafarer', name: 'Seefahrer', desc: 'Schiffe und Boote haben +1 Bewegung.' } },
-  oumaji: { name: 'Oumaji', color: 0xffff00, startTechs: ['riding'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Wüstenreiter – startet mit Reiten.', perk: { id: 'lookouts', name: 'Späher', desc: 'Reiter und Ritter sehen 1 Feld weiter.' } },
+  oumaji: { name: 'Oumaji', color: 0xffff00, startTechs: [], startUnits: ['warrior'], bonusStars: 3, blurb: 'Wüstenreiter – +3 Sterne zum Start, Reiten ist schnell erforscht.', perk: { id: 'lookouts', name: 'Späher', desc: 'Reiter und Ritter sehen 1 Feld weiter.' } },
   hoodrick: { name: 'Hoodrick', color: 0x996600, startTechs: ['archery'], startUnits: ['archer'], bonusStars: 0, blurb: 'Waldläufer – startet mit Bogenschützen.', perk: { id: 'longbow', name: 'Langbogen', desc: 'Bogenschützen kosten 1 Stern weniger.' } },
   quetzali: { name: 'Quetzali', color: 0x275c4a, startTechs: ['shields'], startUnits: ['defender'], bonusStars: 0, blurb: 'Startet mit Verteidiger.', perk: { id: 'guardians', name: 'Wächter', desc: 'Verteidiger kosten 1 Stern weniger.' } },
   vengir: { name: 'Vengir', color: 0xffffff, startTechs: ['smithery'], startUnits: ['swordsman'], bonusStars: 0, blurb: 'Kriegerisch – startet mit Schwertkämpfer.', perk: { id: 'forge', name: 'Schmiede', desc: 'Schwertkämpfer kosten 1 Stern weniger.' } },
@@ -234,8 +234,11 @@ export function tribeColor(tribeId) {
   return t ? t.color : COLORS.neutral;
 }
 
-export function researchCost(tier, cityCount, hasPhilosophy = false) {
-  let cost = tier * (1 + cityCount);
+// Kosten: Stufenfaktor × (1 + Städte) + 2 je bereits erforschter Technologie.
+// Späte Stufen sind deutlich teurer, damit nicht jeder den ganzen Baum hat.
+const TIER_FACTOR = [1, 2, 4, 6];
+export function researchCost(tier, cityCount, hasPhilosophy = false, known = 0) {
+  let cost = TIER_FACTOR[tier - 1] * (1 + cityCount) + 2 * known;
   if (hasPhilosophy) cost = Math.ceil(cost * 0.8);
   return cost;
 }
@@ -255,13 +258,36 @@ export const IMPROVEMENTS = {
   sawmill: { name: 'Sägewerk', tech: 'forestry', terrain: ['forest'], cost: 7, pop: 1 },
   mine: { name: 'Mine', tech: 'mining', terrain: ['mountain'], cost: 8, pop: 1 },
   port: { name: 'Hafen', tech: 'sailing', terrain: ['water', 'ocean'], cost: 7, pop: 1 },
-  temple: { name: 'Tempel', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 }
+  temple: { name: 'Tempel', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 },
+  // Monumente: kostenlos, einmal je Stamm, nach einem Erfolg (siehe MONUMENTS).
+  m_wisdom: { name: 'Turm der Weisheit', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
+  m_valor: { name: 'Tor der Tapferkeit', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
+  m_eye: { name: 'Auge der Welt', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
+  m_treasury: { name: 'Schatzkammer', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
+  m_park: { name: 'Großer Park', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
+  m_palace: { name: 'Kaiserpalast', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 }
 };
+
+// Erfolge, die Monumente freischalten. Ein Monument gibt der Stadt, in deren
+// Gebiet es steht, +MONUMENT_POP Bevölkerung und zählt zur Punktzahl.
+export const MONUMENTS = {
+  m_wisdom: { goal: '20 Technologien erforscht', color: 0x60a5fa },
+  m_valor: { goal: '10 gegnerische Einheiten besiegt', color: 0xef4444 },
+  m_eye: { goal: 'Alle Leuchttürme gefunden', color: 0xfacc15 },
+  m_treasury: { goal: '100 Sterne auf einmal besessen', color: 0xf59e0b },
+  m_park: { goal: 'Drei Städte auf Stufe 5', color: 0x22c55e },
+  m_palace: { goal: '8 Städte besessen', color: 0xa855f7 }
+};
+export const MONUMENT_POP = 3;
 
 // --- Brücken ----------------------------------------------------------------
 // Landeinheiten bauen Brücken über 1–2 Felder Flachwasser; Schiffe fahren
 // darunter durch oder reißen sie ein.
 export const BRIDGE = { tech: 'roads', costPerTile: 5, maxLen: 2 };
+// Straßen: Schritt von Straße zu Straße (Städte und Brücken zählen mit) kostet
+// halbe Bewegung. Bau im eigenen Gebiet über das Stadtmenü, sonst mit einer
+// Einheit auf dem Feld (nicht in fremdem Gebiet).
+export const ROAD = { tech: 'roads', cost: 3 };
 // Auflösen einer Einheit erstattet diesen Anteil der Kosten.
 export const DISBAND_REFUND = 0.5;
 
@@ -282,7 +308,7 @@ export const VETERAN_HP = 5;
 export const CITY_REWARDS = {
   workshop: { name: 'Werkstatt', desc: '+1 Stern pro Runde' },
   explorer: { name: 'Erkunder', desc: 'Deckt die Umgebung im Umkreis von 4 Feldern auf' },
-  wall: { name: 'Stadtmauer', desc: 'Verteidiger in dieser Stadt erhalten ×4 Verteidigung' },
+  wall: { name: 'Stadtmauer', desc: 'Verteidiger in dieser Stadt erhalten 4-fache Verteidigung' },
   resources: { name: 'Vorräte', desc: '+5 Sterne sofort' },
   growth: { name: 'Wachstum', desc: '+1 Bevölkerung (nächste Stufe)' },
   borders: { name: 'Grenzerweiterung', desc: 'Stadtgebiet wächst auf 2 Felder Umkreis' },
@@ -305,6 +331,8 @@ export const RUIN_REWARDS = {
   reveal: { name: 'Alte Karte', weight: 10 }
 };
 export const RUIN_STARS = 10;
+// Beute: Sterne für jede besiegte gegnerische Einheit.
+export const BOUNTY = 1;
 
 // --- Leuchttürme --------------------------------------------------------------
 // In jeder Kartenecke steht ein Leuchtturm. Jeder Stamm kann jeden einmal
@@ -318,11 +346,12 @@ export const GAME_MODES = {
   perfection: { label: 'Perfektion (30 Runden)', turnLimit: 30 }
 };
 export const AI_LEVELS = {
-  easy: { label: 'Leicht', incomeFactor: 0.7, incomeBonus: 0, startBonus: 0 },
-  normal: { label: 'Normal', incomeFactor: 1, incomeBonus: 0, startBonus: 0 },
-  hard: { label: 'Schwer', incomeFactor: 1, incomeBonus: 2, startBonus: 3 }
+  // grace: so viele Runden greift die KI Menschen nicht an (außer sie werden angegriffen).
+  easy: { label: 'Leicht', incomeFactor: 0.7, incomeBonus: 0, startBonus: 0, grace: 12 },
+  normal: { label: 'Normal', incomeFactor: 1, incomeBonus: 0, startBonus: 0, grace: 6 },
+  hard: { label: 'Schwer', incomeFactor: 1, incomeBonus: 2, startBonus: 3, grace: 0 }
 };
 // Punktewertung (Perfektion und Endstatistik).
 export const SCORE = {
-  city: 100, pop: 40, reward: 20, tech: 50, unitCost: 5, explored: 2, improvement: 30, ruin: 40, lighthouse: 40
+  city: 100, pop: 40, reward: 20, tech: 50, unitCost: 5, explored: 2, improvement: 30, ruin: 40, lighthouse: 40, monument: 200
 };

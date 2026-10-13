@@ -1,10 +1,10 @@
 import {
   UNITS, UNIT_ORDER, TECHS, NAMES, MAX_POP,
-  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS,
+  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS, MONUMENTS, ROAD,
   CITY_REWARDS, GAME_MODES, BRIDGE, MAP_SIZES, MAP_TYPES
 } from './config.js';
 import {
-  cityIncome, techCost, tribeName, playerColor, maxHp, maxMove, attackOf, popCost,
+  cityIncome, techCost, tribeName, playerColor, maxHp, maxMove, attackOf, popCost, monumentReady, canBuildRoad, roadAt,
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
@@ -15,7 +15,7 @@ import {
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
 
 const $ = id => document.getElementById(id);
-const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'normal', mapsize: 'normal', maptype: 'continents', onlinebots: '0' };
+const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'easy', mapsize: 'normal', maptype: 'continents', onlinebots: '0', humans: '2' };
 let handlers = {};
 let selectedTribe = null;
 
@@ -41,11 +41,25 @@ export function initUI(h) {
   document.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
     const map = { q: 'rotL', e: 'rotR', r: 'tiltUp', f: 'tiltDown', n: 'reset' };
+    // Offene Dialoge (Menü, Bestätigung, Belohnung …): nur Escape gilt dort.
+    const dialog = [...document.querySelectorAll('.overlay')].some(o => !o.classList.contains('hidden'));
+    if (dialog) return;
     const cmd = map[e.key.toLowerCase()];
-    if (cmd) handlers.onCamera(cmd);
+    if (cmd) { handlers.onCamera(cmd); return; }
+    const keys = {
+      ' ': 'next', Enter: 'end', t: 'tech', o: 'overview', i: 'details', h: 'home', m: 'sound',
+      Escape: 'deselect', ArrowLeft: 'panL', ArrowRight: 'panR', ArrowUp: 'panU', ArrowDown: 'panD',
+      '+': 'zoomIn', '=': 'zoomIn', '-': 'zoomOut'
+    };
+    const action = keys[e.key] || keys[e.key.toLowerCase()];
+    if (!action || e.target.closest && e.target.closest('button, select') && (action === 'next' || action === 'end')) return;
+    e.preventDefault();
+    handlers.onHotkey(action);
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
+  $('winnerEasier').addEventListener('click', () => handlers.onRetry(true));
+  $('winnerRetry').addEventListener('click', () => handlers.onRetry(false));
   $('overviewBtn').addEventListener('click', () => handlers.onOpenOverview());
   $('overviewClose').addEventListener('click', () => handlers.onCloseOverview());
   $('overview-overlay').addEventListener('click', e => {
@@ -80,6 +94,7 @@ export function getSettings() {
     aiLevel: settings.ai,
     mapSize: MAP_SIZES[settings.mapsize] ? settings.mapsize : 'normal',
     mapType: MAP_TYPES[settings.maptype] ? settings.maptype : 'continents',
+    humans: Math.max(2, Math.min(5, Number(settings.humans) || 2)),
     onlineBots: Math.max(0, Math.min(3, Number(settings.onlinebots) || 0))
   };
 }
@@ -116,6 +131,7 @@ function buildSettings() {
   seg('mapsize', 'mapsize');
   seg('maptype', 'maptype');
   seg('onlinebots', 'onlinebots');
+  seg('humans', 'humans');
 }
 
 function hex(c) {
@@ -138,7 +154,7 @@ function buildTribePicker() {
     btn.dataset.tribe = id;
     btn.innerHTML = `<span class="tribe-name"><span class="dot" style="background:${hex(t.color)}"></span>${t.name}</span>
       <span class="tribe-tech">Start: ${startTech} · ${startUnits}</span>
-      ${t.perk ? `<span class="tribe-perk">★ ${t.perk.name}: ${t.perk.desc}</span>` : ''}`;
+      ${t.perk ? `<span class="tribe-perk">${STAR_ICON} ${t.perk.name}: ${t.perk.desc}</span>` : ''}`;
     btn.addEventListener('click', () => {
       selectedTribe = selectedTribe === id ? null : id;
       wrap.querySelectorAll('.tribe-opt').forEach(b => b.classList.toggle('active', b.dataset.tribe === selectedTribe));
@@ -188,6 +204,9 @@ export function updateStrip(state, ctx) {
 }
 
 // Lautsprecher als kleine Vektorgrafik (keine Emojis); durchgestrichen = stumm.
+// Kleine Symbole als SVG (keine Schriftzeichen/Emojis).
+const STAR_ICON = '<svg class="ico" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" fill="currentColor"/></svg>';
+const CHECK_ICON = '<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const SPEAKER = '<path d="M3 9v6h4l5 4V5L7 9H3z" fill="currentColor"/>';
 const WAVES = '<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
 const CROSS = '<path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
@@ -196,6 +215,46 @@ export function setSoundIcon(muted) {
   btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${SPEAKER}${muted ? CROSS : WAVES}</svg>`;
   btn.title = muted ? 'Ton ist aus – einschalten' : 'Ton ist an – ausschalten';
   btn.setAttribute('aria-label', btn.title);
+}
+
+// Tutorial-Karte: Text, Fortschritt, Weiter (nur beim letzten/Info-Schritt) und Überspringen.
+export function showTutor({ text, step, total, next }) {
+  const box = $('tutor');
+  box.innerHTML = `<div class="tu-head"><span>Tutorial · Schritt ${step + 1} von ${total}</span></div>
+    <div class="tu-bar"><div style="width:${Math.round((step + 1) / total * 100)}%"></div></div>
+    <p class="tu-text">${esc(text)}</p>
+    <div class="tu-btns">
+      <button class="btn small" data-tu-skip>${next === 'Fertig' ? 'Schließen' : 'Tutorial beenden'}</button>
+      ${next ? `<button class="btn small primary" data-tu-next>${esc(next)}</button>` : ''}
+    </div>`;
+  box.querySelector('[data-tu-skip]').addEventListener('click', () => handlers.onTutor('skip'));
+  const n = box.querySelector('[data-tu-next]');
+  if (n) n.addEventListener('click', () => handlers.onTutor('next'));
+  box.classList.remove('hidden');
+}
+
+export function hideTutor() {
+  $('tutor').classList.add('hidden');
+}
+
+// Rückblick: Liste {text, q?, r?}; antippen springt zum Ort.
+export function showNews(lines) {
+  const box = $('news');
+  const shown = lines.slice(0, 7);
+  box.innerHTML = `<h3>Seit deinem letzten Zug</h3><ul>${shown.map((l, i) =>
+    `<li><button data-news="${i}" ${l.q == null ? 'tabindex="-1"' : ''}>${esc(l.text)}</button></li>`).join('')}</ul>
+    ${lines.length > shown.length ? `<div class="news-more">und ${lines.length - shown.length} weitere</div>` : ''}
+    <button class="btn small" data-news-close>OK</button>`;
+  box.querySelectorAll('[data-news]').forEach(b => b.addEventListener('click', () => {
+    const l = shown[Number(b.dataset.news)];
+    if (l.q != null) handlers.onJump(l.q, l.r);
+  }));
+  box.querySelector('[data-news-close]').addEventListener('click', hideNews);
+  box.classList.remove('hidden');
+}
+
+export function hideNews() {
+  $('news').classList.add('hidden');
 }
 
 export function setEndTurn(enabled) {
@@ -209,11 +268,11 @@ export function setIdle(count) {
   btn.innerHTML = `<span class="idle-dot"></span>${count}<span class="lbl"> bereit</span>`;
 }
 
-// „2× Krieger, 1× Reiter“
+// „2 Krieger, 1 Reiter“
 export function describeUnits(units) {
   const counts = new Map();
   for (const u of units) counts.set(u.type, (counts.get(u.type) || 0) + 1);
-  return [...counts].map(([t, n]) => `${n}× ${UNITS[t].name}`).join(', ');
+  return [...counts].map(([t, n]) => `${n} ${UNITS[t].name}`).join(', ');
 }
 
 export function hidePanel() {
@@ -257,8 +316,8 @@ export function showUnitChip(state, unit, ctx) {
     : opts.length ? 'kann noch: ' + opts.join(', ') : 'erledigt';
   chip.innerHTML = `
     <span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>
-    <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ★' : ''}</b>
-      <span class="uc-sub">Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${unit.mp}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}</span></span>
+    <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ' + STAR_ICON : ''}</b>
+      <span class="uc-sub">Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}</span></span>
     <button class="btn ghost small" data-details>Details</button>`;
   chip.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
   chip.classList.remove('hidden');
@@ -322,6 +381,16 @@ export function showUnitPanel(state, unit, ctx) {
       }
       extra += `</div>`;
     }
+    // Straße auf dem eigenen Feld (auch außerhalb des Gebiets).
+    if (!unit.carry && !UNITS[unit.type].abilities.includes('water') && state.techs[ctx.actAs].includes(ROAD.tech) && !roadAt(state, unit.q, unit.r)) {
+      const chk = canBuildRoad(state, ctx.actAs, unit.q, unit.r, true);
+      const spent = unit.mp <= 0 && unit.hasMoved;
+      if (!(chk.reason === 'Städte sind schon angebunden')) {
+        extra += `<div class="action-list"><button class="btn action" data-road ${chk.ok && !spent ? '' : 'disabled'}>
+          <span>Straße bauen<span class="sub">${spent ? 'Keine Bewegung mehr' : chk.ok ? 'Auf diesem Feld · verbraucht die restliche Bewegung' : chk.reason}</span></span>
+          <span class="cost">${ROAD.cost} Sterne</span></button></div>`;
+      }
+    }
     const breakable = destroyableBridges(state, unit);
     if (breakable.length) {
       extra += `<div class="action-list">${breakable.map(([q, r]) =>
@@ -343,7 +412,7 @@ export function showUnitPanel(state, unit, ctx) {
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ' <span class="vet-badge">★ Veteran</span>' : ''}</div>
+        <div class="panel-title">${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ' <span class="vet-badge">${STAR_ICON} Veteran</span>' : ''}</div>
         <div class="panel-sub" style="color:${hex(playerColor(state, unit.owner))}">${owner}${mine ? ' (deine Einheit)' : ''}</div>
       </div>
       <div class="panel-head-right">
@@ -356,13 +425,13 @@ export function showUnitPanel(state, unit, ctx) {
       <div class="stat">Leben<b>${unit.hp}/${cap}</b></div>
       <div class="stat">Angriff<b>${attackOf(state, unit)}</b></div>
       <div class="stat">Verteidigung<b>${def.def}</b></div>
-      <div class="stat">Bewegung<b>${unit.mp}/${maxMove(state, unit.owner, unit.type)}</b></div>
+      <div class="stat">Bewegung<b>${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}</b></div>
       <div class="stat">Reichweite<b>${def.range}</b></div>
     </div>
     <div class="ability-row">${abilityChips(unit.type)}</div>
     ${unit.vet ? '' : `<div class="hint">Siege: ${unit.kills || 0}/3 bis zur Beförderung (+5 Leben)</div>`}
     ${land ? '<div class="hint">Fährt als Boot; an Land gehen beendet die Bewegung.</div>' : ''}
-    <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ×${tb}</div>
+    <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ${tb}-fach</div>
     ${switchToCity(state, unit, ctx)}
     ${todo}
     ${found}
@@ -371,6 +440,8 @@ export function showUnitPanel(state, unit, ctx) {
     <div class="hint">${hint}</div>
   `);
   wirePanel($('panel'));
+  const roadBtn = $('panel').querySelector('[data-road]');
+  if (roadBtn) roadBtn.addEventListener('click', () => handlers.onBuildRoad(unit.q, unit.r, unit));
   const foundBtn = $('panel').querySelector('[data-found]');
   if (foundBtn) foundBtn.addEventListener('click', () => handlers.onFound(unit));
   $('panel').querySelectorAll('[data-bridge]').forEach(btn => {
@@ -417,6 +488,7 @@ export function showCityPanel(state, city, ctx) {
     const res = resourceAt(state, q, r);
     let tag = tdef.name, cls = '';
     if (imp) { tag = IMPROVEMENTS[imp].name; cls = 'built'; }
+    if (roadAt(state, q, r)) tag += ' + Straße';
     else if (res) { tag = RESOURCES[res].name; cls = 'res'; }
     return `<span class="tile-chip ${cls}">${tag}</span>`;
   }).join('');
@@ -487,6 +559,12 @@ export function showCityPanel(state, city, ctx) {
   if (rwBtn) rwBtn.addEventListener('click', () => showReward(state, city, ctx));
   const popBtn = $('panel').querySelector('[data-buypop]');
   if (popBtn) popBtn.addEventListener('click', () => handlers.onBuyPop(city));
+  $('panel').querySelectorAll('[data-buildroad]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const [q, r] = btn.dataset.buildroad.split(',').map(Number);
+      handlers.onBuildRoad(q, r, null);
+    });
+  });
   $('panel').querySelectorAll('[data-improve]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onImprove(city, btn.dataset.improve, Number(btn.dataset.q), Number(btn.dataset.r)));
   });
@@ -557,11 +635,14 @@ export function showHandover(name, onGo) {
 
 function buildRows(state, city, ctx) {
   const rows = [];
+  const roadsKnown = city.owner && state.techs[city.owner].includes(ROAD.tech);
   for (const [q, r] of cityTiles(state, city)) {
-    if (improvementAt(state, q, r) || resourceAt(state, q, r)) continue;
     const tile = terrainAt(state, q, r);
-    const types = Object.keys(IMPROVEMENTS).filter(k => IMPROVEMENTS[k].terrain.includes(tile));
-    if (!types.length) continue;
+    const free = !improvementAt(state, q, r) && !resourceAt(state, q, r);
+    const types = free ? Object.keys(IMPROVEMENTS).filter(k => IMPROVEMENTS[k].terrain.includes(tile) &&
+      (!IMPROVEMENTS[k].monument || monumentReady(state, city.owner, k))) : [];
+    const road = roadsKnown && TERRAIN[tile].walkable && !roadAt(state, q, r);
+    if (!types.length && !road) continue;
     const cellName = TERRAIN[tile].name;
     const btns = types.map(t => {
       const d = IMPROVEMENTS[t];
@@ -572,8 +653,12 @@ function buildRows(state, city, ctx) {
       else if (state.stars[city.owner] < d.cost) reason = 'Zu wenig Sterne';
       if (!ctx.myTurn && !reason) reason = 'Nicht dein Zug';
       const locked = !ctx.myTurn;
-      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.name} <span class="cost">${d.cost}</span></button>`;
-    }).join('');
+      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.name} <span class="cost">${d.monument ? 'frei' : d.cost}</span></button>`;
+    }).join('') + (road ? (() => {
+      const chk = canBuildRoad(state, city.owner, q, r);
+      const reason = !ctx.myTurn ? 'Nicht dein Zug' : chk.ok ? '' : chk.reason;
+      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-buildroad="${q},${r}" ${ctx.myTurn ? '' : 'disabled'} title="${reason || 'Straße: halbe Bewegung'}">Straße <span class="cost">${ROAD.cost}</span></button>`;
+    })() : '');
     rows.push(`<div class="build-row"><span class="build-tile">${cellName}</span><span class="build-btns">${btns}</span></div>`);
   }
   if (!rows.length) return '';
@@ -855,7 +940,7 @@ export function openTech(state, ctx, keepView = false) {
     btn.style.top = p.y + 'px';
     btn.style.setProperty('--branch', BRANCH_COLOR[branchOf(id)]);
     btn.dataset.tech = id;
-    btn.innerHTML = `<span class="tn-in"><span class="tn-name">${t.name}</span><span class="tn-cost">${status === 'done' ? '✓' : techCost(state, id, ctx.actAs) + ' Sterne'}</span></span>`;
+    btn.innerHTML = `<span class="tn-in"><span class="tn-name">${t.name}</span><span class="tn-cost">${status === 'done' ? CHECK_ICON : techCost(state, id, ctx.actAs) + ' Sterne'}</span></span>`;
     nodes.appendChild(btn);
   }
   renderTechDetail(state, ctx);
@@ -898,14 +983,46 @@ export function showWinner(state, ctx) {
   if (ctx.mode === 'bot') text = (winner === 'player_1' ? 'Du hast gewonnen. ' : 'Die KI hat gewonnen. ') + text;
   else if (ctx.mode === 'online') text = (winner === ctx.myRole ? 'Du hast gewonnen. ' : 'Dein Gegner hat gewonnen. ') + text;
   $('winner-text').textContent = text + ` · Runde ${state.round}`;
+  $('winnerEasier').classList.add('hidden');
+  $('winnerRetry').classList.toggle('hidden', ctx.mode !== 'bot');
   $('winner-stats').innerHTML = statsHtml(state, ctx);
   $('winner-overlay').classList.remove('hidden');
 }
 
-export function showDefeat(state, ctx) {
-  $('winner-title').textContent = 'Besiegt';
-  $('winner-text').textContent = `Du hast deine letzte Stadt verloren · Runde ${state.round}`;
+const TIPS = [
+  'Lass keine Stadt leer stehen: Eine Einheit darin verteidigt mit Bonus, leere Städte werden im Vorbeigehen erobert.',
+  'Bogenschützen und Schiffe greifen aus 2 Feldern an – Nahkämpfer können dann nicht zurückschlagen.',
+  'Nimm früh neutrale Dörfer ein: Mehr Städte bedeuten mehr Sterne pro Runde.',
+  'Verschanze verletzte Einheiten in Städten: Dort heilen sie 4 Leben pro Runde.',
+  'Ein roter Ring um eine Stadt heißt: Ein Gegner kann sie im nächsten Zug angreifen. Stell rechtzeitig einen Verteidiger hinein.',
+  'Erforsche „Schildmacher“ für Verteidiger – sie halten Städte sehr gut.',
+  'Wähle bei Stufe 3 die Stadtmauer, wenn Gegner in der Nähe sind: Verteidiger bekommen dann 4-fache Verteidigung.',
+  'Greif nicht an, wenn die Vorschau mehr Gegenschlag als Schaden zeigt – warte lieber auf Verstärkung.'
+];
+
+export function showDefeat(state, ctx, opts = {}) {
+  const me = 'player_1';
+  const b = scoreBreakdown(state, me);
+  const kills = (state.killsBy && state.killsBy[me]) || 0;
+  const peak = Math.max(b.cities, (state.peak && state.peak[me]) || 0);
+  const monuments = ((state.monumentsBuilt && state.monumentsBuilt[me]) || []).length;
+  const best = Math.max(0, ...(state.history || []).map(h => h.scores[me] || 0));
+  const done = [
+    `${state.round} ${state.round === 1 ? "Runde" : "Runden"} durchgehalten`,
+    `bis zu ${peak} ${peak === 1 ? 'Stadt' : 'Städte'}`,
+    kills ? `${kills} Gegner besiegt` : null,
+    b.techs ? `${b.techs} Technologien` : null,
+    b.ruins ? `${b.ruins} Ruinen erkundet` : null,
+    b.lighthouses ? `${b.lighthouses} Leuchttürme` : null,
+    monuments ? `${monuments} Monumente` : null,
+    best ? `Bestwert ${best} Punkte` : null
+  ].filter(Boolean);
+  $('winner-title').textContent = 'Diesmal hat es nicht gereicht';
+  $('winner-text').innerHTML = `<div class="achieve">${done.map(d => `<span>${esc(d)}</span>`).join('')}</div>
+    <p class="tip"><b>Tipp:</b> ${esc(TIPS[(state.round + kills) % TIPS.length])}</p>`;
   $('winner-stats').innerHTML = statsHtml(state, ctx || {});
+  $('winnerEasier').classList.toggle('hidden', !opts.easier);
+  $('winnerRetry').classList.toggle('hidden', !opts.retry);
   $('winner-overlay').classList.remove('hidden');
 }
 
@@ -990,6 +1107,7 @@ export function hideConfirm() {
   $('confirm-overlay').classList.add('hidden');
 }
 
+const fmtMp = n => String(n).replace('.', ',');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function unitStatus(u, actAs) {
@@ -1016,6 +1134,18 @@ export function showOverview(state, ctx) {
       <div class="stat">Punkte<b>${score(state, actAs)}</b></div>
     </div>`;
   menu.appendChild(stat);
+
+  // Monumente: Erfolg, Status (offen / bereit / errichtet).
+  const unlocked = (state.monumentsUnlocked && state.monumentsUnlocked[actAs]) || [];
+  const built = (state.monumentsBuilt && state.monumentsBuilt[actAs]) || [];
+  const mon = document.createElement('div');
+  mon.innerHTML = `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Monumente (${built.length}/${Object.keys(MONUMENTS).length})</div></div>
+    <div class="monument-list">${Object.entries(MONUMENTS).map(([id, m]) => {
+      const st = built.includes(id) ? 'errichtet' : unlocked.includes(id) ? 'bereit – im Stadtmenü errichten' : m.goal;
+      const cls = built.includes(id) ? 'done' : unlocked.includes(id) ? 'ready' : '';
+      return `<div class="monument ${cls}"><span class="mon-dot" style="background:#${m.color.toString(16).padStart(6, '0')}"></span><b>${IMPROVEMENTS[id].name}</b><span class="sub">${esc(st)}</span></div>`;
+    }).join('')}</div>`;
+  menu.appendChild(mon);
 
   if (myCities.length) {
     const head = document.createElement('div');
