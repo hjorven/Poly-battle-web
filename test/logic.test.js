@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import * as R from '../js/rules.js';
 import {
   UNITS, TERRAIN, MAP_W, MAP_H, START_STARS, MAX_POP, TRIBES,
-  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE, TECHS, MONUMENT_POP, ROAD
+  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE, TECHS, MONUMENT_POP, ROAD, BOUNTY
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
@@ -295,6 +295,31 @@ test('Rückblick: Verluste anderer Spieler werden einmal gemeldet', () => {
   assert.strictEqual(news[0].by, 'player_2');
   assert.deepStrictEqual(R.takeNews(st, 'player_1'), [], 'nur einmal');
   assert.deepStrictEqual(R.takeNews(st, 'player_2'), [], 'eigene Taten nicht');
+});
+
+test('Schonfrist: KI greift Menschen anfangs nicht an, bis sie angegriffen wird; Beute', () => {
+  const st = makeState();
+  st.ai = ['player_2'];
+  st.aiLevel = 'normal';
+  st.cities = [{ q: 2, r: 2, owner: 'player_1', pop: 1 }, { q: 12, r: 12, owner: 'player_2', pop: 1 }];
+  const mine = unit('m', 'player_1', 'warrior', 6, 5, { hp: 3 });
+  const bot = unit('b', 'player_2', 'swordsman', 5, 5);
+  st.units = [mine, bot];
+  st.turn = 'player_2';
+  assert.ok(R.graceProtects(st, 'player_2', 'player_1'));
+  assert.ok(!R.graceProtects(st, 'player_1', 'player_2'), 'Menschen sind nicht gebunden');
+  const step = botStep(st, 'player_2');
+  assert.ok(!step || step.kind !== 'attack', 'kein Angriff in der Schonfrist');
+  st.round = 7;
+  assert.ok(!R.graceProtects(st, 'player_2', 'player_1'), 'nach Runde 6 vorbei');
+  st.round = 2;
+  st.turn = 'player_1';
+  const stars = st.stars.player_1;
+  bot.hp = 1;
+  const res = R.attack(st, mine, bot);
+  assert.ok(res.events.some(e => e.kind === 'provoke' && e.player === 'player_2'));
+  assert.ok(!R.graceProtects(st, 'player_2', 'player_1'), 'angegriffen: Schonfrist dieser KI vorbei');
+  assert.strictEqual(st.stars.player_1, stars + BOUNTY, 'Beute');
 });
 
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {

@@ -15,7 +15,7 @@ import {
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
 
 const $ = id => document.getElementById(id);
-const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'normal', mapsize: 'normal', maptype: 'continents', onlinebots: '0', humans: '2' };
+const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'easy', mapsize: 'normal', maptype: 'continents', onlinebots: '0', humans: '2' };
 let handlers = {};
 let selectedTribe = null;
 
@@ -58,6 +58,8 @@ export function initUI(h) {
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
+  $('winnerEasier').addEventListener('click', () => handlers.onRetry(true));
+  $('winnerRetry').addEventListener('click', () => handlers.onRetry(false));
   $('overviewBtn').addEventListener('click', () => handlers.onOpenOverview());
   $('overviewClose').addEventListener('click', () => handlers.onCloseOverview());
   $('overview-overlay').addEventListener('click', e => {
@@ -981,14 +983,46 @@ export function showWinner(state, ctx) {
   if (ctx.mode === 'bot') text = (winner === 'player_1' ? 'Du hast gewonnen. ' : 'Die KI hat gewonnen. ') + text;
   else if (ctx.mode === 'online') text = (winner === ctx.myRole ? 'Du hast gewonnen. ' : 'Dein Gegner hat gewonnen. ') + text;
   $('winner-text').textContent = text + ` · Runde ${state.round}`;
+  $('winnerEasier').classList.add('hidden');
+  $('winnerRetry').classList.toggle('hidden', ctx.mode !== 'bot');
   $('winner-stats').innerHTML = statsHtml(state, ctx);
   $('winner-overlay').classList.remove('hidden');
 }
 
-export function showDefeat(state, ctx) {
-  $('winner-title').textContent = 'Besiegt';
-  $('winner-text').textContent = `Du hast deine letzte Stadt verloren · Runde ${state.round}`;
+const TIPS = [
+  'Lass keine Stadt leer stehen: Eine Einheit darin verteidigt mit Bonus, leere Städte werden im Vorbeigehen erobert.',
+  'Bogenschützen und Schiffe greifen aus 2 Feldern an – Nahkämpfer können dann nicht zurückschlagen.',
+  'Nimm früh neutrale Dörfer ein: Mehr Städte bedeuten mehr Sterne pro Runde.',
+  'Verschanze verletzte Einheiten in Städten: Dort heilen sie 4 Leben pro Runde.',
+  'Ein roter Ring um eine Stadt heißt: Ein Gegner kann sie im nächsten Zug angreifen. Stell rechtzeitig einen Verteidiger hinein.',
+  'Erforsche „Schildmacher“ für Verteidiger – sie halten Städte sehr gut.',
+  'Wähle bei Stufe 3 die Stadtmauer, wenn Gegner in der Nähe sind: Verteidiger bekommen dann 4-fache Verteidigung.',
+  'Greif nicht an, wenn die Vorschau mehr Gegenschlag als Schaden zeigt – warte lieber auf Verstärkung.'
+];
+
+export function showDefeat(state, ctx, opts = {}) {
+  const me = 'player_1';
+  const b = scoreBreakdown(state, me);
+  const kills = (state.killsBy && state.killsBy[me]) || 0;
+  const peak = Math.max(b.cities, (state.peak && state.peak[me]) || 0);
+  const monuments = ((state.monumentsBuilt && state.monumentsBuilt[me]) || []).length;
+  const best = Math.max(0, ...(state.history || []).map(h => h.scores[me] || 0));
+  const done = [
+    `${state.round} ${state.round === 1 ? "Runde" : "Runden"} durchgehalten`,
+    `bis zu ${peak} ${peak === 1 ? 'Stadt' : 'Städte'}`,
+    kills ? `${kills} Gegner besiegt` : null,
+    b.techs ? `${b.techs} Technologien` : null,
+    b.ruins ? `${b.ruins} Ruinen erkundet` : null,
+    b.lighthouses ? `${b.lighthouses} Leuchttürme` : null,
+    monuments ? `${monuments} Monumente` : null,
+    best ? `Bestwert ${best} Punkte` : null
+  ].filter(Boolean);
+  $('winner-title').textContent = 'Diesmal hat es nicht gereicht';
+  $('winner-text').innerHTML = `<div class="achieve">${done.map(d => `<span>${esc(d)}</span>`).join('')}</div>
+    <p class="tip"><b>Tipp:</b> ${esc(TIPS[(state.round + kills) % TIPS.length])}</p>`;
   $('winner-stats').innerHTML = statsHtml(state, ctx || {});
+  $('winnerEasier').classList.toggle('hidden', !opts.easier);
+  $('winnerRetry').classList.toggle('hidden', !opts.retry);
   $('winner-overlay').classList.remove('hidden');
 }
 

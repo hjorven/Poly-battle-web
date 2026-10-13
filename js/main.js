@@ -5,7 +5,7 @@ import * as net from './net.js';
 import { botStep, applyStep } from './ai.js';
 import { sfx, isMuted, setMuted } from './sound.js';
 import { saveGame, loadGame, saveInfo, clearSave } from './save.js';
-import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS } from './config.js';
+import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS } from './config.js';
 
 const app = {
   mode: null,
@@ -85,6 +85,7 @@ function refresh() {
   warnThreats();
   announceMonuments();
   showNews();
+  turnStartFeedback();
   tutorTick();
   render.drawMinimap(app.state, viewer());
   updateSelection();
@@ -92,6 +93,23 @@ function refresh() {
 }
 
 // Bedrohte Städte rot markieren und einmal pro Zug darauf hinweisen.
+// Zugbeginn: Einkommen über der Hauptstadt zeigen, Schonfrist ankündigen.
+function turnStartFeedback() {
+  if (!myTurn() || app.state.winner) return;
+  const p = actAs(), st = app.state;
+  const key = `${app.gen}:${st.round}:${p}`;
+  if (app.turnGreeted === key) return;
+  app.turnGreeted = key;
+  const cities = R.citiesFor(st, p);
+  const home = cities.find(c => c.isCapital) || cities[0];
+  if (home && st.round > 1) render.floatAt(home.q, home.r, `+${R.incomeFor(st, p)}`, '#facc15');
+  const grace = R.graceUntil(st);
+  const bots = st.players.filter(o => R.isBot(st, o) && R.alive(st, o));
+  if (!grace || !bots.some(o => R.graceProtects(st, o, p))) return;
+  if (st.round === 1) ui.toast(`Schonfrist: Die KI greift dich bis Runde ${grace} nicht an – außer du greifst sie zuerst an. Nutze die Zeit zum Ausbauen!`, 'good');
+  else if (st.round === grace) ui.toast('Letzte Runde der Schonfrist – ab der nächsten Runde kann die KI angreifen.', 'warn');
+}
+
 // Rückblick auf die Züge der anderen seit dem eigenen letzten Zug.
 function showNews() {
   if (!myTurn()) return;
@@ -211,7 +229,11 @@ function checkWinnerUI() {
     sfx(app.state.winner && (app.mode === 'hotseat' || app.state.winner === me) ? 'win' : 'lose');
   }
   if (app.state.winner) { clearSave(); ui.showWinner(app.state, ctx()); }
-  else if (humanDefeated()) { clearSave(); ui.showDefeat(app.state, ctx()); }
+  else if (humanDefeated()) {
+    clearSave();
+    const easier = app.state.aiLevel !== 'easy' || app.state.players.length > 2;
+    ui.showDefeat(app.state, ctx(), { easier, retry: true });
+  }
 }
 
 // Lokale Partien nach jeder Aktion sichern (Neuladen / Tab schließen).
@@ -249,6 +271,11 @@ function announce(events) {
     if (ev.kind === 'capture') {
       ui.toast(ev.to ? `Stadt erobert! (${needName(app.state, ev.to)})` : 'Stadt neutralisiert', 'good');
       sfx('capture');
+      if (ev.city) render.celebrate(ev.city.q, ev.city.r, R.playerColor(app.state, ev.to), true);
+    } else if (ev.kind === 'bounty') {
+      if (ev.player === actAs()) ui.toast(`Gegner besiegt: +${ev.stars} Stern Beute`, 'good');
+    } else if (ev.kind === 'provoke') {
+      ui.toast(`Du hast ${needName(app.state, ev.player)} angegriffen – die Schonfrist gegen diesen Stamm ist vorbei.`, 'warn');
     } else if (ev.kind === 'ruin') {
       ui.toast(`Ruine erkundet: ${ev.text}`, 'good');
       sfx('coin');
@@ -417,6 +444,7 @@ async function doBuyPop(city) {
   app.busy = true;
   ui.toast('Bevölkerung wächst', 'good');
   sfx('coin');
+  render.celebrate(city.q, city.r);
   await render.syncBoard(app.state, viewer());
   await afterAction();
 }
@@ -429,7 +457,8 @@ async function doImprove(city, type, q, r) {
   app.busy = true;
   const def = IMPROVEMENTS[type];
   ui.toast(`${def ? def.name + ' gebaut' : 'Gebäude gebaut'}`, 'good');
-  sfx('build');
+  sfx(def && def.monument ? 'win' : 'build');
+  render.celebrate(q, r, def && def.monument ? 0xfacc15 : 0x86efac, !!(def && def.monument));
   await render.syncBoard(app.state, viewer());
   await afterAction();
 }
@@ -1012,6 +1041,17 @@ function boot() {
     },
     onMenu: () => showMenu(),
     onRestart: () => { ui.hideWinner(); showMenu(); },
+    onRetry: easier => {
+      const st = app.state;
+      ui.hideWinner();
+      if (!st) return showMenu();
+      const levels = ['easy', 'normal', 'hard'];
+      let aiLevel = st.aiLevel || 'normal', count = st.players.length;
+      // Leichter: erst die Stufe senken, dann einen Gegner weniger.
+      if (easier) { if (aiLevel !== 'easy') aiLevel = levels[levels.indexOf(aiLevel) - 1]; else count = Math.max(2, count - 1); }
+      startLocal('bot', { count, aiLevel, tribe: st.tribes && st.tribes.player_1, mapSize: st.mapSize, mapType: st.mapType, turnLimit: st.turnLimit });
+      if (easier) ui.toast(`Neues Spiel: ${AI_LEVELS[aiLevel].label}, ${count - 1} ${count === 2 ? 'Gegner' : 'Gegner'}`, 'good');
+    },
     onContinue: continueGame,
     onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : startLocal(mode),
     onTutor,
