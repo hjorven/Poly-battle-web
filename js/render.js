@@ -652,7 +652,7 @@ function stepMinimap(now) {
 let idleMarkers = [];
 export function setIdleMarkers(units) {
   if (!initialized) return;
-  while (idleGroup.children.length) idleGroup.remove(idleGroup.children[0]);
+  for (const m of idleMarkers) idleGroup.remove(m);
   idleMarkers = [];
   const markGeo = geo('idleMark', () => new THREE.OctahedronGeometry(0.11, 0));
   const markMat = geo('idleMat', () => new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
@@ -668,7 +668,31 @@ export function setIdleMarkers(units) {
   }
 }
 
+// Rote, pulsierende Ringe um bedrohte eigene Städte.
+let threatRings = [];
+export function setThreatMarkers(cities) {
+  if (!initialized) return;
+  for (const m of threatRings) idleGroup.remove(m);
+  threatRings = [];
+  const ringGeo = geo('threatRing', () => new THREE.RingGeometry(0.72, 0.86, 6).rotateX(-Math.PI / 2).rotateY(Math.PI / 6));
+  for (const c of cities) {
+    const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
+      color: 0xef4444, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide
+    }));
+    const p = toWorld(c.q, c.r);
+    m.position.set(p.x, hexTop(hk(c.q, c.r)) + 0.03, p.z);
+    m.renderOrder = 13;
+    idleGroup.add(m);
+    threatRings.push(m);
+  }
+}
+
 function stepIdleMarkers(now) {
+  for (const m of threatRings) {
+    m.material.opacity = 0.45 + Math.sin(now / 280) * 0.35;
+    const s = 1 + Math.sin(now / 280) * 0.04;
+    m.scale.set(s, 1, s);
+  }
   for (const m of idleMarkers) {
     m.position.y = m.userData.base + Math.sin(now / 260 + m.userData.phase) * 0.06;
     m.rotation.y = now / 600;

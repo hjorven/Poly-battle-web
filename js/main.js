@@ -82,9 +82,24 @@ function refresh() {
   const idle = myTurn() ? R.idleUnits(app.state, actAs()) : [];
   ui.setIdle(idle.length);
   render.setIdleMarkers(idle);
+  warnThreats();
   render.drawMinimap(app.state, viewer());
   updateSelection();
   checkWinnerUI();
+}
+
+// Bedrohte Städte rot markieren und einmal pro Zug darauf hinweisen.
+function warnThreats() {
+  const mine = myTurn() && !app.state.winner;
+  const threats = mine ? R.threatenedCities(app.state, actAs()) : [];
+  render.setThreatMarkers(threats);
+  if (!threats.length) return;
+  const key = `${app.state.round}:${actAs()}`;
+  if (app.threatWarned === key) return;
+  app.threatWarned = key;
+  ui.toast(threats.length === 1
+    ? 'Achtung: Eine deiner Städte ist bedroht (rot markiert)'
+    : `Achtung: ${threats.length} deiner Städte sind bedroht (rot markiert)`, 'warn');
 }
 
 // Reihum zur nächsten Einheit springen, die noch etwas tun kann.
