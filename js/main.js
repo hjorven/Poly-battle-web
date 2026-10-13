@@ -842,6 +842,23 @@ function boot() {
       else if (cmd === 'tiltDown') render.tiltCamera(1);
       else render.resetCamera();
     },
+    onHotkey: key => {
+      if (!app.state) return;
+      if (key === 'next') nextIdle();
+      else if (key === 'end') { if (myTurn()) doEndTurn(); }
+      else if (key === 'tech') ui.openTech(app.state, ctx());
+      else if (key === 'overview') ui.showOverview(app.state, ctx());
+      else if (key === 'details') { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = !app.panelOpen; refresh(); } }
+      else if (key === 'home') focusHome();
+      else if (key === 'sound') { setMuted(!isMuted()); ui.setSoundIcon(isMuted()); }
+      else if (key === 'deselect') { app.sel = null; refresh(); }
+      else if (key === 'panL') render.panCamera(-1, 0);
+      else if (key === 'panR') render.panCamera(1, 0);
+      else if (key === 'panU') render.panCamera(0, 1);
+      else if (key === 'panD') render.panCamera(0, -1);
+      else if (key === 'zoomIn') render.zoomCamera(0.8);
+      else if (key === 'zoomOut') render.zoomCamera(1.25);
+    },
     onToggleSound: () => { setMuted(!isMuted()); ui.setSoundIcon(isMuted()); if (!isMuted()) sfx('select'); },
     onOfferPeace: doOfferPeace,
     onDeclareWar: doDeclareWar,
