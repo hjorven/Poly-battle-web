@@ -4,7 +4,7 @@ import {
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
-  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -577,6 +577,7 @@ export function startTurn(state) {
     if (c.owner === p) c.trained = false;
   }
   state.stars[p] += incomeFor(state, p);
+  checkMonuments(state, p);
   updateExplored(state, p);
 }
 
@@ -726,6 +727,8 @@ export function attack(state, attacker, defender) {
     state.units = state.units.filter(u => u !== defender);
     killed = true;
     events.push({ kind: 'kill', unit: defender });
+    if (!state.killsBy) state.killsBy = {};
+    state.killsBy[attacker.owner] = (state.killsBy[attacker.owner] || 0) + 1;
     const promo = addKill(attacker);
     if (promo) events.push(promo);
     if (UNITS[attacker.type].range === 1 && !switchesDomain(state, attacker, defender.q, defender.r)) {
@@ -905,6 +908,9 @@ export function canImprove(state, city, type, q, r) {
   if (resourceAt(state, q, r)) return { ok: false, reason: 'Ressource wird genutzt' };
   if (bridgeAt(state, q, r)) return { ok: false, reason: 'Brücke im Weg' };
   if (unitAt(state, q, r)) return { ok: false, reason: 'Einheit im Weg' };
+  if (def.monument && city.owner && !monumentReady(state, city.owner, type)) {
+    return { ok: false, reason: `Erfolg fehlt: ${MONUMENTS[type].goal}` };
+  }
   return { ok: true };
 }
 
@@ -913,6 +919,13 @@ export function improve(state, city, type, q, r, player) {
   if (!chk.ok) return chk;
   if (city.owner !== player) return { ok: false, reason: 'Fremde Stadt' };
   const def = IMPROVEMENTS[type];
+  if (def.monument) {
+    if (!state.improvements) state.improvements = {};
+    state.improvements[hk(q, r)] = type;
+    state.monumentsBuilt[player].push(type);
+    growCity(state, city, MONUMENT_POP);
+    return { ok: true };
+  }
   if (def.tech && !state.techs[player].includes(def.tech)) return { ok: false, reason: 'Technologie fehlt' };
   if (state.stars[player] < def.cost) return { ok: false, reason: 'Zu wenig Sterne' };
   state.stars[player] -= def.cost;
@@ -1647,6 +1660,42 @@ function generateRuins(state, rand) {
   }
 }
 
+// --- Monumente ------------------------------------------------------------------
+
+function monumentAchieved(state, player, type) {
+  const mine = citiesFor(state, player);
+  switch (type) {
+    case 'm_wisdom': return (state.techs[player] || []).filter(t => t !== 'basic').length >= 20;
+    case 'm_valor': return ((state.killsBy && state.killsBy[player]) || 0) >= 10;
+    case 'm_eye': return lighthouseKeys(state).length > 0 && lighthouseCount(state, player) === lighthouseKeys(state).length;
+    case 'm_treasury': return (state.stars[player] || 0) >= 100;
+    case 'm_park': return mine.filter(c => c.pop >= MAX_POP).length >= 3;
+    case 'm_palace': return mine.length >= 8;
+    default: return false;
+  }
+}
+
+// Neu erreichte Erfolge dauerhaft freischalten; gibt die neuen Monumente zurück.
+export function checkMonuments(state, player) {
+  if (!state.monumentsUnlocked) state.monumentsUnlocked = {};
+  if (!state.monumentsBuilt) state.monumentsBuilt = {};
+  const have = state.monumentsUnlocked[player] || (state.monumentsUnlocked[player] = []);
+  if (!state.monumentsBuilt[player]) state.monumentsBuilt[player] = [];
+  const fresh = Object.keys(MONUMENTS).filter(t => !have.includes(t) && monumentAchieved(state, player, t));
+  have.push(...fresh);
+  return fresh;
+}
+
+// Freigeschaltet und noch nicht errichtet.
+export function monumentReady(state, player, type) {
+  return !!(state.monumentsUnlocked && (state.monumentsUnlocked[player] || []).includes(type) &&
+    !((state.monumentsBuilt && state.monumentsBuilt[player]) || []).includes(type));
+}
+
+export function readyMonuments(state, player) {
+  return Object.keys(MONUMENTS).filter(t => monumentReady(state, player, t));
+}
+
 // --- Leuchttürme ---------------------------------------------------------------
 
 function placeLighthouses(state) {
@@ -1706,6 +1755,7 @@ export function score(state, player) {
   s += SCORE.explored * ((state.explored && state.explored[player]) ? state.explored[player].length : 0);
   s += SCORE.ruin * ((state.ruinsBy && state.ruinsBy[player]) || 0);
   s += SCORE.lighthouse * lighthouseCount(state, player);
+  s += SCORE.monument * ((state.monumentsBuilt && state.monumentsBuilt[player]) || []).length;
   return s;
 }
 

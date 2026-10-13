@@ -258,8 +258,27 @@ export const IMPROVEMENTS = {
   sawmill: { name: 'Sägewerk', tech: 'forestry', terrain: ['forest'], cost: 7, pop: 1 },
   mine: { name: 'Mine', tech: 'mining', terrain: ['mountain'], cost: 8, pop: 1 },
   port: { name: 'Hafen', tech: 'sailing', terrain: ['water', 'ocean'], cost: 7, pop: 1 },
-  temple: { name: 'Tempel', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 }
+  temple: { name: 'Tempel', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 },
+  // Monumente: kostenlos, einmal je Stamm, nach einem Erfolg (siehe MONUMENTS).
+  m_wisdom: { name: 'Turm der Weisheit', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
+  m_valor: { name: 'Tor der Tapferkeit', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
+  m_eye: { name: 'Auge der Welt', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
+  m_treasury: { name: 'Schatzkammer', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
+  m_park: { name: 'Großer Park', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
+  m_palace: { name: 'Kaiserpalast', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 }
 };
+
+// Erfolge, die Monumente freischalten. Ein Monument gibt der Stadt, in deren
+// Gebiet es steht, +MONUMENT_POP Bevölkerung und zählt zur Punktzahl.
+export const MONUMENTS = {
+  m_wisdom: { goal: '20 Technologien erforscht', color: 0x60a5fa },
+  m_valor: { goal: '10 gegnerische Einheiten besiegt', color: 0xef4444 },
+  m_eye: { goal: 'Alle Leuchttürme gefunden', color: 0xfacc15 },
+  m_treasury: { goal: '100 Sterne auf einmal besessen', color: 0xf59e0b },
+  m_park: { goal: 'Drei Städte auf Stufe 5', color: 0x22c55e },
+  m_palace: { goal: '8 Städte besessen', color: 0xa855f7 }
+};
+export const MONUMENT_POP = 3;
 
 // --- Brücken ----------------------------------------------------------------
 // Landeinheiten bauen Brücken über 1–2 Felder Flachwasser; Schiffe fahren
@@ -327,5 +346,5 @@ export const AI_LEVELS = {
 };
 // Punktewertung (Perfektion und Endstatistik).
 export const SCORE = {
-  city: 100, pop: 40, reward: 20, tech: 50, unitCost: 5, explored: 2, improvement: 30, ruin: 40, lighthouse: 40
+  city: 100, pop: 40, reward: 20, tech: 50, unitCost: 5, explored: 2, improvement: 30, ruin: 40, lighthouse: 40, monument: 200
 };

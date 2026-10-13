@@ -1,10 +1,10 @@
 import {
   UNITS, UNIT_ORDER, TECHS, NAMES, MAX_POP,
-  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS,
+  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS, MONUMENTS,
   CITY_REWARDS, GAME_MODES, BRIDGE, MAP_SIZES, MAP_TYPES
 } from './config.js';
 import {
-  cityIncome, techCost, tribeName, playerColor, maxHp, maxMove, attackOf, popCost,
+  cityIncome, techCost, tribeName, playerColor, maxHp, maxMove, attackOf, popCost, monumentReady,
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
@@ -575,7 +575,8 @@ function buildRows(state, city, ctx) {
   for (const [q, r] of cityTiles(state, city)) {
     if (improvementAt(state, q, r) || resourceAt(state, q, r)) continue;
     const tile = terrainAt(state, q, r);
-    const types = Object.keys(IMPROVEMENTS).filter(k => IMPROVEMENTS[k].terrain.includes(tile));
+    const types = Object.keys(IMPROVEMENTS).filter(k => IMPROVEMENTS[k].terrain.includes(tile) &&
+      (!IMPROVEMENTS[k].monument || monumentReady(state, city.owner, k)));
     if (!types.length) continue;
     const cellName = TERRAIN[tile].name;
     const btns = types.map(t => {
@@ -587,7 +588,7 @@ function buildRows(state, city, ctx) {
       else if (state.stars[city.owner] < d.cost) reason = 'Zu wenig Sterne';
       if (!ctx.myTurn && !reason) reason = 'Nicht dein Zug';
       const locked = !ctx.myTurn;
-      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.name} <span class="cost">${d.cost}</span></button>`;
+      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.name} <span class="cost">${d.monument ? 'frei' : d.cost}</span></button>`;
     }).join('');
     rows.push(`<div class="build-row"><span class="build-tile">${cellName}</span><span class="build-btns">${btns}</span></div>`);
   }
@@ -1031,6 +1032,18 @@ export function showOverview(state, ctx) {
       <div class="stat">Punkte<b>${score(state, actAs)}</b></div>
     </div>`;
   menu.appendChild(stat);
+
+  // Monumente: Erfolg, Status (offen / bereit / errichtet).
+  const unlocked = (state.monumentsUnlocked && state.monumentsUnlocked[actAs]) || [];
+  const built = (state.monumentsBuilt && state.monumentsBuilt[actAs]) || [];
+  const mon = document.createElement('div');
+  mon.innerHTML = `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Monumente (${built.length}/${Object.keys(MONUMENTS).length})</div></div>
+    <div class="monument-list">${Object.entries(MONUMENTS).map(([id, m]) => {
+      const st = built.includes(id) ? 'errichtet' : unlocked.includes(id) ? 'bereit – im Stadtmenü errichten' : m.goal;
+      const cls = built.includes(id) ? 'done' : unlocked.includes(id) ? 'ready' : '';
+      return `<div class="monument ${cls}"><span class="mon-dot" style="background:#${m.color.toString(16).padStart(6, '0')}"></span><b>${IMPROVEMENTS[id].name}</b><span class="sub">${esc(st)}</span></div>`;
+    }).join('')}</div>`;
+  menu.appendChild(mon);
 
   if (myCities.length) {
     const head = document.createElement('div');

@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import * as R from '../js/rules.js';
 import {
   UNITS, TERRAIN, MAP_W, MAP_H, START_STARS, MAX_POP, TRIBES,
-  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE, TECHS
+  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE, TECHS, MONUMENT_POP
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
@@ -231,6 +231,28 @@ test('Stufe 4: Boni wirken (Kosten, Angriff, Bewegung, Einkommen, Heilung)', () 
   R.startTurn(st);
   assert.strictEqual(hurt.hp, 2 + 2 + 2, 'Heilkunst: +2');
   for (const [id, t] of Object.entries(TECHS)) if (t.tier === 4) assert.strictEqual(TECHS[t.req].tier, 3, id);
+});
+
+test('Monumente: Erfolg schaltet frei, einmal bauen, +3 Bevölkerung, Punkte', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1 };
+  st.cities = [city];
+  assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), []);
+  assert.ok(!R.canImprove(st, city, 'm_treasury', 6, 5).ok, 'noch gesperrt');
+  st.stars.player_1 = 100;
+  assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), ['m_treasury']);
+  st.stars.player_1 = 5;
+  assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), [], 'bleibt freigeschaltet, nicht doppelt');
+  assert.ok(R.monumentReady(st, 'player_1', 'm_treasury'));
+  const before = R.score(st, 'player_1');
+  assert.ok(R.improve(st, city, 'm_treasury', 6, 5, 'player_1').ok);
+  assert.strictEqual(st.stars.player_1, 5, 'kostenlos');
+  assert.strictEqual(city.pop, 1 + MONUMENT_POP);
+  assert.ok(R.score(st, 'player_1') >= before + SCORE.monument);
+  assert.ok(!R.monumentReady(st, 'player_1', 'm_treasury'), 'nur einmal');
+  assert.ok(!R.improve(st, city, 'm_treasury', 4, 5, 'player_1').ok);
+  st.killsBy = { player_1: 10 };
+  assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), ['m_valor']);
 });
 
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
