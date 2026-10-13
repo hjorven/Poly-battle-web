@@ -61,7 +61,8 @@ export const ABILITY_INFO = {
   convert: { name: 'Bekehren', desc: 'Übernimmt eine benachbarte feindliche Einheit.' },
   land: { name: 'Land', desc: 'Kann auf Land stehen.' },
   water: { name: 'Wasser', desc: 'Kann sich ausschließlich auf Wasser und Ozean bewegen.' },
-  settle: { name: 'Siedeln', desc: 'Gründet auf einem freien Feld eine neue Stadt (mind. 2 Felder von anderen Städten entfernt).' }
+  settle: { name: 'Siedeln', desc: 'Gründet auf einem freien Feld eine neue Stadt (mind. 2 Felder von anderen Städten entfernt).' },
+  scout: { name: 'Spähen', desc: 'Greift nicht an, betritt Berge ohne Klettern und sieht von Bergen 1 Feld weiter.' }
 };
 
 export function hasAbility(type, name) {
@@ -118,6 +119,10 @@ export const UNITS = {
     name: 'Kriegsschiff', icon: '🚤', hp: 18, atk: 4, def: 2, move: 3, range: 1, cost: 8, sight: 2,
     tech: 'navigation', abilities: ['dash', 'fortify', 'water']
   },
+  spy: {
+    name: 'Spion', icon: '🕵️', hp: 6, atk: 0, def: 1, move: 2, range: 1, cost: 4, sight: 2,
+    tech: null, abilities: ['scout', 'land']
+  },
   settler: {
     name: 'Siedler', icon: '🧑‍🌾', hp: 10, atk: 0, def: 0, move: 1, range: 1, cost: 5, sight: 1,
     tech: null, abilities: ['static', 'land', 'settle'], capital: true
@@ -127,7 +132,7 @@ export const UNITS = {
 export const UNIT_ORDER = [
   'warrior', 'archer', 'rider', 'defender', 'swordsman',
   'catapult', 'mindbender', 'knight', 'giant',
-  'boat', 'ship', 'battleship', 'settler'
+  'boat', 'ship', 'battleship', 'spy', 'settler'
 ];
 
 // Echter Technologiebaum (Basis-Äste; `req` = Voraussetzung, `tier` = Stufe/Kosten).
@@ -146,7 +151,7 @@ export const TECHS = {
   ramming: { name: 'Rammen', icon: '🛳️', tier: 2, req: 'fishing', desc: 'Zweig: Aquatismus' },
   archery: { name: 'Bogenschießen', icon: '🎯', tier: 2, req: 'hunting', desc: 'Bogenschützen; Wald-Verteidigung' },
   forestry: { name: 'Forstwirtschaft', icon: '🌲', tier: 2, req: 'hunting', desc: 'Sägewerke bauen (+1 Einkommen)' },
-  roads: { name: 'Wege', icon: '🛣️', tier: 2, req: 'riding', desc: '+1 Bewegung für alle Einheiten' },
+  roads: { name: 'Wege', icon: '🛣️', tier: 2, req: 'riding', desc: '+1 Bewegung für alle Einheiten; Brücken bauen' },
   freespirit: { name: 'Freier Geist', icon: '🕊️', tier: 2, req: 'riding', desc: 'Zweig: Ritterlichkeit' },
 
   construction: { name: 'Baukunst', icon: '🏗️', tier: 3, req: 'farming', desc: '+1 Stern pro Stadt' },
@@ -213,6 +218,13 @@ export const IMPROVEMENTS = {
   port: { name: 'Hafen', icon: '⚓', tech: 'sailing', terrain: ['water', 'ocean', 'ice'], cost: 7, pop: 1 },
   temple: { name: 'Tempel', icon: '🛕', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 }
 };
+
+// --- Brücken ----------------------------------------------------------------
+// Landeinheiten bauen Brücken über 1–2 Felder Flachwasser; Schiffe fahren
+// darunter durch oder reißen sie ein.
+export const BRIDGE = { tech: 'roads', costPerTile: 5, maxLen: 2 };
+// Auflösen einer Einheit erstattet diesen Anteil der Kosten.
+export const DISBAND_REFUND = 0.5;
 
 // --- Stadtstufen ------------------------------------------------------------
 // Stufe = Bevölkerung. Bei jeder neuen Stufe (2 bis 5) wählt der Besitzer

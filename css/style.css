@@ -608,3 +608,9 @@ button:focus-visible {
 .stats-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .score-chart { width: 100%; height: auto; display: block; margin-bottom: 18px; border: 1px solid var(--border); background: var(--bg); }
 .chart-cap { font-size: 12px; color: var(--muted); text-align: left; margin-bottom: 6px; }
+
+/* Hinweis auf Einheiten, die noch handeln können */
+.idle-btn { color: #a16207; border-color: #facc15; background: #fefce8; }
+.idle-btn:hover { background: #fef9c3; }
+.idle-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #facc15; margin-right: 6px; vertical-align: middle; }
+.panel .todo { color: #a16207; }
