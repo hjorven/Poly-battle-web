@@ -14,7 +14,11 @@ Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im
 - **Ruinen** auf der Karte geben beim Betreten Sterne, eine Technologie, einen Schwertkämpfer, Bevölkerung oder eine aufgedeckte Umgebung.
 - **Spielmodi**: Eroberung (bis nur noch ein Stamm übrig ist) oder Perfektion (30 Runden, höchste Punktzahl gewinnt). Am Ende gibt es eine Auswertung mit Punkteverlauf.
 - **KI-Stärke** Leicht, Normal oder Schwer (Einkommen, Startsterne, Angriffsverhalten).
-- **Fog of War**: Unentdecktes Land ist abgedunkelt. Feindliche Einheiten sieht (und trifft) man nur, solange sie in Sichtweite einer eigenen Einheit oder Stadt stehen.
+- **Fog of War**: Unentdecktes Land liegt unter treibendem Nebel, entdecktes, aber unbeobachtetes Land unter leichtem Dunst. Feindliche Einheiten sieht (und trifft) man nur in Sichtweite; Städte im Dunst zeigen den Stand, in dem man sie zuletzt gesehen hat.
+- **Wasser & Brücken**: Alle Gewässer sind zu einem Netz verbunden. An schmalen Stellen gibt es natürliche Brücken; mit „Wege“ bauen Landeinheiten eigene Brücken über 1–2 Felder Flachwasser (5 Sterne pro Feld). Schiffe fahren darunter durch oder reißen sie ein.
+- **Spion**: Günstiger Späher (Bewegung 2, Sicht 2, auf Bergen 3), betritt Berge ohne Klettern, greift nicht an.
+- **Einheiten auflösen** (halbe Kosten zurück) und **Regeneration**: Einheiten heilen zu Rundenbeginn, wenn sie nicht angegriffen haben und kein Gegner sie erreichen kann.
+- **Tipps**: Der Knopf „N bereit“ springt reihum zu Einheiten, die noch handeln können; diese tragen eine gelbe Markierung.
 - **Sieg**: Wer als Letzter noch Städte besitzt (alle anderen eliminiert), gewinnt. Verlierst du gegen die KI deine letzte Stadt, endet die Partie mit „Besiegt".
 - **Spielstand**: Partien gegen die KI und Hotseat-Partien werden nach jeder Aktion im Browser gespeichert und lassen sich über „Weiterspielen" im Menü fortsetzen.
 

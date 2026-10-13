@@ -1,13 +1,17 @@
 import {
   UNITS, UNIT_ORDER, TECHS, NAMES, MAX_POP,
   TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS,
-  CITY_REWARDS, GAME_MODES
+  CITY_REWARDS, GAME_MODES, BRIDGE
 } from './config.js';
 import {
   cityIncome, techCost, tribeName, playerColor, maxHp, maxMove,
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
-  canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking
+  canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
+  bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate
 } from './rules.js';
+
+// Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
+const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
 
 const $ = id => document.getElementById(id);
 const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'normal' };
@@ -29,6 +33,7 @@ export function initUI(h) {
     }
   });
   $('endTurnBtn').addEventListener('click', () => handlers.onEndTurn());
+  $('idleBtn').addEventListener('click', () => handlers.onNextIdle());
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
   $('overviewBtn').addEventListener('click', () => handlers.onOpenOverview());
@@ -165,6 +170,20 @@ export function setEndTurn(enabled) {
   $('endTurnBtn').disabled = !enabled;
 }
 
+// Zeigt an, wie viele eigene Einheiten in diesem Zug noch etwas tun können.
+export function setIdle(count) {
+  const btn = $('idleBtn');
+  btn.classList.toggle('hidden', !count);
+  btn.innerHTML = `<span class="idle-dot"></span>${count} bereit`;
+}
+
+// „2× Krieger, 1× Reiter“
+export function describeUnits(units) {
+  const counts = new Map();
+  for (const u of units) counts.set(u.type, (counts.get(u.type) || 0) + 1);
+  return [...counts].map(([t, n]) => `${n}× ${UNITS[t].name}`).join(', ');
+}
+
 export function hidePanel() {
   $('panel').classList.add('hidden');
 }
@@ -227,6 +246,38 @@ export function showUnitPanel(state, unit, ctx) {
     }
   }
 
+  let todo = '';
+  if (mine && ctx.myTurn) {
+    const opts = unitOptions(state, unit);
+    if (opts.length) todo = `<div class="hint todo">Kann noch: ${opts.join(', ')}</div>`;
+  }
+  if (unit.hp < cap) {
+    todo += `<div class="hint">${canRegenerate(state, unit) ? 'Heilt zu Beginn des nächsten Zuges' : 'Heilt nicht: hat angegriffen oder steht in Reichweite eines Gegners'}</div>`;
+  }
+
+  let extra = '';
+  if (mine && ctx.myTurn) {
+    const bridges = bridgeOptions(state, unit);
+    if (bridges.length) {
+      extra += `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Brücke bauen</div></div><div class="action-list">`;
+      for (const o of bridges) {
+        const chk = canBuildBridge(state, unit, o.dir, ctx.actAs);
+        extra += `<button class="btn action" data-bridge="${o.dir}" ${chk.ok ? '' : 'disabled'}>
+          <span>🌉 Nach ${DIR_NAMES[o.dir]} (${o.tiles.length} ${o.tiles.length === 1 ? 'Feld' : 'Felder'})<span class="sub">${chk.ok ? 'Blau markiert · verbraucht den Zug der Einheit' : chk.reason}</span></span>
+          <span class="cost">${o.cost} Sterne</span></button>`;
+      }
+      extra += `</div>`;
+    }
+    const breakable = destroyableBridges(state, unit);
+    if (breakable.length) {
+      extra += `<div class="action-list">${breakable.map(([q, r]) =>
+        `<button class="btn action" data-unbridge="${q},${r}"><span>💥 Brücke einreißen<span class="sub">${q === unit.q && r === unit.r ? 'Unter dem Schiff' : 'Auf dem Nachbarfeld'} · verbraucht den Zug</span></span></button>`).join('')}</div>`;
+    }
+    extra += `<div class="action-list"><button class="btn action ghost" data-disband>
+      <span>🗑️ Einheit auflösen<span class="sub">Entfernt die Einheit dauerhaft</span></span>
+      <span class="cost">+${disbandRefund(unit)} Sterne</span></button></div>`;
+  }
+
   let found = '';
   if (mine && ctx.myTurn && unit.type === 'settler') {
     const f = canFound(state, unit, ctx.actAs);
@@ -256,16 +307,30 @@ export function showUnitPanel(state, unit, ctx) {
     </div>
     <div class="ability-row">${abilityChips(unit.type)}</div>
     <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ×${tb}</div>
+    ${todo}
     ${found}
     ${forecast}
+    ${extra}
     <div class="hint">${hint}</div>
   `);
   wirePanel($('panel'));
   const foundBtn = $('panel').querySelector('[data-found]');
   if (foundBtn) foundBtn.addEventListener('click', () => handlers.onFound(unit));
+  $('panel').querySelectorAll('[data-bridge]').forEach(btn => {
+    btn.addEventListener('click', () => handlers.onBuildBridge(unit, Number(btn.dataset.bridge)));
+  });
+  $('panel').querySelectorAll('[data-unbridge]').forEach(btn => {
+    const [q, r] = btn.dataset.unbridge.split(',').map(Number);
+    btn.addEventListener('click', () => handlers.onDestroyBridge(unit, q, r));
+  });
+  const disbandBtn = $('panel').querySelector('[data-disband]');
+  if (disbandBtn) disbandBtn.addEventListener('click', () => handlers.onDisband(unit));
 }
 
 export function showCityPanel(state, city, ctx) {
+  // Fremde Städte außer Sicht nur so zeigen, wie man sie zuletzt gesehen hat.
+  const view = cityView(state, ctx.viewer, city);
+  if (view && !view.live) return showRememberedCity(state, view);
   const mine = city.owner === ctx.actAs && ctx.myTurn;
   const ownerName = city.owner ? (tribeName(state, city.owner) || NAMES[city.owner]) : 'Neutral';
   const income = city.owner ? cityIncome(state, city) : 0;
@@ -332,7 +397,9 @@ export function showCityPanel(state, city, ctx) {
     </div>
     ${levelChips(city)}
     <div class="tile-grid">${cells}</div>
-    ${actions || (!city.owner ? '<div class="hint">Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.</div>' : '<div class="hint">Nicht dein Zug.</div>')}
+    ${actions || (!city.owner ? '<div class="hint">Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.</div>'
+      : city.owner !== ctx.actAs ? '<div class="hint">Feindliche Stadt – besiege die Verteidiger und rücke ein, um sie zu erobern.</div>'
+      : '<div class="hint">Nicht dein Zug.</div>')}
   `);
   wirePanel($('panel'));
   $('panel').querySelectorAll('[data-train]').forEach(btn => {
@@ -345,6 +412,27 @@ export function showCityPanel(state, city, ctx) {
   $('panel').querySelectorAll('[data-improve]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onImprove(city, btn.dataset.improve, Number(btn.dataset.q), Number(btn.dataset.r)));
   });
+}
+
+function showRememberedCity(state, view) {
+  const ownerName = view.owner ? (tribeName(state, view.owner) || NAMES[view.owner]) : 'Neutral';
+  panel(`
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">🏙️ Stadt${view.isCapital ? ' · Hauptstadt' : ''}</div>
+        <div class="panel-sub" style="color:${view.owner ? hex(playerColor(state, view.owner)) : '#71717a'}">${ownerName}</div>
+      </div>
+      <div class="panel-head-right">
+        <button class="btn icon-btn panel-close" data-close>Schließen</button>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat">Stufe<b>${view.pop}/${MAX_POP}</b></div>
+      <div class="stat">Mauer<b>${view.wall ? 'ja' : 'nein'}</b></div>
+    </div>
+    <div class="hint">Im Nebel – so hast du die Stadt zuletzt gesehen. Schick eine Einheit oder einen Spion hin, um den aktuellen Stand zu sehen.</div>
+  `);
+  wirePanel($('panel'));
 }
 
 function levelChips(city) {

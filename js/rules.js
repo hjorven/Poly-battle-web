@@ -3,9 +3,9 @@ import {
   TERRAIN, UNITS, TECHS, UNIT_ORDER, COLORS, VISION, ACCELERATOR,
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
-  AI_LEVELS, SCORE
+  AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND
 } from './config.js';
-import { hk, inBounds, neighbors, hexDistance, forEachHex } from './hex.js';
+import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -169,15 +169,31 @@ function hasTech(state, owner, tech) {
   return !!tech && !!state.techs[owner] && state.techs[owner].includes(tech);
 }
 
-export function canEnter(state, unit, tile) {
+// q/r sind optional: Nur mit Koordinaten werden Brücken berücksichtigt.
+export function canEnter(state, unit, tile, q, r) {
   const t = TERRAIN[tile];
   if (!t) return false;
   if (hasAbility(unit.type, 'water')) {
     return tile === 'water' || tile === 'ocean';
   }
+  if (q != null && bridgeAt(state, q, r)) return true;
   if (!t.walkable) return false;
+  if (tile === 'mountain' && hasAbility(unit.type, 'scout')) return true;
   if (t.enterTech) return hasTech(state, unit.owner, t.enterTech);
   return true;
+}
+
+// Bewegungskosten eines Feldes. Schiffe fahren auf Wasser mit 1 pro Feld
+// (sonst käme ein Boot mit Bewegung 2 nur ein Feld weit), Brücken kosten
+// für Landeinheiten wie ebenes Land 1.
+export function moveCost(state, unit, q, r) {
+  if (hasAbility(unit.type, 'water')) return 1;
+  if (bridgeAt(state, q, r)) return 1;
+  return TERRAIN[terrainAt(state, q, r)].move;
+}
+
+export function bridgeAt(state, q, r) {
+  return !!(state.bridges && state.bridges[hk(q, r)] != null);
 }
 
 export function defenceBonus(state, defender) {
@@ -206,6 +222,18 @@ export function battleResults(state, attacker, defender) {
   return { damage, retaliation };
 }
 
+// Sichtweite einer Einheit: Berge geben mindestens 2, Späher dort +1,
+// Segeln +1 für alle.
+export function unitSight(state, u) {
+  let radius = UNITS[u.type].sight ?? VISION.unit;
+  if (terrainAt(state, u.q, u.r) === 'mountain') {
+    radius = Math.max(radius, 2);
+    if (hasAbility(u.type, 'scout')) radius += 1;
+  }
+  if (hasTech(state, u.owner, 'sailing')) radius += 1;
+  return radius;
+}
+
 export function visibleKeys(state, player) {
   const keys = new Set();
   const addArea = (q, r, rad) => {
@@ -215,10 +243,7 @@ export function visibleKeys(state, player) {
   };
   for (const u of state.units) {
     if (u.owner !== player) continue;
-    let radius = UNITS[u.type].sight ?? VISION.unit;
-    if (terrainAt(state, u.q, u.r) === 'mountain') radius = Math.max(radius, 2);
-    if (hasTech(state, player, 'sailing')) radius += 1;
-    addArea(u.q, u.r, radius);
+    addArea(u.q, u.r, unitSight(state, u));
   }
   for (const c of state.cities) {
     if (c.owner === player) addArea(c.q, c.r, VISION.city);
@@ -234,7 +259,39 @@ export function updateExplored(state, player) {
   for (const k of visible) {
     if (!known.has(k)) { known.add(k); state.explored[player].push(k); changed = true; }
   }
+  rememberCities(state, player, visible);
   return changed;
+}
+
+// --- Gedächtnis im Nebel ------------------------------------------------------
+// Jeder Spieler merkt sich Städte so, wie er sie zuletzt gesehen hat. Was
+// danach außerhalb seiner Sicht passiert (Eroberung, Wachstum, Mauer), sieht
+// er erst, wenn wieder eine Einheit oder Stadt hinschaut.
+
+function citySnapshot(c) {
+  return { owner: c.owner, pop: c.pop, wall: hasReward(c, 'wall'), isCapital: !!c.isCapital };
+}
+
+function rememberCities(state, player, keys) {
+  if (!state.cityMemory) state.cityMemory = {};
+  const mem = state.cityMemory[player] || (state.cityMemory[player] = {});
+  for (const c of state.cities) {
+    const k = hk(c.q, c.r);
+    if (keys.has(k)) mem[k] = citySnapshot(c);
+  }
+}
+
+// Wie `viewer` die Stadt gerade sieht: live (eigene oder sichtbare Stadt),
+// als Erinnerung (entdeckt, aber außer Sicht) oder gar nicht (null).
+export function cityView(state, viewer, city) {
+  const live = { ...citySnapshot(city), q: city.q, r: city.r, live: true };
+  if (!viewer || !state.explored || !state.explored[viewer]) return live;
+  if (city.owner === viewer || isVisible(state, viewer, city.q, city.r)) return live;
+  if (!isExplored(state, viewer, city.q, city.r)) return null;
+  const mem = state.cityMemory && state.cityMemory[viewer] && state.cityMemory[viewer][hk(city.q, city.r)];
+  // Alte Spielstände ohne Gedächtnis: neutral anzeigen statt live zu verraten.
+  const snap = mem || { owner: null, pop: 1, wall: false, isCapital: false };
+  return { ...snap, q: city.q, r: city.r, live: false };
 }
 
 // Set-Cache pro explored-Array: vermeidet Array.includes (O(n)) bei
@@ -258,12 +315,9 @@ export function isExplored(state, player, q, r) {
 // einer eigenen Einheit oder Stadt.
 export function isVisible(state, player, q, r) {
   if (!player || !state.explored || !state.explored[player]) return true;
-  const sailing = hasTech(state, player, 'sailing') ? 1 : 0;
   for (const u of state.units) {
     if (u.owner !== player) continue;
-    let radius = UNITS[u.type].sight ?? VISION.unit;
-    if (terrainAt(state, u.q, u.r) === 'mountain') radius = Math.max(radius, 2);
-    if (hexDistance(u.q, u.r, q, r) <= radius + sailing) return true;
+    if (hexDistance(u.q, u.r, q, r) <= unitSight(state, u)) return true;
   }
   for (const c of state.cities) {
     if (c.owner === player && hexDistance(c.q, c.r, q, r) <= VISION.city) return true;
@@ -280,13 +334,29 @@ export function canAct(state, player) {
   return !state.winner && state.turn === player;
 }
 
+// Steht eine feindliche Einheit so nah, dass sie diese Einheit angreifen könnte?
+export function threatened(state, u) {
+  return state.units.some(e =>
+    e.owner !== u.owner && canEverAttack(e.type) &&
+    hexDistance(e.q, e.r, u.q, u.r) <= UNITS[e.type].range
+  );
+}
+
+// Heilt zu Rundenbeginn: Verschanzer, die nichts getan haben (wie bisher),
+// und jede Einheit, die nicht angegriffen hat und außer Reichweite aller
+// Gegner steht – auch wenn sie sich bewegt hat.
+export function canRegenerate(state, u) {
+  if (u.hp >= maxHp(u.type) || u.acted) return false;
+  if (hasAbility(u.type, 'fortify') && !u.hasMoved) return true;
+  return !threatened(state, u);
+}
+
 export function startTurn(state) {
   const p = state.turn;
   const spirit = hasTech(state, p, 'spiritualism') ? 1 : 0;
 
   for (const u of state.units) {
-    if (u.owner !== p || !hasAbility(u.type, 'fortify')) continue;
-    if (u.acted || u.hasMoved) continue;
+    if (u.owner !== p || !canRegenerate(state, u)) continue;
     const cap = maxHp(u.type);
     if (u.hp >= cap) continue;
     const city = cityAt(state, u.q, u.r);
@@ -362,8 +432,8 @@ export function reachableMap(state, unit) {
     for (const [nq, nr] of neighbors(q, r)) {
       if (unitAt(state, nq, nr)) continue;
       const tile = terrainAt(state, nq, nr);
-      if (!canEnter(state, unit, tile)) continue;
-      const nc = cost + TERRAIN[tile].move;
+      if (!canEnter(state, unit, tile, nq, nr)) continue;
+      const nc = cost + moveCost(state, unit, nq, nr);
       if (nc > budget) continue;
       const k = hk(nq, nr);
       if (nc < (dist.get(k) ?? Infinity)) {
@@ -433,7 +503,7 @@ export function attack(state, attacker, defender) {
     events.push({ kind: 'kill', unit: defender });
     if (UNITS[attacker.type].range === 1) {
       const tile = terrainAt(state, defender.q, defender.r);
-      if (canEnter(state, attacker, tile) && !unitAt(state, defender.q, defender.r)) {
+      if (canEnter(state, attacker, tile, defender.q, defender.r) && !unitAt(state, defender.q, defender.r)) {
         attacker.q = defender.q;
         attacker.r = defender.r;
         const city = cityAt(state, attacker.q, attacker.r);
@@ -565,6 +635,7 @@ export function canImprove(state, city, type, q, r) {
   if (!def.terrain.includes(terrainAt(state, q, r))) return { ok: false, reason: 'Falsches Gelände' };
   if (improvementAt(state, q, r)) return { ok: false, reason: 'Bereits bebaut' };
   if (resourceAt(state, q, r)) return { ok: false, reason: 'Ressource wird genutzt' };
+  if (bridgeAt(state, q, r)) return { ok: false, reason: 'Brücke im Weg' };
   if (unitAt(state, q, r)) return { ok: false, reason: 'Einheit im Weg' };
   return { ok: true };
 }
@@ -587,6 +658,121 @@ export function attackPreview(state, attacker) {
     const { damage, retaliation } = battleResults(state, attacker, target);
     return { target, damage, retaliation };
   });
+}
+
+// --- Brücken ----------------------------------------------------------------
+
+// Achse einer Brücke (0–2): verbindet die Nachbarn in Richtung DIRS[a] und
+// DIRS[a + 3].
+function bridgeable(state, q, r) {
+  return terrainAt(state, q, r) === 'water' && !bridgeAt(state, q, r) &&
+    !unitAt(state, q, r) && !cityAt(state, q, r) && !improvementAt(state, q, r);
+}
+
+function landAt(state, q, r) {
+  if (!inBounds(q, r)) return false;
+  const t = TERRAIN[terrainAt(state, q, r)];
+  return t.walkable || bridgeAt(state, q, r);
+}
+
+// Mögliche Brücken für eine Landeinheit: in jeder Richtung 1 oder 2 Felder
+// Flachwasser, dahinter wieder Land.
+export function bridgeOptions(state, unit) {
+  if (!unit || hasAbility(unit.type, 'water') || UNITS[unit.type].reward) return [];
+  const out = [];
+  DIRS.forEach(([dq, dr], dir) => {
+    const tiles = [];
+    for (let i = 1; i <= BRIDGE.maxLen; i++) {
+      const q = unit.q + dq * i, r = unit.r + dr * i;
+      if (!inBounds(q, r) || !bridgeable(state, q, r)) break;
+      tiles.push([q, r]);
+      const eq = q + dq, er = r + dr;
+      if (landAt(state, eq, er) && terrainAt(state, eq, er) !== 'water' && terrainAt(state, eq, er) !== 'ocean') {
+        out.push({ dir, tiles: tiles.slice(), cost: tiles.length * BRIDGE.costPerTile });
+        break;
+      }
+    }
+  });
+  return out;
+}
+
+export function canBuildBridge(state, unit, dir, player) {
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (!unit || unit.owner !== player) return { ok: false, reason: 'Nicht deine Einheit' };
+  if (unit.acted) return { ok: false, reason: 'Einheit hat schon gehandelt' };
+  if (!hasTech(state, player, BRIDGE.tech)) return { ok: false, reason: `Technologie fehlt: ${TECHS[BRIDGE.tech].name}` };
+  const opt = bridgeOptions(state, unit).find(o => o.dir === dir);
+  if (!opt) return { ok: false, reason: 'Hier ist keine Brücke möglich' };
+  if (state.stars[player] < opt.cost) return { ok: false, reason: 'Zu wenig Sterne' };
+  return { ok: true, option: opt };
+}
+
+export function buildBridge(state, unit, dir, player) {
+  const chk = canBuildBridge(state, unit, dir, player);
+  if (!chk.ok) return chk;
+  if (!state.bridges) state.bridges = {};
+  state.stars[player] -= chk.option.cost;
+  for (const [q, r] of chk.option.tiles) state.bridges[hk(q, r)] = dir % 3;
+  unit.acted = true;
+  unit.mp = 0;
+  unit.hasMoved = true;
+  return { ok: true, tiles: chk.option.tiles };
+}
+
+// Brücken, die ein Schiff einreißen kann: auf dem eigenen oder einem
+// Nachbarfeld, solange niemand anderes darauf steht.
+export function destroyableBridges(state, unit) {
+  if (!unit || !hasAbility(unit.type, 'water') || unit.acted) return [];
+  return [[unit.q, unit.r], ...neighbors(unit.q, unit.r)].filter(([q, r]) => {
+    if (!bridgeAt(state, q, r)) return false;
+    const other = unitAt(state, q, r);
+    return !other || other === unit;
+  });
+}
+
+export function destroyBridge(state, unit, q, r, player) {
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (!unit || unit.owner !== player) return { ok: false, reason: 'Nicht deine Einheit' };
+  if (!destroyableBridges(state, unit).some(([bq, br]) => bq === q && br === r)) {
+    return { ok: false, reason: 'Keine Brücke in Reichweite' };
+  }
+  delete state.bridges[hk(q, r)];
+  unit.acted = true;
+  unit.mp = 0;
+  unit.hasMoved = true;
+  return { ok: true };
+}
+
+// --- Auflösen ---------------------------------------------------------------
+
+export function disbandRefund(unit) {
+  return Math.floor(UNITS[unit.type].cost * DISBAND_REFUND);
+}
+
+export function disbandUnit(state, unit, player) {
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (!unit || unit.owner !== player) return { ok: false, reason: 'Nicht deine Einheit' };
+  if (state.turn !== player) return { ok: false, reason: 'Nicht dein Zug' };
+  const refund = disbandRefund(unit);
+  state.units = state.units.filter(u => u !== unit);
+  state.stars[player] += refund;
+  return { ok: true, refund };
+}
+
+// --- Bereite Einheiten (Tipps) ---------------------------------------------
+
+// Was eine Einheit in diesem Zug noch sinnvoll tun kann (leer = nichts).
+export function unitOptions(state, unit) {
+  if (unit.acted && unit.mp <= 0) return [];
+  const out = [];
+  if (attackTargets(state, unit).length) out.push(hasAbility(unit.type, 'convert') ? 'bekehren' : 'angreifen');
+  if (unit.mp > 0 && reachableMap(state, unit).size) out.push('ziehen');
+  if (!unit.acted && unit.type === 'settler' && canFound(state, unit, unit.owner).ok) out.push('Stadt gründen');
+  return out;
+}
+
+export function idleUnits(state, player) {
+  return state.units.filter(u => u.owner === player && unitOptions(state, u).length);
 }
 
 // --- Siedeln (Stadtgründung) ------------------------------------------------
@@ -693,12 +879,123 @@ function floodReachable(state, sq, sr) {
       if (seen.has(k)) continue;
       const tile = terrainAt(state, nq, nr);
       const def = TERRAIN[tile];
-      if (!def.walkable || def.enterTech) continue;
+      if (!bridgeAt(state, nq, nr) && (!def.walkable || def.enterTech)) continue;
       seen.add(k);
       queue.push([nq, nr]);
     }
   }
   return seen;
+}
+
+const isWet = t => t === 'water' || t === 'ocean';
+
+// Achse (0–2), auf der beide gegenüberliegenden Nachbarn begehbares Land
+// sind – dort ergibt eine Brücke Sinn. -1, wenn es keine gibt.
+function crossingAxis(state, q, r) {
+  for (let a = 0; a < 3; a++) {
+    const [d1q, d1r] = DIRS[a], [d2q, d2r] = DIRS[a + 3];
+    const ok = [[q + d1q, r + d1r], [q + d2q, r + d2r]].every(([nq, nr]) => {
+      if (!inBounds(nq, nr)) return false;
+      const t = TERRAIN[terrainAt(state, nq, nr)];
+      return t.walkable && !t.enterTech;
+    });
+    if (ok) return a;
+  }
+  return -1;
+}
+
+// Alle Gewässer zu einem zusammenhängenden Netz verbinden: Jeder See bekommt
+// einen Kanal (kürzester Weg über Land) zum Meer. Startgebiete bleiben frei.
+// Gibt die Kanalfelder zurück.
+function connectWater(state, starts) {
+  const n = MAP_W * MAP_H;
+  const comp = new Int32Array(n).fill(-1);
+  const comps = [];
+  forEachHex((q, r) => {
+    if (!isWet(terrainAt(state, q, r)) || comp[idx(q, r)] >= 0) return;
+    const id = comps.length, cells = [[q, r]];
+    comp[idx(q, r)] = id;
+    for (let i = 0; i < cells.length; i++) {
+      for (const [nq, nr] of neighbors(cells[i][0], cells[i][1])) {
+        if (comp[idx(nq, nr)] < 0 && isWet(terrainAt(state, nq, nr))) {
+          comp[idx(nq, nr)] = id;
+          cells.push([nq, nr]);
+        }
+      }
+    }
+    comps.push(cells);
+  });
+  if (comps.length < 2) return [];
+  // Das größte Gewässer (der Ozeanring) ist das Hauptnetz.
+  let main = 0;
+  comps.forEach((c, i) => { if (c.length > comps[main].length) main = i; });
+  const inMain = new Uint8Array(n);
+  for (const [q, r] of comps[main]) inMain[idx(q, r)] = 1;
+  const nearStart = (q, r) => starts.some(([sq, sr]) => hexDistance(q, r, sq, sr) <= 2);
+  const channel = [];
+  for (let id = 0; id < comps.length; id++) {
+    if (id === main) continue;
+    // Mehrquellen-Breitensuche vom See aus bis zum Hauptnetz.
+    const prev = new Map();
+    const queue = [];
+    for (const [q, r] of comps[id]) { prev.set(idx(q, r), -1); queue.push([q, r]); }
+    let hit = null;
+    for (let i = 0; i < queue.length && !hit; i++) {
+      const [q, r] = queue[i];
+      for (const [nq, nr] of neighbors(q, r)) {
+        const k = idx(nq, nr);
+        if (prev.has(k)) continue;
+        if (inMain[k]) { prev.set(k, idx(q, r)); hit = k; break; }
+        if (nearStart(nq, nr) || cityAt(state, nq, nr)) continue;
+        prev.set(k, idx(q, r));
+        queue.push([nq, nr]);
+      }
+    }
+    if (hit == null) continue;
+    // Zurückverfolgen bis zum See (Seefelder haben Vorgänger -1).
+    for (let k = prev.get(hit); k !== -1; k = prev.get(k)) {
+      if (!isWet(state.terrain[k])) {
+        state.terrain[k] = 'water';
+        channel.push([k % MAP_W, Math.floor(k / MAP_W)]);
+      }
+    }
+    for (const [q, r] of comps[id]) inMain[idx(q, r)] = 1;
+    for (const [q, r] of channel) inMain[idx(q, r)] = 1;
+  }
+  return channel;
+}
+
+// Brücken über Kanäle, wo sie für den Landweg nötig sind, plus ein paar
+// natürliche Brücken an 1 Feld breiten Engstellen.
+function placeBridges(state, rand, channel, sq, sr) {
+  state.bridges = {};
+  const candidates = channel
+    .map(([q, r]) => ({ q, r, a: crossingAxis(state, q, r) }))
+    .filter(c => c.a >= 0);
+  for (const c of candidates) state.bridges[hk(c.q, c.r)] = c.a;
+  // Erreichbares Land (ohne Brückenfelder selbst) darf nicht schrumpfen.
+  const landReach = () => {
+    let n = 0;
+    for (const k of floodReachable(state, sq, sr)) if (!state.bridges[k] && state.bridges[k] !== 0) n++;
+    return n;
+  };
+  const want = landReach();
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  for (const c of candidates) {
+    const k = hk(c.q, c.r);
+    delete state.bridges[k];
+    if (landReach() < want) state.bridges[k] = c.a;
+  }
+  forEachHex((q, r) => {
+    if (terrainAt(state, q, r) !== 'water' || bridgeAt(state, q, r)) return;
+    const a = crossingAxis(state, q, r);
+    if (a < 0 || rand() > 0.3) return;
+    if (neighbors(q, r).some(([nq, nr]) => bridgeAt(state, nq, nr))) return;
+    state.bridges[hk(q, r)] = a;
+  });
 }
 
 function carveLine(state, q1, r1, q2, r2, wide = true) {
@@ -770,7 +1067,7 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   const tribes = assignTribes(seed, count, tribe);
   const state = {
     terrain: generateTerrain(rand),
-    cities: [], units: [], resources: {}, improvements: {},
+    cities: [], units: [], resources: {}, improvements: {}, bridges: {}, cityMemory: {},
     players: Array.from({ length: count }, (_, k) => 'player_' + (k + 1)),
     tribes,
     stars: {}, techs: {}, explored: {},
@@ -806,6 +1103,9 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   }
   carveLine(state, starts[0][0], starts[0][1], starts[2 % starts.length][0], starts[2 % starts.length][1], false);
 
+  const channel = connectWater(state, starts);
+  placeBridges(state, rand, channel, starts[0][0], starts[0][1]);
+
   const reachable = floodReachable(state, starts[0][0], starts[0][1]);
 
   const candidates = [];
@@ -813,7 +1113,7 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
     const k = hk(q, r);
     if (!reachable.has(k)) return;
     const def = TERRAIN[state.terrain[idx(q, r)]];
-    if (!def.walkable || def.enterTech) return;
+    if (!def.walkable || def.enterTech || bridgeAt(state, q, r)) return;
     candidates.push([q, r]);
   });
   for (let i = candidates.length - 1; i > 0; i--) {
@@ -875,7 +1175,7 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
       let q = city.q, r = city.r;
       if (!first || unitAt(state, q, r)) {
         const opts = neighbors(city.q, city.r).filter(([nq, nr]) =>
-          canEnter(state, { owner, type }, terrainAt(state, nq, nr)) && !unitAt(state, nq, nr) && !cityAt(state, nq, nr)
+          canEnter(state, { owner, type }, terrainAt(state, nq, nr), nq, nr) && !unitAt(state, nq, nr) && !cityAt(state, nq, nr)
         );
         if (!opts.length) continue;
         [q, r] = opts[0];
@@ -938,7 +1238,7 @@ function freeLandNear(state, q, r, type, owner) {
   const spots = [[q, r], ...neighbors(q, r)];
   for (const [nq, nr] of spots) {
     if (unitAt(state, nq, nr)) continue;
-    if (!canEnter(state, { type, owner }, terrainAt(state, nq, nr))) continue;
+    if (!canEnter(state, { type, owner }, terrainAt(state, nq, nr), nq, nr)) continue;
     if (cityAt(state, nq, nr) && cityAt(state, nq, nr).owner !== owner) continue;
     return [nq, nr];
   }
@@ -958,10 +1258,14 @@ function spawnUnitAt(state, owner, type, q, r) {
 function revealAround(state, player, q, r, rad) {
   if (!state.explored || !state.explored[player]) return;
   const known = new Set(state.explored[player]);
+  const area = new Set();
   forEachHex((nq, nr) => {
     const k = hk(nq, nr);
-    if (hexDistance(q, r, nq, nr) <= rad && !known.has(k)) { known.add(k); state.explored[player].push(k); }
+    if (hexDistance(q, r, nq, nr) > rad) return;
+    area.add(k);
+    if (!known.has(k)) { known.add(k); state.explored[player].push(k); }
   });
+  rememberCities(state, player, area);
 }
 
 export function chooseReward(state, city, id, player) {
