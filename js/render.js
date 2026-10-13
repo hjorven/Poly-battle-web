@@ -46,16 +46,18 @@ function freshMat(color) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true });
 }
 
-const darkMats = new Map();
-function darkMatFor(t) {
-  if (!darkMats.has(t)) {
-    darkMats.set(t, new THREE.MeshLambertMaterial({
-      color: new THREE.Color(TERRAIN[t].color).multiplyScalar(0.45),
+// Entdeckt, aber gerade außer Sicht: Gelände leicht abgedunkelt.
+const dimMats = new Map();
+function dimMatFor(t) {
+  if (!dimMats.has(t)) {
+    dimMats.set(t, new THREE.MeshLambertMaterial({
+      color: new THREE.Color(TERRAIN[t].color).multiplyScalar(0.68),
       flatShading: true
     }));
   }
-  return darkMats.get(t);
+  return dimMats.get(t);
 }
+
 
 export function initRender(canvas, opts = {}) {
   onPick = opts.onPick || null;
@@ -360,96 +362,117 @@ function syncBridge(t, axis) {
 }
 
 // --- Nebel ------------------------------------------------------------------
-// Unentdecktes Land liegt unter dichten, langsam treibenden Nebelschwaden;
-// entdecktes, aber gerade unbeobachtetes Land unter leichtem Dunst.
+// Eine durchgehende Nebelfläche über der ganzen Karte. Ihre Deckkraft kommt
+// aus einer Textur, in die jedes unentdeckte Feld als weicher Kreis gemalt
+// wird: innen gleichmäßig dicht, am Rand ein sanfter Übergang – keine
+// Flecken, kein Muster. Die Fläche liegt knapp über den Feldern, damit der
+// Rand auch beim Drehen/Neigen zu den Feldern passt (unentdeckte Berge
+// werden dafür flach gezeichnet). Zielfelder werden freigelegt.
 
-let fogDense = null, fogHaze = null, fogTiles = [];
-const fogDummy = new THREE.Object3D();
-const FOG_LAYERS = 2;
-
-function fogTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const ctx = c.getContext('2d');
-  const blob = (x, y, r, a) => {
-    const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, `rgba(255,255,255,${a})`);
-    gr.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = gr;
-    ctx.fillRect(0, 0, 128, 128);
-  };
-  blob(64, 64, 62, 0.85);
-  blob(44, 52, 36, 0.5);
-  blob(84, 70, 34, 0.5);
-  blob(60, 86, 28, 0.4);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
+const FOG_Y = 0.62;          // Höhe der Nebelfläche (Land 0.5)
+const FOG_COLOR = 0xdde4ea;
+const FOG_PX = 10;           // Texturpixel pro Welteinheit
+// Radius des weichen Kreises je Feld (Weltmaß). Der voll deckende Kern
+// (FOG_CORE) reicht über die Feldecken (Abstand 1) hinaus, sonst schimmern
+// dort die Fugen zwischen den Feldern durch.
+const FOG_RADIUS = 1.45;
+const FOG_CORE = 0.76;
+let fog = null;
+let fogClear = new Set();
 
 function buildFog() {
-  for (const m of [fogDense, fogHaze]) {
-    if (!m) continue;
-    scene.remove(m);
-    m.dispose();
+  if (fog) {
+    scene.remove(fog.mesh);
+    fog.mesh.material.map.dispose();
+    fog.mesh.material.dispose();
+    fog.mesh.geometry.dispose();
   }
-  const tex = geo('fogTex', fogTexture);
-  const plane = geo('fogPlane', () => new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2));
-  const n = tiles.size;
-  fogDense = new THREE.InstancedMesh(plane, new THREE.MeshBasicMaterial({
-    map: tex, color: 0xeef2f5, transparent: true, opacity: 0.95, depthWrite: false, fog: false
-  }), n * FOG_LAYERS);
-  fogHaze = new THREE.InstancedMesh(plane, new THREE.MeshBasicMaterial({
-    map: tex, color: 0xd5dee6, transparent: true, opacity: 0.42, depthWrite: false, fog: false
-  }), n);
-  fogDense.renderOrder = 12;
-  fogHaze.renderOrder = 11;
-  for (const m of [fogDense, fogHaze]) {
-    m.frustumCulled = false;
-    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    scene.add(m);
-  }
-  fogTiles = [];
-  let i = 0;
+  const b = mapBounds();
+  const pad = 3;
+  const minX = b.minX - pad, minZ = b.minZ - pad;
+  const w = b.maxX - b.minX + pad * 2, h = b.maxZ - b.minZ + pad * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(w * FOG_PX);
+  canvas.height = Math.ceil(h * FOG_PX);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ map: tex, color: FOG_COLOR, transparent: true, depthWrite: false, fog: false })
+  );
+  mesh.position.set(minX + w / 2, FOG_Y, minZ + h / 2);
+  mesh.renderOrder = 12;
+  scene.add(mesh);
+  const cells = [];
   for (const [key, t] of tiles) {
     const [q, r] = key.split(',').map(Number);
     const p = toWorld(q, r);
-    const h = (q * 928371 + r * 123457) % 1000 / 1000;
-    fogTiles.push({ t, x: p.x, z: p.z, dense: 1, haze: 0, phase: h * Math.PI * 2, rot: h * 6.28, i: i++ });
+    cells.push({ key, t, px: (p.x - minX) * FOG_PX, pz: (p.z - minZ) * FOG_PX, level: 1 });
   }
+  fog = { mesh, tex, canvas, ctx: canvas.getContext('2d'), cells, dirty: true };
+}
+
+function paintFog() {
+  const { ctx, canvas, cells } = fog;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const rad = FOG_RADIUS * FOG_PX;
+  for (const c of cells) {
+    if (c.level <= 0.005) continue;
+    const gr = ctx.createRadialGradient(c.px, c.pz, 0, c.px, c.pz, rad);
+    gr.addColorStop(0, `rgba(255,255,255,${c.level})`);
+    gr.addColorStop(FOG_CORE, `rgba(255,255,255,${c.level})`);
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gr;
+    ctx.fillRect(c.px - rad, c.pz - rad, rad * 2, rad * 2);
+  }
+  fog.tex.needsUpdate = true;
 }
 
 function stepFog(now, dt) {
-  if (!fogDense) return;
-  const k = Math.min(1, dt * 3.5);
-  const time = now / 1000;
-  for (const f of fogTiles) {
-    const wantDense = f.t.seen ? 0 : 1;
-    const wantHaze = f.t.seen && !f.t.lit ? 1 : 0;
-    f.dense += (wantDense - f.dense) * k;
-    f.haze += (wantHaze - f.haze) * k;
-    for (let l = 0; l < FOG_LAYERS; l++) {
-      const ph = f.phase + l * 2.1;
-      const sc = f.dense < 0.01 ? 0 : (2.5 + l * 0.5 + Math.sin(time * 0.3 + ph) * 0.15) * f.dense;
-      fogDummy.position.set(
-        f.x + Math.sin(time * 0.17 + ph) * 0.25,
-        1.25 + l * 0.35 + Math.sin(time * 0.4 + ph) * 0.05,
-        f.z + Math.cos(time * 0.13 + ph) * 0.25
-      );
-      fogDummy.rotation.set(0, f.rot + l + time * 0.03, 0);
-      fogDummy.scale.set(sc || 1e-4, 1, sc || 1e-4);
-      fogDummy.updateMatrix();
-      fogDense.setMatrixAt(f.i * FOG_LAYERS + l, fogDummy.matrix);
-    }
-    const hs = f.haze < 0.01 ? 1e-4 : 2.3 * f.haze;
-    fogDummy.position.set(f.x + Math.sin(time * 0.2 + f.phase) * 0.15, 1.02, f.z);
-    fogDummy.rotation.set(0, f.rot, 0);
-    fogDummy.scale.set(hs, 1, hs);
-    fogDummy.updateMatrix();
-    fogHaze.setMatrixAt(f.i, fogDummy.matrix);
+  if (!fog) return;
+  const k = Math.min(1, dt * 6);
+  let changed = fog.dirty;
+  for (const c of fog.cells) {
+    const want = !c.t.seen && !fogClear.has(c.key) ? 1 : 0;
+    if (c.level === want) continue;
+    c.level += (want - c.level) * k;
+    if (Math.abs(c.level - want) < 0.02) c.level = want;
+    changed = true;
   }
-  fogDense.instanceMatrix.needsUpdate = true;
-  fogHaze.instanceMatrix.needsUpdate = true;
+  if (changed) {
+    fog.dirty = false;
+    paintFog();
+  }
+}
+
+// Unentdeckte Felder tragen selbst die Nebelfarbe (unbeleuchtet), liegen
+// flach (Berge ragen sonst heraus) und stoßen lückenlos aneinander. Was an
+// Kanten unter der Nebelfläche durchscheint, hat so dieselbe Farbe – keine
+// Fugenlinien im Nebel.
+const fogTileMat = new THREE.MeshBasicMaterial({ color: FOG_COLOR, fog: false });
+// Freigelegtes Zugziel im Unentdeckten: mittleres Grau, damit die helle
+// Markierung darauf gut sichtbar ist.
+const fogTargetMat = new THREE.MeshBasicMaterial({ color: 0x8b97a3, fog: false });
+let fogClearTiles = [];
+
+function applyFogClear() {
+  for (const t of fogClearTiles) if (!t.seen) t.mesh.material = fogTileMat;
+  fogClearTiles = [];
+  for (const k of fogClear) {
+    const t = tiles.get(k);
+    if (t && !t.seen) { t.mesh.material = fogTargetMat; fogClearTiles.push(t); }
+  }
+}
+function flattenUnseen(t) {
+  const h = TERRAIN[t.terrain].height;
+  const y = t.seen || h <= 0.5 ? 1 : 0.5 / h;
+  const xz = t.seen ? 1 : 1 / TILE_GAP;
+  if (t.mesh.scale.y !== y || t.mesh.scale.x !== xz) {
+    t.mesh.scale.set(xz, y, xz);
+    t.mesh.position.y = (h * y) / 2;
+  }
 }
 
 // --- Minikarte --------------------------------------------------------------
@@ -1311,7 +1334,8 @@ export function syncBoard(state, viewer = null) {
     const seen = !explored || explored.has(key);
     t.seen = seen;
     t.lit = !visible || visible.has(key);
-    t.mesh.material = seen ? t.baseMat : darkMatFor(t.terrain);
+    t.mesh.material = !seen ? (fogClear.has(key) ? fogTargetMat : fogTileMat) : t.lit ? t.baseMat : dimMatFor(t.terrain);
+    flattenUnseen(t);
     if (t.decor) for (const d of t.decor) d.visible = seen;
   }
   // Städte so zeigen, wie der Betrachter sie kennt (live oder aus dem Gedächtnis).
@@ -1481,7 +1505,7 @@ function discMat(kind) {
   if (!discMats.has(kind)) {
     const { color, opacity } = HL[kind];
     discMats.set(kind, new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity, depthWrite: false
+      color, transparent: true, opacity, depthWrite: false, fog: false
     }));
   }
   return discMats.get(kind);
@@ -1499,8 +1523,11 @@ export function setHighlights({ selected = null, move = null, attack = null, cit
     const m = new THREE.Mesh(discGeo(), discMat(kind));
     const p = toWorld(q, r);
     m.position.set(p.x, t.top + dy, p.z);
+    m.renderOrder = 13; // nach dem Nebel zeichnen – Zielfelder bleiben sichtbar
     highlightGroup.add(m);
+    if (kind !== 'city') clear.add(hk(q, r));
   };
+  const clear = new Set();
 
   if (selected) {
     const [q, r] = selected.split(',').map(Number);
@@ -1511,6 +1538,8 @@ export function setHighlights({ selected = null, move = null, attack = null, cit
   if (attack) for (const u of attack) addDisc(u.q, u.r, 'attack');
   if (city) addDisc(city.q, city.r, 'city');
   if (bridge) for (const [q, r] of bridge) addDisc(q, r, 'bridge');
+  fogClear = clear;
+  applyFogClear();
 }
 
 // Zum Feld schwenken. Drehung und Neigung bleiben erhalten; `close` zoomt
@@ -1594,3 +1623,5 @@ export function debugCamera(x = 15, y = 3.2, z = 17.5, tx = 15, tz = 12) {
   camera.position.set(x, y, z);
   controls.update();
 }
+
+

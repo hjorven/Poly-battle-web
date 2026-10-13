@@ -25,7 +25,7 @@ Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im
 - **Diplomatie**: Mit „Diplomatie“ lässt sich Stämmen, denen man begegnet ist, Frieden anbieten (Übersicht). Im Frieden kein Angriff und kein Betreten der Städte des anderen; Kriegserklärung jederzeit, danach 3 Runden Pause.
 - **Stammes-Fähigkeiten**: Jeder Stamm hat eine Besonderheit (z. B. Xin-Xi: Berge kosten 1 Bewegung, Kickoo: Schiffe +1 Bewegung, Luxidoor: Hauptstadt +2 Sterne).
 - **Karten**: Größe Klein/Normal/Groß und Typ Kontinente/Pangäa/Archipel in den Spieleinstellungen.
-- **Komfort**: Minikarte (antippen springt dorthin), Rückgängig für Aktionen im laufenden Zug (nicht nach Kampf, Eroberung oder Ruinen; nicht online), Soundeffekte (🔊 schaltet stumm).
+- **Komfort**: Minikarte (antippen springt dorthin), Soundeffekte (Lautsprecher-Knopf schaltet stumm). Kein Rückgängig – jeder Zug zählt.
 - **KI**: verteidigt bedrohte Städte, schickt Spione, baut Schiffe und Brücken und bricht Frieden, wenn sie sonst keine Ziele hat. Züge im Nebel laufen ohne Animation durch.
 - **Kamera**: verschieben (ziehen), zoomen (Mausrad/zwei Finger), drehen und neigen (rechte Maustaste, Zwei-Finger-Drehgeste, Knöpfe unten rechts oder Q/E und R/F; N = Standardansicht).
 - **Städte** wachsen sichtbar: Hütten, Dorf mit Wachturm, Steinturm mit Markt, Halle, Burg; Hauptstadt mit Krone, Mauer/Park/Werkstatt am Modell erkennbar.

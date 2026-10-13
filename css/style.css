@@ -438,7 +438,6 @@ button:focus-visible {
   transition: transform 0.15s, background 0.15s, border-color 0.15s, opacity 0.15s;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
 }
-.tech-node .tn-icon { font-size: 22px; line-height: 1; }
 .tech-node .tn-name { font-size: 10px; font-weight: 700; text-align: center; line-height: 1.1; }
 .tech-node .tn-cost { font-size: 11px; color: var(--accent); font-weight: 700; }
 .tech-node:hover:not(:disabled) {
@@ -639,10 +638,10 @@ button:focus-visible {
 .tribe-perk { display: block; font-size: 11px; color: #a16207; margin-top: 2px; }
 .vet-badge { color: #a16207; font-weight: 700; }
 
-/* Schmale Bildschirme: Rückgängig/Bereit nur als Symbol + Zahl */
+/* Schmale Bildschirme: Bereit nur als Punkt + Zahl */
 @media (max-width: 760px) {
   .top-actions .lbl { display: none; }
-  #idleBtn, #undoBtn { padding: 8px 9px; }
+  #idleBtn { padding: 8px 9px; }
 }
 /* Sehr schmal (Handy hochkant): Schriftzug weglassen, damit „Zug beenden“ passt */
 @media (max-width: 480px) {
@@ -664,3 +663,5 @@ button:focus-visible {
   #camera-pad { right: 8px; top: 168px; bottom: auto; grid-template-columns: repeat(3, 40px); }
   .cam-btn { width: 40px; height: 40px; }
 }
+
+#soundBtn { display: inline-flex; align-items: center; justify-content: center; }

@@ -26,7 +26,6 @@
       <span id="round-label">Runde 1</span>
       <button id="techBtn" class="btn ghost">Forschung</button>
       <button id="overviewBtn" class="btn ghost">Übersicht</button>
-      <button id="undoBtn" class="btn ghost hidden" title="Letzte Aktion rückgängig machen" aria-label="Rückgängig">↶<span class="lbl"> Rückgängig</span></button>
       <button id="idleBtn" class="btn ghost idle-btn hidden" title="Zur nächsten Einheit, die noch handeln kann">Bereit</button>
       <button id="endTurnBtn" class="btn primary" disabled>Zug beenden</button>
     </div>
@@ -37,7 +36,7 @@
     <div id="toast-area"></div>
     <aside id="panel" class="hidden"></aside>
     <button id="menuBtn" class="btn ghost small" title="Menü">Menü</button>
-    <button id="soundBtn" class="btn ghost small" title="Ton an/aus">🔊</button>
+    <button id="soundBtn" class="btn ghost small" title="Ton an/aus" aria-label="Ton an/aus"></button>
     <canvas id="minimap" width="220" height="150" title="Minikarte – antippen, um dorthin zu springen"></canvas>
     <div id="camera-pad" aria-label="Kamera">
       <button class="cam-btn" data-cam="rotL" title="Nach links drehen (Q)">↺</button>
