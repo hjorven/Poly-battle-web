@@ -32,8 +32,17 @@ function geo(key, make) {
   return geoCache.get(key);
 }
 
-function mat(color, opts = {}) {
-  return new THREE.MeshLambertMaterial({ color, flatShading: true, ...opts });
+// Unveränderliche Materialien werden geteilt (sonst entsteht pro Einheit,
+// Stadt und Kachel ein neues Material, das nie freigegeben wird).
+// Teamfarben werden pro Einheit verändert und nutzen deshalb freshMat().
+const matCache = new Map();
+function mat(color) {
+  if (!matCache.has(color)) matCache.set(color, freshMat(color));
+  return matCache.get(color);
+}
+
+function freshMat(color) {
+  return new THREE.MeshLambertMaterial({ color, flatShading: true });
 }
 
 const darkMats = new Map();
@@ -472,7 +481,6 @@ function syncImprovement(t, imp) {
 function clearBoard() {
   for (const t of tiles.values()) {
     scene.remove(t.mesh);
-    t.baseMat.dispose();
   }
   tiles.clear();
   tileMeshes = [];
@@ -480,6 +488,7 @@ function clearBoard() {
     scene.remove(node.group);
     node.sprite.userData.texture?.dispose();
     node.sprite.material.dispose();
+    for (const m of node.group.userData.teamMats) m.dispose();
   }
   unitNodes.clear();
   for (const node of cityNodes.values()) scene.remove(node.group);
@@ -557,7 +566,7 @@ function unitBody(type, color) {
     return mesh;
   };
   const teamMat = () => {
-    const m = mat(team);
+    const m = freshMat(team);
     teamMats.push(m);
     return m;
   };
@@ -752,7 +761,7 @@ function placeUnitNode(state, unit) {
   sprite.position.y = 0.95;
   group.add(sprite);
   scene.add(group);
-  const node = { group, sprite, hp: unit.hp, acted: unit.acted, dying: false, baseColor: color };
+  const node = { group, sprite, hp: unit.hp, acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
   unitNodes.set(unit.id, node);
   if (unit.acted) {
     for (const m of node.group.userData.teamMats) m.color.multiplyScalar(0.55);
@@ -845,6 +854,12 @@ export function syncBoard(state, viewer = null) {
       node.hp = u.hp;
       drawHp(node.sprite, u.hp);
     }
+    // Bekehrte Einheiten (Gedankenbeuger) wechseln den Besitzer.
+    if (node.owner !== u.owner) {
+      node.owner = u.owner;
+      node.baseColor = ownerColor(u.owner);
+      node.acted = null;
+    }
     if (node.acted !== u.acted) {
       node.acted = u.acted;
       const f = u.acted ? 0.55 : 1;
@@ -897,6 +912,7 @@ export function syncBoard(state, viewer = null) {
         scene.remove(g);
         node.sprite.userData.texture.dispose();
         node.sprite.material.dispose();
+        for (const m of g.userData.teamMats) m.dispose();
         unitNodes.delete(id);
       }
     });

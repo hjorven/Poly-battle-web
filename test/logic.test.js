@@ -1045,5 +1045,59 @@ test('Komplette KI-Partien: jede Stärke, Perfektion bis zum Ende', () => {
   }
 });
 
+console.log('\n-- Stadtgebiete --');
+
+// Zwei eigene Städte im Abstand 2 mit Grenzerweiterung: Gebiete überlappen.
+function twoCities() {
+  const st = R.createGame(7, 2);
+  const a = st.cities.find(c => c.owner === 'player_1');
+  const bq = a.q + 2, br = a.r;
+  st.terrain[br * MAP_W + bq] = 'field';
+  delete st.resources[hk(bq, br)];
+  st.units = st.units.filter(u => !(u.q === bq && u.r === br));
+  st.cities = st.cities.filter(c => !(c.q === bq && c.r === br));
+  const b = { q: bq, r: br, owner: 'player_1', pop: 1, trained: false, isCapital: false };
+  st.cities.push(b);
+  a.rewards = { 4: 'borders' };
+  b.rewards = { 4: 'borders' };
+  return { st, a, b };
+}
+
+test('Gebäude: nicht auf einem fremden Stadtfeld', () => {
+  const { st, a, b } = twoCities();
+  st.techs.player_1.push('farming');
+  st.stars.player_1 = 99;
+  const chk = R.canImprove(st, a, 'farm', b.q, b.r);
+  assert.strictEqual(chk.ok, false);
+  assert.strictEqual(R.improve(st, a, 'farm', b.q, b.r, 'player_1').ok, false);
+});
+
+test('Überlappende Gebiete: jedes Feld zählt nur für eine Stadt', () => {
+  const { st, a, b } = twoCities();
+  const seen = new Map();
+  for (const c of [a, b]) {
+    for (const [q, r] of R.cityTiles(st, c)) {
+      assert.ok(!seen.has(hk(q, r)), 'Feld doppelt: ' + hk(q, r));
+      seen.set(hk(q, r), c);
+    }
+  }
+  // Ressource auf einem gemeinsamen Feld bringt insgesamt genau +1.
+  const shared = R.territory(a).find(([q, r]) => hexDistance(q, r, b.q, b.r) === 1);
+  for (const k of Object.keys(st.resources)) delete st.resources[k];
+  const before = R.cityIncome(st, a) + R.cityIncome(st, b);
+  st.resources[hk(shared[0], shared[1])] = 'fruit';
+  assert.strictEqual(R.cityIncome(st, a) + R.cityIncome(st, b), before + 1);
+});
+
+test('Bevölkerung kaufen: eigene Garnison in der Stadt stört nicht', () => {
+  const st = R.createGame(3, 2);
+  const c = st.cities.find(x => x.owner === 'player_1');
+  st.stars.player_1 = 50;
+  if (!R.unitAt(st, c.q, c.r)) {
+    st.units.push({ id: 'g1', owner: 'player_1', type: 'warrior', q: c.q, r: c.r, hp: 10, mp: 1, acted: false, hasMoved: false });
+  }
+  assert.ok(R.canBuyPop(st, c, 'player_1').ok);
+});
+
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
 if (failed) process.exit(1);
