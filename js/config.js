@@ -104,7 +104,7 @@ export const UNITS = {
   },
   giant: {
     name: 'Riese', icon: '🗿', hp: 40, atk: 5, def: 4, move: 1, range: 1, cost: 10, sight: 1,
-    tech: null, abilities: ['static', 'land']
+    tech: null, abilities: ['static', 'land'], reward: true
   },
   boat: {
     name: 'Boot', icon: '🛶', hp: 10, atk: 2, def: 0, move: 2, range: 1, cost: 3, sight: 2,
@@ -212,4 +212,49 @@ export const IMPROVEMENTS = {
   mine: { name: 'Mine', icon: '⛏️', tech: 'mining', terrain: ['mountain'], cost: 8, pop: 1 },
   port: { name: 'Hafen', icon: '⚓', tech: 'sailing', terrain: ['water', 'ocean', 'ice'], cost: 7, pop: 1 },
   temple: { name: 'Tempel', icon: '🛕', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 }
+};
+
+// --- Stadtstufen ------------------------------------------------------------
+// Stufe = Bevölkerung. Bei jeder neuen Stufe (2 bis 5) wählt der Besitzer
+// eine von zwei Belohnungen – wie in Polytopia.
+export const CITY_REWARDS = {
+  workshop: { name: 'Werkstatt', desc: '+1 Stern pro Runde' },
+  explorer: { name: 'Erkunder', desc: 'Deckt die Umgebung im Umkreis von 4 Feldern auf' },
+  wall: { name: 'Stadtmauer', desc: 'Verteidiger in dieser Stadt erhalten ×4 Verteidigung' },
+  resources: { name: 'Vorräte', desc: '+5 Sterne sofort' },
+  growth: { name: 'Wachstum', desc: '+1 Bevölkerung (nächste Stufe)' },
+  borders: { name: 'Grenzerweiterung', desc: 'Stadtgebiet wächst auf 2 Felder Umkreis' },
+  park: { name: 'Park', desc: '+1 Stern pro Runde' },
+  giant: { name: 'Riese', desc: 'Ein Riese (40 Leben) erscheint bei der Stadt' }
+};
+export const REWARD_CHOICES = {
+  2: ['workshop', 'explorer'],
+  3: ['wall', 'resources'],
+  4: ['growth', 'borders'],
+  5: ['park', 'giant']
+};
+
+// --- Ruinen -----------------------------------------------------------------
+export const RUIN_REWARDS = {
+  stars: { name: 'Schatz', weight: 30 },
+  tech: { name: 'Altes Wissen', weight: 25 },
+  unit: { name: 'Verbündete', weight: 20 },
+  pop: { name: 'Siedler aus der Ruine', weight: 15 },
+  reveal: { name: 'Alte Karte', weight: 10 }
+};
+export const RUIN_STARS = 10;
+
+// --- Spielmodi & Schwierigkeit ---------------------------------------------
+export const GAME_MODES = {
+  conquest: { label: 'Eroberung', turnLimit: null },
+  perfection: { label: 'Perfektion (30 Runden)', turnLimit: 30 }
+};
+export const AI_LEVELS = {
+  easy: { label: 'Leicht', incomeFactor: 0.7, incomeBonus: 0, startBonus: 0 },
+  normal: { label: 'Normal', incomeFactor: 1, incomeBonus: 0, startBonus: 0 },
+  hard: { label: 'Schwer', incomeFactor: 1, incomeBonus: 2, startBonus: 3 }
+};
+// Punktewertung (Perfektion und Endstatistik).
+export const SCORE = {
+  city: 100, pop: 40, reward: 20, tech: 50, unitCost: 5, explored: 2, improvement: 30, ruin: 40
 };

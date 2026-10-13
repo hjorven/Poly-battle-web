@@ -4,7 +4,7 @@ import * as ui from './ui.js';
 import * as net from './net.js';
 import { botStep } from './ai.js';
 import { saveGame, loadGame, saveInfo, clearSave } from './save.js';
-import { NAMES, UNITS, TECHS, IMPROVEMENTS } from './config.js';
+import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS } from './config.js';
 
 const app = {
   mode: null,
@@ -14,7 +14,10 @@ const app = {
   gameId: null,
   sel: null,
   busy: false,
-  online: false
+  online: false,
+  // Wird bei jedem neuen/geladenen Spiel erhöht; eine noch laufende
+  // KI-Schleife des alten Spiels erkennt daran, dass sie aufhören muss.
+  gen: 0
 };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -44,7 +47,11 @@ function myTurn() {
 function statusText() {
   const st = app.state;
   if (!st) return 'Lade Spiel…';
-  if (st.winner) return `${needName(st, st.winner)} hat alle Städte erobert und gewinnt.`;
+  if (st.winner) {
+    return st.endReason === 'score'
+      ? `${needName(st, st.winner)} gewinnt nach Punkten.`
+      : `${needName(st, st.winner)} hat alle Städte erobert und gewinnt.`;
+  }
   if (app.mode === 'online') {
     if (!app.myRole) return `Zuschauer · Am Zug: ${needName(st, st.turn)}`;
     if (!app.hasOpponent) return 'Warte auf Mitspieler – teile den Link (Menü → Link kopieren).';
@@ -99,7 +106,7 @@ function humanDefeated() {
 function checkWinnerUI() {
   if (!app.state) return;
   if (app.state.winner) { clearSave(); ui.showWinner(app.state, ctx()); }
-  else if (humanDefeated()) { clearSave(); ui.showDefeat(app.state); }
+  else if (humanDefeated()) { clearSave(); ui.showDefeat(app.state, ctx()); }
 }
 
 // Lokale Partien nach jeder Aktion sichern (Neuladen / Tab schließen).
@@ -136,6 +143,10 @@ async function afterAction(events = []) {
   for (const ev of events) {
     if (ev.kind === 'capture') {
       ui.toast(ev.to ? `Stadt erobert! (${needName(app.state, ev.to)})` : 'Stadt neutralisiert', 'good');
+    } else if (ev.kind === 'ruin') {
+      ui.toast(`Ruine erkundet: ${ev.text}`, 'good');
+    } else if (ev.kind === 'note') {
+      ui.toast(ev.text);
     }
   }
   app.busy = false;
@@ -147,11 +158,41 @@ async function afterAction(events = []) {
   }
   persist();
   await saveOnline();
+  offerReward();
   if (!app.state.winner) await maybeBot();
 }
 
 function actAs() {
   return ctx().actAs;
+}
+
+// Panels und Dialoge halten Objekte aus dem Stand, mit dem sie gezeichnet
+// wurden. Ersetzt ein Online-Update den Stand, würde eine Aktion sonst ein
+// verwaistes Objekt ändern – deshalb immer im aktuellen Stand nachschlagen.
+function liveCity(city) {
+  return city ? R.cityAt(app.state, city.q, city.r) : null;
+}
+
+function liveUnit(unit) {
+  return unit ? R.findUnit(app.state, unit.id) : null;
+}
+
+// Offene Stadt-Belohnung des aktiven Spielers direkt zur Auswahl anbieten.
+function offerReward() {
+  if (!myTurn() || ui.isRewardOpen()) return;
+  const city = R.citiesFor(app.state, actAs()).find(c => R.pendingLevel(c));
+  if (city) ui.showReward(app.state, city, ctx());
+}
+
+async function doChooseReward(city, id) {
+  city = liveCity(city);
+  if (!city) return;
+  const res = R.chooseReward(app.state, city, id, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
+  app.busy = true;
+  ui.toast(`${CITY_REWARDS[id].name} gewählt`, 'good');
+  await render.syncBoard(app.state, viewer());
+  await afterAction(res.events);
 }
 
 function viewer() {
@@ -182,6 +223,8 @@ async function doAttack(attacker, defender) {
 }
 
 async function doTrain(city, type) {
+  city = liveCity(city);
+  if (!city) return;
   const res = R.trainUnit(app.state, city, type, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
@@ -191,6 +234,8 @@ async function doTrain(city, type) {
 }
 
 async function doBuyPop(city) {
+  city = liveCity(city);
+  if (!city) return;
   const res = R.buyPop(app.state, city, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
@@ -200,6 +245,8 @@ async function doBuyPop(city) {
 }
 
 async function doImprove(city, type, q, r) {
+  city = liveCity(city);
+  if (!city) return;
   const res = R.improve(app.state, city, type, q, r, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
@@ -210,6 +257,8 @@ async function doImprove(city, type, q, r) {
 }
 
 async function doFound(unit) {
+  unit = liveUnit(unit);
+  if (!unit) return;
   const res = R.foundCity(app.state, unit, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
   app.busy = true;
@@ -226,10 +275,19 @@ function doEndTurnNow() {
   app.busy = true;
   app.sel = null;
   R.endTurn(app.state);
-  return render.syncBoard(app.state, viewer()).then(() => {
-    if (app.mode === 'hotseat') { ui.toast(`Am Zug: ${needName(app.state, app.state.turn)}`); focusHome(); }
-    return afterAction();
-  });
+  // Hotseat: erst Übergabe-Bildschirm, dann die Sicht des nächsten Spielers.
+  if (app.mode === 'hotseat' && !app.state.winner) {
+    ui.showHandover(needName(app.state, app.state.turn), () => {
+      render.syncBoard(app.state, viewer());
+      focusHome();
+      afterAction();
+    });
+    app.busy = false;
+    persist();
+    refresh();
+    return Promise.resolve();
+  }
+  return render.syncBoard(app.state, viewer()).then(() => afterAction());
 }
 
 async function doEndTurn() {
@@ -253,14 +311,18 @@ async function doResearch(techId) {
 async function maybeBot() {
   if (app.mode !== 'bot' || app.busy || !app.state || app.state.winner) return;
   if (app.state.turn === 'player_1') return;
+  const gen = app.gen;
+  const stale = () => gen !== app.gen;
   app.busy = true;
   app.sel = null;
   refresh();
   await sleep(550);
+  if (stale()) return;
   while (app.state.turn !== 'player_1' && !app.state.winner && !humanDefeated()) {
     const player = app.state.turn;
     let steps = 0;
     while (app.state.turn === player && !app.state.winner) {
+      if (stale()) return;
       const step = botStep(app.state, player);
       if (!step) break;
       if (step.kind === 'attack') {
@@ -284,12 +346,17 @@ async function maybeBot() {
         await render.syncBoard(app.state, viewer());
       } else if (step.kind === 'research') {
         R.research(app.state, step.tech, player);
+      } else if (step.kind === 'reward') {
+        R.chooseReward(app.state, step.city, step.choice, player);
+        await render.syncBoard(app.state, viewer());
       }
       ui.updateStrip(app.state, ctx());
       await sleep(430);
+      if (stale()) return;
       steps++;
       if (steps > 220) break;
     }
+    if (stale()) return;
     if (app.state.turn === player && !app.state.winner) {
       R.endTurn(app.state);
       await render.syncBoard(app.state, viewer());
@@ -309,7 +376,9 @@ async function onHexPick(key) {
   const rawUnit = R.unitAt(st, q, r);
   // Feindliche Einheiten im Nebel lassen sich weder anwählen noch angreifen.
   const unit = rawUnit && (!v || rawUnit.owner === v || R.isVisible(st, v, q, r)) ? rawUnit : null;
-  const city = R.cityAt(st, q, r);
+  const rawCity = R.cityAt(st, q, r);
+  // Städte im unentdeckten Nebel bleiben verborgen.
+  const city = rawCity && (!v || rawCity.owner === v || R.isExplored(st, v, q, r)) ? rawCity : null;
 
   if (!myTurn()) {
     app.sel = unit ? { kind: 'unit', id: unit.id } : (city ? { kind: 'city', q, r } : null);
@@ -351,6 +420,7 @@ async function onHexPick(key) {
 }
 
 function startLocal(mode) {
+  app.gen++;
   app.mode = mode;
   app.online = false;
   app.gameId = null;
@@ -362,7 +432,12 @@ function startLocal(mode) {
   const settings = ui.getSettings();
   const count = mode === 'bot' ? settings.bots + 1 : 2;
   const tribe = mode === 'bot' ? ui.getTribe() : null;
-  const opts = mode === 'bot' ? { tribe, stars: settings.stars } : null;
+  const opts = mode === 'bot'
+    ? {
+        tribe, stars: settings.stars, turnLimit: settings.turnLimit, aiLevel: settings.aiLevel,
+        ai: Array.from({ length: count - 1 }, (_, k) => 'player_' + (k + 2))
+      }
+    : { turnLimit: settings.turnLimit };
   app.state = R.createGame(Math.floor(Math.random() * 2 ** 31), count, opts);
   enterLocal();
   persist();
@@ -394,6 +469,7 @@ function focusHome() {
 function continueGame() {
   const data = loadGame();
   if (!data) { ui.setContinue(null); ui.toast('Kein Spielstand gefunden', 'warn'); return; }
+  app.gen++;
   app.mode = data.mode;
   app.online = false;
   app.gameId = null;
@@ -403,12 +479,19 @@ function continueGame() {
   app.busy = false;
   app.idleWarned = null;
   app.state = data.state;
+  if (app.mode === 'hotseat') {
+    enterLocal();
+    ui.showHandover(needName(app.state, app.state.turn), () => { focusHome(); offerReward(); });
+    return;
+  }
   enterLocal();
   ui.toast(`Spielstand geladen · Runde ${app.state.round}`, 'good');
+  offerReward();
   maybeBot();
 }
 
 async function startOnline() {
+  app.gen++;
   app.mode = 'online';
   app.online = true;
   app.sel = null;
@@ -450,12 +533,15 @@ async function startOnline() {
   }
   app.channel = net.subscribe(app.gameId, match => {
     if (!app.online || !match.game_state) return;
-    // Veraltete oder eigene, bereits angewendete Stände ignorieren.
-    if ((match.game_state.rev || 0) < (app.state?.rev || 0)) return;
-    app.state = match.game_state;
     if (match.player_2) app.hasOpponent = true;
-    app.busy = false;
-    render.syncBoard(app.state, viewer());
+    // Nur echte Neuerungen übernehmen. Das Echo des eigenen Zuges (gleiche
+    // rev) würde den Stand durch eine identische Kopie ersetzen und offene
+    // Panels/Dialoge auf verwaiste Objekte zeigen lassen.
+    if ((match.game_state.rev || 0) > (app.state?.rev || 0)) {
+      app.state = match.game_state;
+      app.busy = false;
+      render.syncBoard(app.state, viewer());
+    }
     refresh();
   });
 }
@@ -485,6 +571,7 @@ function boot() {
     onBuyPop: doBuyPop,
     onImprove: doImprove,
     onFound: doFound,
+    onChooseReward: doChooseReward,
     onClosePanel: () => { app.sel = null; refresh(); },
     onOpenOverview: () => { if (app.state) ui.showOverview(app.state, ctx()); },
     onCloseOverview: () => ui.hideOverview(),
@@ -514,7 +601,7 @@ function boot() {
   if (location.hash.length > 1) startOnline();
   else showMenu();
 
-  window.__pb = { app, project: render.project, R, botStep };
+  window.__pb = { app, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); } };
 }
 
 boot();

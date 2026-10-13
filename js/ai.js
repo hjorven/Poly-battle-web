@@ -1,5 +1,5 @@
 import * as R from './rules.js';
-import { UNITS, IMPROVEMENTS } from './config.js';
+import { UNITS, IMPROVEMENTS, TECHS } from './config.js';
 import { hexDistance, hk } from './hex.js';
 
 const UNIT_VALUE = {
@@ -30,7 +30,7 @@ function bestBuilding(state, player) {
   let best = null;
   for (const city of R.citiesFor(state, player)) {
     if (city.pop < 2 && state.cities.filter(c => c.owner === player).length < 3) continue;
-    for (const [q, r] of R.territory(city)) {
+    for (const [q, r] of R.cityTiles(state, city)) {
       if (R.improvementAt(state, q, r) || R.resourceAt(state, q, r)) continue;
       if (state.units.some(u => u.q === q && u.r === r)) continue;
       for (const type of Object.keys(IMPROVEMENTS)) {
@@ -112,9 +112,43 @@ function bestMove(state, unit, player) {
   return { unit, q: best.q, r: best.r };
 }
 
+// Belohnung für eine aufgestiegene Stadt wählen.
+function rewardStep(state, player) {
+  for (const city of R.citiesFor(state, player)) {
+    const opts = R.rewardOptions(city);
+    if (!opts.length) continue;
+    let pick = opts[0];
+    if (opts.includes('wall')) {
+      const threat = state.units.some(u => u.owner !== player && hexDistance(u.q, u.r, city.q, city.r) <= 3);
+      pick = threat ? 'wall' : 'resources';
+    } else if (opts.includes('borders')) pick = 'borders';
+    else if (opts.includes('giant')) pick = 'giant';
+    else if (opts.includes('workshop')) pick = 'workshop';
+    return { kind: 'reward', city, choice: pick };
+  }
+  return null;
+}
+
+// Erreichbare Ruine (nicht für Siedler und Schiffe).
+function ruinStep(state, unit) {
+  if (!state.ruins || unit.type === 'settler' || UNITS[unit.type].abilities.includes('water')) return null;
+  const reach = R.reachableMap(state, unit);
+  for (const [k] of reach) {
+    if (state.ruins[k]) {
+      const [q, r] = k.split(',').map(Number);
+      return { kind: 'move', unit, q, r };
+    }
+  }
+  return null;
+}
+
 export function botStep(state, player) {
   if (state.winner || state.turn !== player) return null;
   const mine = state.units.filter(u => u.owner === player);
+  const easy = state.aiLevel === 'easy' && R.isBot(state, player);
+
+  const reward = rewardStep(state, player);
+  if (reward) return reward;
 
   let bestAttack = null;
   for (const u of mine) {
@@ -122,6 +156,8 @@ export function botStep(state, player) {
     for (const t of R.attackTargets(state, u)) {
       const res = R.battleResults(state, u, t);
       if (res.damage < t.hp && res.retaliation >= u.hp) continue;
+      // Leichte KI greift nur an, wenn sie dabei mehr austeilt als einsteckt.
+      if (easy && res.damage < t.hp && res.damage <= res.retaliation) continue;
       const s = attackScore(state, u, t);
       if (!bestAttack || s > bestAttack.score) bestAttack = { kind: 'attack', attacker: u, defender: t, score: s };
     }
@@ -147,6 +183,12 @@ export function botStep(state, player) {
       break;
     }
     if (type && R.canTrain(state, c, type, player).ok) return { kind: 'train', city: c, type };
+  }
+
+  for (const u of mine) {
+    if (u.mp <= 0) continue;
+    const r = ruinStep(state, u);
+    if (r) return r;
   }
 
   for (const u of mine) {
@@ -177,10 +219,27 @@ export function botStep(state, player) {
     'trade', 'spiritualism', 'fishing', 'sailing', 'ramming', 'navigation', 'aquatism', 'diplomacy'
   ];
   for (const t of techOrder) {
+    if (easy && TECHS[t].tier > 2) continue;
     if (R.canResearch(state, t, player).ok && state.stars[player] >= R.techCost(state, t, player) + 5) {
       return { kind: 'research', tech: t };
     }
   }
 
   return null;
+}
+
+// Einen KI-Schritt nur auf die Regeln anwenden (ohne Darstellung) – für
+// Tests und Simulationen.
+export function applyStep(state, step, player) {
+  switch (step.kind) {
+    case 'attack': return R.attack(state, step.attacker, step.defender);
+    case 'move': return R.moveUnit(state, step.unit, step.q, step.r);
+    case 'train': return R.trainUnit(state, step.city, step.type, player);
+    case 'buyPop': return R.buyPop(state, step.city, player);
+    case 'improve': return R.improve(state, step.city, step.type, step.q, step.r, player);
+    case 'settle': return R.foundCity(state, step.unit, player);
+    case 'research': return R.research(state, step.tech, player);
+    case 'reward': return R.chooseReward(state, step.city, step.choice, player);
+    default: throw new Error('unknown step ' + step.kind);
+  }
 }
