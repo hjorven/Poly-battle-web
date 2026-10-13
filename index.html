@@ -26,6 +26,7 @@
       <span id="round-label">Runde 1</span>
       <button id="techBtn" class="btn ghost">Forschung</button>
       <button id="overviewBtn" class="btn ghost">Übersicht</button>
+      <button id="undoBtn" class="btn ghost hidden" title="Letzte Aktion rückgängig machen" aria-label="Rückgängig">↶<span class="lbl"> Rückgängig</span></button>
       <button id="idleBtn" class="btn ghost idle-btn hidden" title="Zur nächsten Einheit, die noch handeln kann">Bereit</button>
       <button id="endTurnBtn" class="btn primary" disabled>Zug beenden</button>
     </div>
@@ -36,6 +37,8 @@
     <div id="toast-area"></div>
     <aside id="panel" class="hidden"></aside>
     <button id="menuBtn" class="btn ghost small" title="Menü">Menü</button>
+    <button id="soundBtn" class="btn ghost small" title="Ton an/aus">🔊</button>
+    <canvas id="minimap" width="220" height="150" title="Minikarte – antippen, um dorthin zu springen"></canvas>
   </main>
 
   <div id="menu-overlay" class="overlay hidden">
@@ -63,6 +66,22 @@
             <div class="seg">
               <button data-gamemode="conquest" class="chip-btn">Eroberung</button>
               <button data-gamemode="perfection" class="chip-btn">Perfektion (30 Runden)</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Kartengröße</span>
+            <div class="seg">
+              <button data-mapsize="small" class="chip-btn">Klein</button>
+              <button data-mapsize="normal" class="chip-btn">Normal</button>
+              <button data-mapsize="large" class="chip-btn">Groß</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Kartentyp</span>
+            <div class="seg">
+              <button data-maptype="continents" class="chip-btn">Kontinente</button>
+              <button data-maptype="pangaea" class="chip-btn">Pangäa</button>
+              <button data-maptype="archipelago" class="chip-btn">Archipel</button>
             </div>
           </div>
           <div class="setting-row">
