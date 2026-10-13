@@ -1325,7 +1325,8 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
     state.explored[p] = [];
   }
 
-  const corner = [[1, 1], [MAP_W - 2, 1], [MAP_W - 2, MAP_H - 2], [1, MAP_H - 2]];
+  // Starts mit Abstand zum Rand, damit rund um die Hauptstadt Platz ist.
+  const corner = [[3, 3], [MAP_W - 4, 3], [MAP_W - 4, MAP_H - 4], [3, MAP_H - 4]];
   const starts = count === 2 ? [corner[3], corner[1]]
     : count === 3 ? [corner[0], corner[1], corner[3]]
     : count === 4 ? corner
@@ -1338,9 +1339,9 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   for (const [q, r] of starts) clearAround(q, r, 2);
   for (let i = 0; i < starts.length; i++) {
     const a = starts[i], b = starts[(i + 1) % starts.length];
-    carveLine(state, a[0], a[1], b[0], b[1], count === 2);
+    carveLine(state, a[0], a[1], b[0], b[1]);
   }
-  carveLine(state, starts[0][0], starts[0][1], starts[2 % starts.length][0], starts[2 % starts.length][1], false);
+  carveLine(state, starts[0][0], starts[0][1], starts[2 % starts.length][0], starts[2 % starts.length][1]);
 
   const channel = connectWater(state, starts);
   placeBridges(state, rand, channel, starts[0][0], starts[0][1]);
@@ -1365,23 +1366,12 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
     state.cities.push({ q, r, owner, pop, trained: false, isCapital });
   };
 
-  const nearest = (tq, tr, minDistFrom, centers) => {
-    let best = null, bd = Infinity;
-    for (const [q, r] of candidates) {
-      if (state.cities.some(c => c.q === q && c.r === r)) continue;
-      const dFrom = Math.min(...centers.map(([cq, cr]) => hexDistance(q, r, cq, cr)));
-      if (dFrom < minDistFrom) continue;
-      const d = hexDistance(q, r, tq, tr);
-      if (d < bd) { bd = d; best = [q, r]; }
-    }
-    return best;
-  };
-
   const centerCities = [];
   for (let k = 0; k < count; k++) {
     const [sq, sr] = starts[k];
     const owner = 'player_' + (k + 1);
-    const c = nearest(sq, sr, 3, starts) || candidates[k % candidates.length];
+    // Die Hauptstadt steht genau im freigeräumten Startgebiet.
+    const c = [sq, sr];
     placeCity(c[0], c[1], owner, BASE_CITY_POP, true);
     centerCities.push(c);
   }
