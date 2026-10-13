@@ -1,15 +1,16 @@
 import {
   UNITS, UNIT_ORDER, TECHS, NAMES, MAX_POP,
-  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS
+  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS,
+  CITY_REWARDS, GAME_MODES
 } from './config.js';
 import {
   cityIncome, techCost, tribeName, playerColor, maxHp, maxMove,
-  terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, territory,
-  canAttackNow, canFound, canTrain
+  terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
+  canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking
 } from './rules.js';
 
 const $ = id => document.getElementById(id);
-const settings = { bots: 3, stars: 'normal' };
+const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'normal' };
 let handlers = {};
 let selectedTribe = null;
 
@@ -53,7 +54,12 @@ export function initUI(h) {
 }
 
 export function getSettings() {
-  return { bots: settings.bots, stars: STARS_OPTIONS[settings.stars].stars };
+  return {
+    bots: settings.bots,
+    stars: STARS_OPTIONS[settings.stars].stars,
+    turnLimit: GAME_MODES[settings.gamemode].turnLimit,
+    aiLevel: settings.ai
+  };
 }
 
 export function getTribe() {
@@ -75,6 +81,16 @@ function buildSettings() {
   }));
   bots.forEach(x => x.classList.toggle('active', Number(x.dataset.bots) === settings.bots));
   stars.forEach(x => x.classList.toggle('active', x.dataset.stars === settings.stars));
+  const seg = (attr, key) => {
+    const btns = wrap.querySelectorAll(`[data-${attr}]`);
+    btns.forEach(b => b.addEventListener('click', () => {
+      settings[key] = b.dataset[attr];
+      btns.forEach(x => x.classList.toggle('active', x === b));
+    }));
+    btns.forEach(x => x.classList.toggle('active', x.dataset[attr] === settings[key]));
+  };
+  seg('gamemode', 'gamemode');
+  seg('ai', 'ai');
 }
 
 function hex(c) {
@@ -134,6 +150,7 @@ function chip(player, state, ctx) {
     <span class="dot" style="background:${hex(playerColor(state, player))}"></span>
     <span>${name}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
     <span class="stars">${s} Sterne</span>
+    ${state.turnLimit ? `<span class="pts">${score(state, player)} P</span>` : ''}
     <span class="meta">${cities} Städte · ${units} Einheiten</span>
   </div>`;
 }
@@ -141,7 +158,7 @@ function chip(player, state, ctx) {
 export function updateStrip(state, ctx) {
   const players = state.players && state.players.length ? state.players : ['player_1', 'player_2'];
   $('player-strip').innerHTML = players.map(p => chip(p, state, ctx)).join('');
-  $('round-label').textContent = 'Runde ' + state.round;
+  $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' / ' + state.turnLimit : '');
 }
 
 export function setEndTurn(enabled) {
@@ -254,7 +271,7 @@ export function showCityPanel(state, city, ctx) {
   const income = city.owner ? cityIncome(state, city) : 0;
   const occupied = state.units.some(u => u.q === city.q && u.r === city.r);
 
-  const cells = territory(city).map(([q, r]) => {
+  const cells = cityTiles(state, city).map(([q, r]) => {
     const tdef = TERRAIN[terrainAt(state, q, r)];
     const imp = improvementAt(state, q, r);
     const res = resourceAt(state, q, r);
@@ -268,9 +285,15 @@ export function showCityPanel(state, city, ctx) {
   if (city.owner && city.owner === ctx.actAs) {
     const unlocked = UNIT_ORDER.filter(t => {
       const u = UNITS[t];
+      if (u.reward) return false;
       if (u.tech && !state.techs[city.owner].includes(u.tech)) return false;
       return true;
     });
+    const lvl = pendingLevel(city);
+    if (lvl && mine) {
+      actions += `<div class="action-list"><button class="btn primary action" data-reward-open>
+        <span>Stufe ${lvl} erreicht<span class="sub" style="color:#d4d4d8">Belohnung auswählen</span></span></button></div>`;
+    }
     actions += `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Einheiten ausbilden</div></div><div class="action-list">`;
     for (const t of unlocked) {
       const u = UNITS[t];
@@ -283,11 +306,11 @@ export function showCityPanel(state, city, ctx) {
     actions += `</div>`;
     const popReason = popReasonFor(state, city, ctx);
     actions += `<div class="action-list"><button class="btn action ghost" data-buypop ${popReason ? 'disabled' : ''}>
-      <span>Bevölkerung +1<span class="sub">Mehr Sterne pro Runde (max ${MAX_POP})</span></span>
+      <span>Bevölkerung +1<span class="sub">Mehr Sterne pro Runde, neue Stufe mit Belohnung (max ${MAX_POP})</span></span>
       <span class="cost">${city.pop + 2} Sterne</span>
     </button></div>`;
     if (city.trained) actions += `<div class="hint">Diese Stadt hat bereits diese Runde ausgebildet.</div>`;
-    if (occupied) actions += `<div class="hint">Einheit in der Stadt – zuerst wegziehen.</div>`;
+    if (occupied) actions += `<div class="hint">Einheit in der Stadt – zum Ausbilden zuerst wegziehen.</div>`;
     actions += buildRows(state, city, ctx);
   }
 
@@ -303,10 +326,11 @@ export function showCityPanel(state, city, ctx) {
       </div>
     </div>
     <div class="stat-row">
-      <div class="stat">Bevölkerung<b>${city.pop}/${MAX_POP}</b></div>
+      <div class="stat">Stufe<b>${city.pop}/${MAX_POP}</b></div>
       <div class="stat">Einkommen<b>${income}/Runde</b></div>
-      <div class="stat">Gebiete<b>${territory(city).length}</b></div>
+      <div class="stat">Gebiete<b>${cityTiles(state, city).length}</b></div>
     </div>
+    ${levelChips(city)}
     <div class="tile-grid">${cells}</div>
     ${actions || (!city.owner ? '<div class="hint">Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.</div>' : '<div class="hint">Nicht dein Zug.</div>')}
   `);
@@ -314,6 +338,8 @@ export function showCityPanel(state, city, ctx) {
   $('panel').querySelectorAll('[data-train]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onTrain(city, btn.dataset.train));
   });
+  const rwBtn = $('panel').querySelector('[data-reward-open]');
+  if (rwBtn) rwBtn.addEventListener('click', () => showReward(state, city, ctx));
   const popBtn = $('panel').querySelector('[data-buypop]');
   if (popBtn) popBtn.addEventListener('click', () => handlers.onBuyPop(city));
   $('panel').querySelectorAll('[data-improve]').forEach(btn => {
@@ -321,9 +347,51 @@ export function showCityPanel(state, city, ctx) {
   });
 }
 
+function levelChips(city) {
+  const got = Object.entries(city.rewards || {}).sort((a, b) => a[0] - b[0]);
+  if (!got.length) return '';
+  return `<div class="level-row">${got.map(([lvl, id]) =>
+    `<span class="level-chip" title="${CITY_REWARDS[id].desc}">Stufe ${lvl}: ${CITY_REWARDS[id].name}</span>`).join('')}</div>`;
+}
+
+// Auswahl-Dialog für die Belohnung einer aufgestiegenen Stadt.
+export function showReward(state, city, ctx) {
+  const lvl = pendingLevel(city);
+  if (!lvl) return false;
+  $('reward-title').textContent = `${city.isCapital ? 'Hauptstadt' : 'Stadt'} erreicht Stufe ${lvl}`;
+  $('reward-text').textContent = 'Wähle eine Belohnung.';
+  const box = $('reward-options');
+  box.innerHTML = '';
+  rewardOptions(city).forEach((id, i) => {
+    const def = CITY_REWARDS[id];
+    const b = document.createElement('button');
+    b.className = 'btn big reward-opt' + (i === 0 ? ' primary' : '');
+    b.innerHTML = `<span>${def.name}</span><span class="sub">${def.desc}</span>`;
+    b.addEventListener('click', () => {
+      $('reward-overlay').classList.add('hidden');
+      handlers.onChooseReward(city, id);
+    });
+    box.appendChild(b);
+  });
+  $('reward-overlay').classList.remove('hidden');
+  return true;
+}
+
+export function isRewardOpen() {
+  return !$('reward-overlay').classList.contains('hidden');
+}
+
+export function showHandover(name, onGo) {
+  $('handover-title').textContent = `${name} ist am Zug`;
+  $('handover-text').textContent = 'Gib das Gerät weiter. Die Karte wird erst angezeigt, wenn du bereit bist.';
+  const btn = $('handoverGo');
+  btn.onclick = () => { $('handover-overlay').classList.add('hidden'); onGo && onGo(); };
+  $('handover-overlay').classList.remove('hidden');
+}
+
 function buildRows(state, city, ctx) {
   const rows = [];
-  for (const [q, r] of territory(city)) {
+  for (const [q, r] of cityTiles(state, city)) {
     if (improvementAt(state, q, r) || resourceAt(state, q, r)) continue;
     const tile = terrainAt(state, q, r);
     const types = Object.keys(IMPROVEMENTS).filter(k => IMPROVEMENTS[k].terrain.includes(tile));
@@ -355,10 +423,8 @@ function trainReason(state, city, type, ctx) {
 
 function popReasonFor(state, city, ctx) {
   if (!ctx.myTurn) return 'Nicht dein Zug';
-  if (city.pop >= MAX_POP) return 'Maximum';
-  if (state.stars[ctx.actAs] < city.pop + 2) return 'Zu wenig Sterne';
-  if (state.units.some(u => u.q === city.q && u.r === city.r)) return 'Stadt besetzt';
-  return '';
+  const chk = canBuyPop(state, city, ctx.actAs);
+  return chk.ok ? '' : chk.reason;
 }
 
 const ROOTS = ['organization', 'climbing', 'fishing', 'hunting', 'riding'];
@@ -595,17 +661,67 @@ export function hideMenu() {
 export function showWinner(state, ctx) {
   const winner = state.winner;
   $('winner-title').textContent = (tribeName(state, winner) || NAMES[winner]) + ' gewinnt!';
-  let text = 'Alle anderen Städte wurden erobert.';
-  if (ctx.mode === 'bot') text = winner === 'player_1' ? 'Du hast gewonnen.' : 'Die KI hat gewonnen.';
-  else if (ctx.mode === 'online') text = winner === ctx.myRole ? 'Du hast gewonnen.' : 'Dein Gegner hat gewonnen.';
+  let text = state.endReason === 'score' ? 'Höchste Punktzahl nach ' + state.turnLimit + ' Runden.' : 'Alle anderen Städte wurden erobert.';
+  if (ctx.mode === 'bot') text = (winner === 'player_1' ? 'Du hast gewonnen. ' : 'Die KI hat gewonnen. ') + text;
+  else if (ctx.mode === 'online') text = (winner === ctx.myRole ? 'Du hast gewonnen. ' : 'Dein Gegner hat gewonnen. ') + text;
   $('winner-text').textContent = text + ` · Runde ${state.round}`;
+  $('winner-stats').innerHTML = statsHtml(state, ctx);
   $('winner-overlay').classList.remove('hidden');
 }
 
-export function showDefeat(state) {
+export function showDefeat(state, ctx) {
   $('winner-title').textContent = 'Besiegt';
   $('winner-text').textContent = `Du hast deine letzte Stadt verloren · Runde ${state.round}`;
+  $('winner-stats').innerHTML = statsHtml(state, ctx || {});
   $('winner-overlay').classList.remove('hidden');
+}
+
+function playerLabel(state, p) {
+  return tribeName(state, p) || NAMES[p];
+}
+
+function statsHtml(state, ctx) {
+  const me = ctx.mode === 'online' ? ctx.myRole : ctx.mode === 'bot' ? 'player_1' : null;
+  const rows = ranking(state).map(({ player }, i) => {
+    const b = scoreBreakdown(state, player);
+    const sc = state.finalScores ? state.finalScores[player] : b.score;
+    return `<tr class="${player === me ? 'me' : ''}">
+      <td class="num">${i + 1}.</td>
+      <td><span class="dot" style="background:${hex(playerColor(state, player))}"></span>${playerLabel(state, player)}${player === me ? ' (du)' : ''}</td>
+      <td class="num">${sc}</td><td class="num">${b.cities}</td><td class="num">${b.pop}</td>
+      <td class="num">${b.techs}</td><td class="num">${b.units}</td><td class="num">${b.ruins}</td>
+    </tr>`;
+  }).join('');
+  return `${chartSvg(state)}
+    <div class="stats-scroll"><table class="stats-table">
+      <thead><tr><th class="num">#</th><th>Stamm</th><th class="num">Punkte</th><th class="num">Städte</th>
+      <th class="num">Bev.</th><th class="num">Techs</th><th class="num">Einh.</th><th class="num">Ruinen</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+}
+
+// Punkteverlauf als schlichtes Liniendiagramm (eine Linie je Stamm).
+function chartSvg(state) {
+  const hist = state.history || [];
+  if (hist.length < 2) return '';
+  const W = 540, H = 180, padL = 40, padR = 12, padT = 12, padB = 24;
+  const players = state.players || [];
+  const maxY = Math.max(10, ...hist.flatMap(h => players.map(p => h.scores[p] || 0)));
+  const r0 = hist[0].round, r1 = hist[hist.length - 1].round;
+  const x = r => padL + ((r - r0) / Math.max(1, r1 - r0)) * (W - padL - padR);
+  const y = v => padT + (1 - v / maxY) * (H - padT - padB);
+  const grid = [0, 0.5, 1].map(f => {
+    const v = Math.round(maxY * f);
+    return `<line x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}" stroke="#e4e4e7" stroke-width="1"/>
+      <text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="#71717a">${v}</text>`;
+  }).join('');
+  const lines = players.map(p => {
+    const pts = hist.map(h => `${x(h.round).toFixed(1)},${y(h.scores[p] || 0).toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${hex(playerColor(state, p))}" stroke-width="2" stroke-linejoin="round"/>`;
+  }).join('');
+  const axis = `<text x="${padL}" y="${H - 6}" font-size="10" fill="#71717a">Runde ${r0}</text>
+    <text x="${W - padR}" y="${H - 6}" font-size="10" fill="#71717a" text-anchor="end">Runde ${r1}</text>`;
+  return `<div class="chart-cap">Punkteverlauf</div>
+    <svg class="score-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Punkteverlauf aller Stämme">${grid}${lines}${axis}</svg>`;
 }
 
 export function setContinue(info) {
@@ -653,7 +769,8 @@ export function showOverview(state, ctx) {
       <div class="stat">Städte<b>${myCities.length}</b></div>
       <div class="stat">Einheiten<b>${myUnits.length}</b></div>
       <div class="stat">Sterne<b>${state.stars[actAs]}</b></div>
-      <div class="stat">Runde<b>${state.round}</b></div>
+      <div class="stat">Runde<b>${state.round}${state.turnLimit ? '/' + state.turnLimit : ''}</b></div>
+      <div class="stat">Punkte<b>${score(state, actAs)}</b></div>
     </div>`;
   menu.appendChild(stat);
 
@@ -665,7 +782,7 @@ export function showOverview(state, ctx) {
     for (const c of myCities) {
       const row = document.createElement('button');
       row.className = 'btn action overview-row';
-      row.innerHTML = `<span>🏙️ ${c.isCapital ? 'Hauptstadt' : 'Stadt'} (${territory(c).length} Gebiete)<span class="sub">Bevölkerung ${c.pop} · +${cityIncome(state, c)}/Runde</span></span>`;
+      row.innerHTML = `<span>🏙️ ${c.isCapital ? 'Hauptstadt' : 'Stadt'} (${cityTiles(state, c).length} Gebiete)<span class="sub">Bevölkerung ${c.pop} · +${cityIncome(state, c)}/Runde</span></span>`;
       row.addEventListener('click', () => handlers.onFocusCity(c.q, c.r));
       menu.appendChild(row);
     }

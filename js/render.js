@@ -32,8 +32,17 @@ function geo(key, make) {
   return geoCache.get(key);
 }
 
-function mat(color, opts = {}) {
-  return new THREE.MeshLambertMaterial({ color, flatShading: true, ...opts });
+// Unveränderliche Materialien werden geteilt (sonst entsteht pro Einheit,
+// Stadt und Kachel ein neues Material, das nie freigegeben wird).
+// Teamfarben werden pro Einheit verändert und nutzen deshalb freshMat().
+const matCache = new Map();
+function mat(color) {
+  if (!matCache.has(color)) matCache.set(color, freshMat(color));
+  return matCache.get(color);
+}
+
+function freshMat(color) {
+  return new THREE.MeshLambertMaterial({ color, flatShading: true });
 }
 
 const darkMats = new Map();
@@ -193,8 +202,10 @@ function pick(clientX, clientY) {
   if (!hits.length) return null;
   const h = hits[0].object.userData.hex;
   const key = hk(h.q, h.r);
-  const t = tiles.get(key);
-  if (!t || !t.seen) return null;
+  // Auch Felder im Nebel sind antippbar: Einheiten dürfen dorthin ziehen,
+  // wenn das Feld als Ziel markiert ist. Was dort steht, entscheidet main.js
+  // (versteckte Gegner bleiben unsichtbar und nicht anwählbar).
+  if (!tiles.get(key)) return null;
   return key;
 }
 
@@ -246,6 +257,43 @@ function resourceNode(type) {
   }
   for (const m of g.children) m.castShadow = true;
   return g;
+}
+
+function ruinNode() {
+  const g = new THREE.Group();
+  const stone = mat(0xa8a29e);
+  const dark = mat(0x78716c);
+  const slab = new THREE.Mesh(geo('ruSlab', () => new THREE.BoxGeometry(0.42, 0.05, 0.32)), dark);
+  slab.position.y = 0.025;
+  g.add(slab);
+  const heights = [0.34, 0.22, 0.12];
+  [[-0.14, -0.08], [0.12, -0.1], [0.02, 0.1]].forEach(([x, z], i) => {
+    const pil = new THREE.Mesh(geo('ruPillar' + i, () => new THREE.CylinderGeometry(0.045, 0.05, heights[i], 6)), stone);
+    pil.position.set(x, 0.05 + heights[i] / 2, z);
+    g.add(pil);
+  });
+  const lintel = new THREE.Mesh(geo('ruLintel', () => new THREE.BoxGeometry(0.34, 0.05, 0.08)), stone);
+  lintel.position.set(-0.01, 0.41, -0.09);
+  lintel.rotation.z = 0.12;
+  g.add(lintel);
+  for (const m of g.children) { m.castShadow = true; }
+  return g;
+}
+
+function syncRuin(t, present) {
+  if (!t || !!t.ruinNode === !!present) return;
+  if (t.ruinNode) {
+    t.mesh.remove(t.ruinNode);
+    t.decor = t.decor.filter(d => d !== t.ruinNode);
+    t.ruinNode = null;
+    return;
+  }
+  const n = ruinNode();
+  n.position.y = TERRAIN[t.terrain].height / 2 + 0.01;
+  n.visible = t.seen;
+  t.mesh.add(n);
+  t.decor.push(n);
+  t.ruinNode = n;
 }
 
 function improvementNode(type) {
@@ -357,7 +405,7 @@ function buildTiles(state) {
       scene.add(mesh);
       tileMeshes.push(mesh);
       const decor = [];
-      tiles.set(hk(q, r), { mesh, baseMat, top: def.height, terrain: t, decor, seen: true, imp: null, impNode: null });
+      tiles.set(hk(q, r), { mesh, baseMat, top: def.height, terrain: t, decor, seen: true, imp: null, impNode: null, ruinNode: null });
 
       if (t === 'forest') {
         let s = (q * 73856093) ^ (r * 19349663);
@@ -433,7 +481,6 @@ function syncImprovement(t, imp) {
 function clearBoard() {
   for (const t of tiles.values()) {
     scene.remove(t.mesh);
-    t.baseMat.dispose();
   }
   tiles.clear();
   tileMeshes = [];
@@ -441,6 +488,7 @@ function clearBoard() {
     scene.remove(node.group);
     node.sprite.userData.texture?.dispose();
     node.sprite.material.dispose();
+    for (const m of node.group.userData.teamMats) m.dispose();
   }
   unitNodes.clear();
   for (const node of cityNodes.values()) scene.remove(node.group);
@@ -518,7 +566,7 @@ function unitBody(type, color) {
     return mesh;
   };
   const teamMat = () => {
-    const m = mat(team);
+    const m = freshMat(team);
     teamMats.push(m);
     return m;
   };
@@ -666,13 +714,31 @@ function buildCity(city, color) {
     flag.position.set(0.35, 0.85, 0);
     g.add(flag);
   }
+  // Stadtmauer (Belohnung): niedriger Steinring am Rand.
+  if (city.rewards && Object.values(city.rewards).includes('wall')) {
+    const wallMat = mat(0x9ca3af);
+    const segGeo = geo('wallSeg', () => new THREE.BoxGeometry(0.34, 0.14, 0.07));
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+      const seg = new THREE.Mesh(segGeo, wallMat);
+      seg.position.set(Math.cos(a) * 0.58, 0.19, Math.sin(a) * 0.58);
+      seg.rotation.y = -a + Math.PI / 2;
+      seg.castShadow = true;
+      g.add(seg);
+    }
+  }
   return g;
+}
+
+function cityKey(city) {
+  const walls = city.rewards && Object.values(city.rewards).includes('wall') ? 'w' : '';
+  return `${city.owner}|${city.pop}|${walls}`;
 }
 
 function placeCityNode(state, city) {
   const key = hk(city.q, city.r);
   const existing = cityNodes.get(key);
-  if (existing && existing.owner === city.owner && existing.pop === city.pop) return;
+  if (existing && existing.sig === cityKey(city)) return;
   if (existing) {
     scene.remove(existing.group);
     cityNodes.delete(key);
@@ -681,7 +747,7 @@ function placeCityNode(state, city) {
   const p = toWorld(city.q, city.r);
   group.position.set(p.x, hexTop(key), p.z);
   scene.add(group);
-  cityNodes.set(key, { group, owner: city.owner, pop: city.pop });
+  cityNodes.set(key, { group, owner: city.owner, pop: city.pop, sig: cityKey(city) });
 }
 
 function placeUnitNode(state, unit) {
@@ -695,7 +761,7 @@ function placeUnitNode(state, unit) {
   sprite.position.y = 0.95;
   group.add(sprite);
   scene.add(group);
-  const node = { group, sprite, hp: unit.hp, acted: unit.acted, dying: false, baseColor: color };
+  const node = { group, sprite, hp: unit.hp, acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
   unitNodes.set(unit.id, node);
   if (unit.acted) {
     for (const m of node.group.userData.teamMats) m.color.multiplyScalar(0.55);
@@ -767,6 +833,7 @@ export function syncBoard(state, viewer = null) {
   const explored = exploredSet(state, viewer);
   for (const [key, t] of tiles) {
     syncImprovement(t, state.improvements ? state.improvements[key] : null);
+    syncRuin(t, state.ruins && state.ruins[key]);
     const seen = !explored || explored.has(key);
     t.seen = seen;
     t.mesh.material = seen ? t.baseMat : darkMatFor(t.terrain);
@@ -786,6 +853,12 @@ export function syncBoard(state, viewer = null) {
     if (node.hp !== u.hp) {
       node.hp = u.hp;
       drawHp(node.sprite, u.hp);
+    }
+    // Bekehrte Einheiten (Gedankenbeuger) wechseln den Besitzer.
+    if (node.owner !== u.owner) {
+      node.owner = u.owner;
+      node.baseColor = ownerColor(u.owner);
+      node.acted = null;
     }
     if (node.acted !== u.acted) {
       node.acted = u.acted;
@@ -839,6 +912,7 @@ export function syncBoard(state, viewer = null) {
         scene.remove(g);
         node.sprite.userData.texture.dispose();
         node.sprite.material.dispose();
+        for (const m of g.userData.teamMats) m.dispose();
         unitNodes.delete(id);
       }
     });
