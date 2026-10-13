@@ -667,6 +667,7 @@ button:focus-visible {
   width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.92); font-size: 16px; font-weight: 700; color: var(--text);
   cursor: pointer; touch-action: manipulation;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
 }
 .cam-btn:hover { background: #fff; }
 @media (max-width: 760px) {
@@ -691,3 +692,7 @@ button:focus-visible {
 @media (max-width: 760px) {
   #unit-chip { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); max-width: none; }
 }
+
+/* Kleine Inline-Symbole (Stern, Haken) */
+.ico { display: inline-block; vertical-align: -1px; }
+.vet-badge .ico, .uc-main .ico, .tribe-perk .ico { color: #ca8a04; }
