@@ -281,6 +281,22 @@ test('Straßen: halbe Bewegung, Bau im Gebiet oder per Einheit, nicht in fremdem
   assert.ok(R.reachableMap(st, r).has(hk(7, 5)), 'halber Schritt reicht für das nächste Straßenfeld');
 });
 
+test('Rückblick: Verluste anderer Spieler werden einmal gemeldet', () => {
+  const st = makeState();
+  st.turn = 'player_2';
+  const a = unit('a', 'player_2', 'swordsman', 5, 5), d = unit('d', 'player_1', 'warrior', 6, 5, { hp: 1 });
+  const h = unit('h', 'player_1', 'defender', 7, 5); // neben dem Feld, auf das der Sieger nachrückt
+  st.units = [a, d, h];
+  assert.ok(R.attack(st, a, d).killed);
+  a.acted = false; a.hasMoved = false;
+  R.attack(st, a, h);
+  const news = R.takeNews(st, 'player_1');
+  assert.deepStrictEqual(news.map(e => e.kind), ['unitLost', 'hit']);
+  assert.strictEqual(news[0].by, 'player_2');
+  assert.deepStrictEqual(R.takeNews(st, 'player_1'), [], 'nur einmal');
+  assert.deepStrictEqual(R.takeNews(st, 'player_2'), [], 'eigene Taten nicht');
+});
+
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
   const st = makeState();
   st.explored = { player_1: [], player_2: [] };

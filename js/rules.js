@@ -152,6 +152,7 @@ export function respondPeace(state, to, from, accept) {
 export function declareWar(state, a, b) {
   if (!atPeace(state, a, b)) return { ok: false, reason: 'Kein Frieden' };
   delete state.peace[pairKey(a, b)];
+  logEvent(state, { kind: 'war', victim: b });
   if (!state.warCooldown) state.warCooldown = {};
   state.warCooldown[pairKey(a, b)] = state.round + 3;
   return { ok: true };
@@ -742,6 +743,23 @@ function finishAction(attacker) {
   }
 }
 
+// --- Ereignisprotokoll (für den Rückblick zu Beginn des eigenen Zuges) -------
+
+export function logEvent(state, entry) {
+  if (!state.log) state.log = [];
+  state.logSeq = (state.logSeq || 0) + 1;
+  state.log.push({ seq: state.logSeq, round: state.round, by: state.turn, ...entry });
+  if (state.log.length > 80) state.log.shift();
+}
+
+// Was anderen seit dem letzten Abruf mit `player` passiert ist; markiert als gelesen.
+export function takeNews(state, player) {
+  if (!state.logSeen) state.logSeen = {};
+  const seen = state.logSeen[player] || 0;
+  state.logSeen[player] = state.logSeq || 0;
+  return (state.log || []).filter(e => e.seq > seen && e.victim === player && e.by !== player);
+}
+
 export function attack(state, attacker, defender) {
   const events = [];
   // Regelprüfung auch hier, damit KI, Online-Gegner oder Konsole keine
@@ -751,11 +769,13 @@ export function attack(state, attacker, defender) {
 
   if (hasAbility(attacker.type, 'convert')) {
     if (dist === 1) {
+      const prevOwner = defender.owner;
       defender.owner = attacker.owner;
       defender.acted = true;
       defender.mp = 0;
       defender.hasMoved = true;
       events.push({ kind: 'convert', unit: defender.id, to: attacker.owner });
+      logEvent(state, { kind: 'converted', victim: prevOwner, unit: defender.type, q: defender.q, r: defender.r });
       finishAction(attacker);
       updateExplored(state, attacker.owner);
     }
@@ -772,6 +792,7 @@ export function attack(state, attacker, defender) {
     state.units = state.units.filter(u => u !== defender);
     killed = true;
     events.push({ kind: 'kill', unit: defender });
+    logEvent(state, { kind: 'unitLost', victim: defender.owner, unit: defender.type, q: defender.q, r: defender.r });
     if (!state.killsBy) state.killsBy = {};
     state.killsBy[attacker.owner] = (state.killsBy[attacker.owner] || 0) + 1;
     const promo = addKill(attacker);
@@ -786,13 +807,17 @@ export function attack(state, attacker, defender) {
           const prev = city.owner;
           city.owner = attacker.owner;
           events.push({ kind: 'capture', city, from: prev, to: attacker.owner });
+          logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
           checkWinner(state);
         }
         const ruin = claimRuin(state, attacker);
         if (ruin) events.push(ruin);
       }
     }
-  } else if (!hasAbility(defender.type, 'stiff') && UNITS[defender.type].range >= dist && res.retaliation > 0) {
+  } else {
+    logEvent(state, { kind: 'hit', victim: defender.owner, unit: defender.type, dmg: res.damage, q: defender.q, r: defender.r });
+  }
+  if (!killed && !hasAbility(defender.type, 'stiff') && UNITS[defender.type].range >= dist && res.retaliation > 0) {
     attacker.hp -= res.retaliation;
     events.push({ kind: 'retaliate', from: defender.id, to: attacker.id, dmg: res.retaliation });
     if (attacker.hp <= 0) {
@@ -844,6 +869,7 @@ export function moveUnit(state, unit, q, r) {
     const prev = city.owner;
     city.owner = unit.owner;
     events.push({ kind: 'capture', city, from: prev, to: unit.owner });
+    logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
     checkWinner(state);
   }
   const ruin = claimRuin(state, unit);
