@@ -27,6 +27,10 @@ Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im
 - **Karten**: Größe Klein/Normal/Groß und Typ Kontinente/Pangäa/Archipel in den Spieleinstellungen.
 - **Komfort**: Minikarte (antippen springt dorthin), Rückgängig für Aktionen im laufenden Zug (nicht nach Kampf, Eroberung oder Ruinen; nicht online), Soundeffekte (🔊 schaltet stumm).
 - **KI**: verteidigt bedrohte Städte, schickt Spione, baut Schiffe und Brücken und bricht Frieden, wenn sie sonst keine Ziele hat. Züge im Nebel laufen ohne Animation durch.
+- **Kamera**: verschieben (ziehen), zoomen (Mausrad/zwei Finger), drehen und neigen (rechte Maustaste, Zwei-Finger-Drehgeste, Knöpfe unten rechts oder Q/E und R/F; N = Standardansicht).
+- **Städte** wachsen sichtbar: Hütten, Dorf mit Wachturm, Steinturm mit Markt, Halle, Burg; Hauptstadt mit Krone, Mauer/Park/Werkstatt am Modell erkennbar.
+- **Einheiten** drehen sich in Lauf- und Angriffsrichtung; die Lebensanzeige trägt die Teamfarbe.
+- **Online mit KI**: Beim Erstellen einer Online-Partie lassen sich 0–3 KI-Gegner hinzufügen. Die KI-Züge rechnet das Gerät des Spielers, der gerade seinen Zug beendet hat.
 - **Sieg**: Wer als Letzter noch Städte besitzt (alle anderen eliminiert), gewinnt. Verlierst du gegen die KI deine letzte Stadt, endet die Partie mit „Besiegt".
 - **Spielstand**: Partien gegen die KI und Hotseat-Partien werden nach jeder Aktion im Browser gespeichert und lassen sich über „Weiterspielen" im Menü fortsetzen.
 

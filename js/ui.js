@@ -8,14 +8,14 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
 
 const $ = id => document.getElementById(id);
-const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'normal', mapsize: 'normal', maptype: 'continents' };
+const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'normal', mapsize: 'normal', maptype: 'continents', onlinebots: '0' };
 let handlers = {};
 let selectedTribe = null;
 
@@ -37,6 +37,14 @@ export function initUI(h) {
   $('idleBtn').addEventListener('click', () => handlers.onNextIdle());
   $('undoBtn').addEventListener('click', () => handlers.onUndo());
   $('soundBtn').addEventListener('click', () => handlers.onToggleSound());
+  document.querySelectorAll('[data-cam]').forEach(btn => btn.addEventListener('click', () => handlers.onCamera(btn.dataset.cam)));
+  // Tastatur: Q/E drehen, R/F neigen, N Standardansicht (nicht beim Tippen in Feldern).
+  document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+    const map = { q: 'rotL', e: 'rotR', r: 'tiltUp', f: 'tiltDown', n: 'reset' };
+    const cmd = map[e.key.toLowerCase()];
+    if (cmd) handlers.onCamera(cmd);
+  });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
   $('overviewBtn').addEventListener('click', () => handlers.onOpenOverview());
@@ -72,7 +80,8 @@ export function getSettings() {
     turnLimit: GAME_MODES[settings.gamemode].turnLimit,
     aiLevel: settings.ai,
     mapSize: MAP_SIZES[settings.mapsize] ? settings.mapsize : 'normal',
-    mapType: MAP_TYPES[settings.maptype] ? settings.maptype : 'continents'
+    mapType: MAP_TYPES[settings.maptype] ? settings.maptype : 'continents',
+    onlineBots: Math.max(0, Math.min(3, Number(settings.onlinebots) || 0))
   };
 }
 
@@ -107,6 +116,7 @@ function buildSettings() {
   seg('ai', 'ai');
   seg('mapsize', 'mapsize');
   seg('maptype', 'maptype');
+  seg('onlinebots', 'onlinebots');
 }
 
 function hex(c) {
@@ -330,6 +340,7 @@ export function showUnitPanel(state, unit, ctx) {
     ${unit.vet ? '' : `<div class="hint">Siege: ${unit.kills || 0}/3 bis zur Beförderung (+5 Leben)</div>`}
     ${land ? '<div class="hint">Fährt als Boot; an Land gehen beendet die Bewegung.</div>' : ''}
     <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ×${tb}</div>
+    ${switchToCity(state, unit, ctx)}
     ${todo}
     ${found}
     ${forecast}
@@ -346,8 +357,26 @@ export function showUnitPanel(state, unit, ctx) {
     const [q, r] = btn.dataset.unbridge.split(',').map(Number);
     btn.addEventListener('click', () => handlers.onDestroyBridge(unit, q, r));
   });
+  const cityBtn = $('panel').querySelector('[data-open-city]');
+  if (cityBtn) cityBtn.addEventListener('click', () => handlers.onSelectCity(unit.q, unit.r));
   const disbandBtn = $('panel').querySelector('[data-disband]');
   if (disbandBtn) disbandBtn.addEventListener('click', () => handlers.onDisband(unit));
+}
+
+// Einheit und Stadt auf demselben Feld: Knopf zum Wechseln zwischen den Menüs.
+function switchToCity(state, unit, ctx) {
+  const city = cityAt(state, unit.q, unit.r);
+  if (!city || !cityView(state, ctx.viewer, city)) return '';
+  const label = city.owner === ctx.actAs ? 'Stadtmenü öffnen' : 'Stadt ansehen';
+  return `<div class="action-list"><button class="btn action ghost" data-open-city><span>${label}<span class="sub">Die Einheit steht in einer ${city.isCapital ? 'Hauptstadt' : 'Stadt'} – ausbilden, Bevölkerung, Gebäude</span></span></button></div>`;
+}
+
+function switchToUnit(state, city, ctx) {
+  const u = unitAt(state, city.q, city.r);
+  if (!u) return '';
+  const def = UNITS[u.carry || u.type];
+  const mine = u.owner === ctx.actAs;
+  return `<div class="action-list"><button class="btn action ghost" data-open-unit="${u.id}"><span>${mine ? 'Einheit auswählen' : 'Einheit ansehen'}: ${def.name}<span class="sub">Steht in der Stadt${mine ? ' – ziehen, angreifen, auflösen' : ''}</span></span></button></div>`;
 }
 
 export function showCityPanel(state, city, ctx) {
@@ -364,8 +393,8 @@ export function showCityPanel(state, city, ctx) {
     const imp = improvementAt(state, q, r);
     const res = resourceAt(state, q, r);
     let tag = tdef.name, cls = '';
-    if (imp) { tag = `${IMPROVEMENTS[imp].icon} ${IMPROVEMENTS[imp].name}`; cls = 'built'; }
-    else if (res) { tag = `${RESOURCES[res].icon} ${RESOURCES[res].name}`; cls = 'res'; }
+    if (imp) { tag = IMPROVEMENTS[imp].name; cls = 'built'; }
+    else if (res) { tag = RESOURCES[res].name; cls = 'res'; }
     return `<span class="tile-chip ${cls}">${tag}</span>`;
   }).join('');
 
@@ -387,7 +416,7 @@ export function showCityPanel(state, city, ctx) {
       const u = UNITS[t];
       const reason = trainReason(state, city, t, ctx);
       actions += `<button class="btn action" data-train="${t}" ${reason ? 'disabled' : ''}>
-        <span>${u.icon} ${u.name}<span class="sub">${reason || `Angriff ${u.atk} · Verteidigung ${u.def} · Bewegung ${u.move} · Reichweite ${u.range} · Leben ${u.hp}`}</span></span>
+        <span>${u.name}<span class="sub">${reason || `Angriff ${u.atk} · Verteidigung ${u.def} · Bewegung ${u.move} · Reichweite ${u.range} · Leben ${u.hp}`}</span></span>
         <span class="cost">${unitCost(state, city.owner, t)} Sterne</span>
       </button>`;
     }
@@ -405,7 +434,7 @@ export function showCityPanel(state, city, ctx) {
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">🏙️ Stadt${city.isCapital ? ' · Hauptstadt' : ''}</div>
+        <div class="panel-title">Stadt${city.isCapital ? ' · Hauptstadt' : ''}</div>
         <div class="panel-sub" style="color:${city.owner ? hex(playerColor(state, city.owner)) : '#71717a'}">${ownerName}</div>
       </div>
       <div class="panel-head-right">
@@ -419,6 +448,7 @@ export function showCityPanel(state, city, ctx) {
       <div class="stat">Gebiete<b>${cityTiles(state, city).length}</b></div>
     </div>
     ${levelChips(city)}
+    ${switchToUnit(state, city, ctx)}
     <div class="tile-grid">${cells}</div>
     ${actions || (!city.owner ? '<div class="hint">Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.</div>'
       : city.owner !== ctx.actAs ? '<div class="hint">Feindliche Stadt – besiege die Verteidiger und rücke ein, um sie zu erobern.</div>'
@@ -428,6 +458,8 @@ export function showCityPanel(state, city, ctx) {
   $('panel').querySelectorAll('[data-train]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onTrain(city, btn.dataset.train));
   });
+  const unitBtn = $('panel').querySelector('[data-open-unit]');
+  if (unitBtn) unitBtn.addEventListener('click', () => handlers.onSelectUnit(unitBtn.dataset.openUnit));
   const rwBtn = $('panel').querySelector('[data-reward-open]');
   if (rwBtn) rwBtn.addEventListener('click', () => showReward(state, city, ctx));
   const popBtn = $('panel').querySelector('[data-buypop]');
@@ -442,7 +474,7 @@ function showRememberedCity(state, view) {
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">🏙️ Stadt${view.isCapital ? ' · Hauptstadt' : ''}</div>
+        <div class="panel-title">Stadt${view.isCapital ? ' · Hauptstadt' : ''}</div>
         <div class="panel-sub" style="color:${view.owner ? hex(playerColor(state, view.owner)) : '#71717a'}">${ownerName}</div>
       </div>
       <div class="panel-head-right">
@@ -517,7 +549,7 @@ function buildRows(state, city, ctx) {
       else if (state.stars[city.owner] < d.cost) reason = 'Zu wenig Sterne';
       if (!ctx.myTurn && !reason) reason = 'Nicht dein Zug';
       const locked = !ctx.myTurn;
-      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.icon} ${d.name} <span class="cost">${d.cost}</span></button>`;
+      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.name} <span class="cost">${d.cost}</span></button>`;
     }).join('');
     rows.push(`<div class="build-row"><span class="build-tile">${cellName}</span><span class="build-btns">${btns}</span></div>`);
   }
@@ -903,7 +935,7 @@ export function showOverview(state, ctx) {
     for (const c of myCities) {
       const row = document.createElement('button');
       row.className = 'btn action overview-row';
-      row.innerHTML = `<span>🏙️ ${c.isCapital ? 'Hauptstadt' : 'Stadt'} (${cityTiles(state, c).length} Gebiete)<span class="sub">Bevölkerung ${c.pop} · +${cityIncome(state, c)}/Runde</span></span>`;
+      row.innerHTML = `<span>${c.isCapital ? 'Hauptstadt' : 'Stadt'} (${cityTiles(state, c).length} Gebiete)<span class="sub">Bevölkerung ${c.pop} · +${cityIncome(state, c)}/Runde</span></span>`;
       row.addEventListener('click', () => handlers.onFocusCity(c.q, c.r));
       menu.appendChild(row);
     }

@@ -648,3 +648,19 @@ button:focus-visible {
 @media (max-width: 480px) {
   .brand { display: none; }
 }
+
+/* Kamera-Steuerung links neben der Minikarte */
+#camera-pad {
+  position: absolute; right: 244px; bottom: 12px; z-index: 9;
+  display: grid; grid-template-columns: repeat(3, 36px); gap: 4px;
+}
+.cam-btn {
+  width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92); font-size: 16px; font-weight: 700; color: var(--text);
+  cursor: pointer; touch-action: manipulation;
+}
+.cam-btn:hover { background: #fff; }
+@media (max-width: 760px) {
+  #camera-pad { right: 8px; top: 168px; bottom: auto; grid-template-columns: repeat(3, 40px); }
+  .cam-btn { width: 40px; height: 40px; }
+}
