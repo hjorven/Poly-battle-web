@@ -204,6 +204,26 @@ function bestMove(state, unit, player) {
   return { unit, q: best.q, r: best.r };
 }
 
+// Schiffe ohne Feind in der Nähe fahren zum nächsten noch nicht erreichten
+// Leuchtturm.
+function lighthouseMove(state, unit) {
+  if (!UNITS[unit.type].abilities.includes('water') || unit.carry || unit.mp <= 0) return null;
+  const open = R.lighthouseKeys(state).filter(k => !R.lighthouseFound(state, unit.owner, k))
+    .map(k => k.split(',').map(Number));
+  if (!open.length) return null;
+  if (state.units.some(e => R.hostile(state, unit.owner, e.owner) && hexDistance(e.q, e.r, unit.q, unit.r) <= 3)) return null;
+  const [lq, lr] = open.reduce((a, b) =>
+    hexDistance(unit.q, unit.r, a[0], a[1]) <= hexDistance(unit.q, unit.r, b[0], b[1]) ? a : b);
+  const cur = hexDistance(unit.q, unit.r, lq, lr);
+  let best = null;
+  for (const k of R.reachableMap(state, unit).keys()) {
+    const [q, r] = k.split(',').map(Number);
+    const d = hexDistance(q, r, lq, lr);
+    if (d < cur && (!best || d < best.d)) best = { q, r, d };
+  }
+  return best ? { kind: 'move', unit, q: best.q, r: best.r } : null;
+}
+
 // Belohnung für eine aufgestiegene Stadt wählen.
 function rewardStep(state, player) {
   for (const city of R.citiesFor(state, player)) {
@@ -317,6 +337,8 @@ export function botStep(state, player) {
       if (mv) return { kind: 'move', unit: mv.unit, q: mv.q, r: mv.r };
       continue;
     }
+    const light = lighthouseMove(state, u);
+    if (light) return light;
     const mv = bestMove(state, u, player);
     if (mv) return { kind: 'move', unit: mv.unit, q: mv.q, r: mv.r };
   }

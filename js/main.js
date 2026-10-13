@@ -199,6 +199,9 @@ function announce(events) {
     } else if (ev.kind === 'ruin') {
       ui.toast(`Ruine erkundet: ${ev.text}`, 'good');
       sfx('coin');
+    } else if (ev.kind === 'lighthouse') {
+      ui.toast(ev.text, 'good');
+      sfx('coin');
     } else if (ev.kind === 'promote') {
       ui.toast(`${UNITS[ev.type].name} wird Veteran! (+5 Leben, voll geheilt)`, 'good');
       sfx('promote');
