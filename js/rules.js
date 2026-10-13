@@ -4,7 +4,7 @@ import {
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
-  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -620,6 +620,8 @@ export function startTurn(state) {
   }
   state.stars[p] += incomeFor(state, p);
   checkMonuments(state, p);
+  if (!state.peak) state.peak = {};
+  state.peak[p] = Math.max(state.peak[p] || 0, citiesFor(state, p).length);
   updateExplored(state, p);
 }
 
@@ -743,6 +745,29 @@ function finishAction(attacker) {
   }
 }
 
+// --- Schonfrist -------------------------------------------------------------
+// In den ersten Runden greift die KI Menschen nicht an – bis ein Mensch diese
+// KI selbst angreift oder ihr eine Stadt nimmt.
+
+export function graceUntil(state) {
+  return (AI_LEVELS[state.aiLevel] || AI_LEVELS.normal).grace || 0;
+}
+
+export function graceProtects(state, ai, target) {
+  if (!target || !isBot(state, ai) || isBot(state, target)) return false;
+  if (state.provoked && state.provoked[ai]) return false;
+  return state.round <= graceUntil(state);
+}
+
+// Ein Mensch greift eine KI an: deren Schonfrist endet (Ereignis nur beim ersten Mal).
+function provoke(state, human, ai) {
+  if (!ai || !isBot(state, ai) || isBot(state, human)) return null;
+  if (state.round > graceUntil(state) || (state.provoked && state.provoked[ai])) return null;
+  if (!state.provoked) state.provoked = {};
+  state.provoked[ai] = true;
+  return { kind: 'provoke', player: ai };
+}
+
 // --- Ereignisprotokoll (für den Rückblick zu Beginn des eigenen Zuges) -------
 
 export function logEvent(state, entry) {
@@ -783,6 +808,8 @@ export function attack(state, attacker, defender) {
   }
 
   meet(state, attacker.owner, defender.owner);
+  const prov = provoke(state, attacker.owner, defender.owner);
+  if (prov) events.push(prov);
   const res = battleResults(state, attacker, defender);
   defender.hp -= res.damage;
   events.push({ kind: 'damage', from: attacker.id, to: defender.id, dmg: res.damage });
@@ -795,6 +822,8 @@ export function attack(state, attacker, defender) {
     logEvent(state, { kind: 'unitLost', victim: defender.owner, unit: defender.type, q: defender.q, r: defender.r });
     if (!state.killsBy) state.killsBy = {};
     state.killsBy[attacker.owner] = (state.killsBy[attacker.owner] || 0) + 1;
+    state.stars[attacker.owner] += BOUNTY;
+    events.push({ kind: 'bounty', player: attacker.owner, stars: BOUNTY });
     const promo = addKill(attacker);
     if (promo) events.push(promo);
     if (UNITS[attacker.type].range === 1 && !switchesDomain(state, attacker, defender.q, defender.r)) {
@@ -869,6 +898,8 @@ export function moveUnit(state, unit, q, r) {
     const prev = city.owner;
     city.owner = unit.owner;
     events.push({ kind: 'capture', city, from: prev, to: unit.owner });
+    const prov = provoke(state, unit.owner, prev);
+    if (prov) events.push(prov);
     logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
     checkWinner(state);
   }

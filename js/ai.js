@@ -23,7 +23,7 @@ function attackScore(state, attacker, defender) {
 
 // Kriegsziele: Städte aller Stämme ohne Frieden (auch neutrale).
 function targetCities(state, player) {
-  return state.cities.filter(c => R.hostile(state, player, c.owner));
+  return state.cities.filter(c => R.hostile(state, player, c.owner) && !R.graceProtects(state, player, c.owner));
 }
 
 // Frieden brechen, wenn er die KI blockiert (keine anderen Ziele mehr) oder
@@ -83,6 +83,9 @@ function spyMove(state, spy) {
   let best = null;
   for (const [k] of reach) {
     const [q, r] = k.split(',').map(Number);
+    // Spione erobern keine Städte.
+    const city = R.cityAt(state, q, r);
+    if (city && city.owner !== spy.owner) continue;
     const sight = R.unitSight(state, { ...spy, q, r });
     const reveal = unknown.filter(([uq, ur]) => hexDistance(q, r, uq, ur) <= sight).length;
     const near = Math.min(...unknown.map(([uq, ur]) => hexDistance(q, r, uq, ur)));
@@ -185,7 +188,7 @@ function bestMove(state, unit, player) {
   const reach = R.reachableMap(state, unit);
   if (!reach.size) return null;
   const enemyCities = targetCities(state, player);
-  const enemyUnits = state.units.filter(u => R.hostile(state, player, u.owner));
+  const enemyUnits = state.units.filter(u => R.hostile(state, player, u.owner) && !R.graceProtects(state, player, u.owner));
   let target = null;
   if (enemyCities.length) {
     target = enemyCities.reduce((a, b) =>
@@ -201,6 +204,9 @@ function bestMove(state, unit, player) {
   let best = null;
   for (const [k, cost] of reach) {
     const [q, r] = k.split(',').map(Number);
+    // Schonfrist: keine Stadt eines geschützten Menschen betreten.
+    const city = R.cityAt(state, q, r);
+    if (city && R.graceProtects(state, player, city.owner)) continue;
     const d = hexDistance(q, r, target.q, target.r);
     const canHit = d <= range;
     let score = -d * 10;
@@ -324,6 +330,7 @@ export function botStep(state, player) {
   for (const u of mine) {
     if (u.acted) continue;
     for (const t of R.attackTargets(state, u)) {
+      if (R.graceProtects(state, player, t.owner)) continue;
       const res = R.battleResults(state, u, t);
       if (res.damage < t.hp && res.retaliation >= u.hp) continue;
       // Leichte KI greift nur an, wenn sie dabei mehr austeilt als einsteckt.

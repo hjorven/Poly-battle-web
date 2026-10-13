@@ -1646,6 +1646,42 @@ function floatText(worldPos, text, color) {
   });
 }
 
+// Kleines Feuerwerk über einem Feld (Eroberung, Wachstum, Monument).
+export function celebrate(q, r, color = 0xfacc15, big = false) {
+  if (!initialized) return;
+  const p = worldOf(q, r);
+  const group = new THREE.Group();
+  group.position.copy(p).add(new THREE.Vector3(0, 0.6, 0));
+  const n = big ? 34 : 18;
+  const colors = [color, 0xffffff, 0xfde68a];
+  const parts = [];
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(geo('confetti', () => new THREE.BoxGeometry(0.07, 0.07, 0.07)),
+      new THREE.MeshBasicMaterial({ color: colors[i % colors.length], transparent: true }));
+    const a = Math.random() * Math.PI * 2, up = 1.6 + Math.random() * (big ? 2.2 : 1.2), out = 0.6 + Math.random() * (big ? 1.4 : 0.8);
+    m.userData.v = new THREE.Vector3(Math.cos(a) * out, up, Math.sin(a) * out);
+    group.add(m);
+    parts.push(m);
+  }
+  scene.add(group);
+  effects.push({
+    start: performance.now(), dur: big ? 1400 : 1000,
+    update: t => {
+      for (const m of parts) {
+        m.position.set(m.userData.v.x * t, m.userData.v.y * t - 2.2 * t * t, m.userData.v.z * t);
+        m.rotation.x = m.rotation.y = t * 9;
+        m.material.opacity = 1 - Math.max(0, t - 0.5) * 2;
+      }
+      if (t >= 1) { scene.remove(group); for (const m of parts) m.material.dispose(); }
+    }
+  });
+}
+
+export function floatAt(q, r, text, color = '#facc15') {
+  if (!initialized) return;
+  floatText(worldOf(q, r), text, color);
+}
+
 function nodePos(id) {
   const n = unitNodes.get(id);
   return n ? n.group.position.clone() : new THREE.Vector3();

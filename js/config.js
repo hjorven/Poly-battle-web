@@ -217,7 +217,7 @@ export const TRIBES = {
   bardur: { name: 'Bardur', color: 0x352514, startTechs: ['hunting'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Waldstämme des Nordens.', perk: { id: 'woodland', name: 'Waldvolk', desc: 'Wald kostet nur 1 Bewegung.' } },
   xinxi: { name: 'Xin-Xi', color: 0xcc0000, startTechs: ['climbing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Bergvolk der Berge.', perk: { id: 'mountaineer', name: 'Bergsteiger', desc: 'Berge kosten nur 1 Bewegung.' } },
   kickoo: { name: 'Kickoo', color: 0x00ff00, startTechs: ['fishing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Inselvolk der Südsee.', perk: { id: 'seafarer', name: 'Seefahrer', desc: 'Schiffe und Boote haben +1 Bewegung.' } },
-  oumaji: { name: 'Oumaji', color: 0xffff00, startTechs: ['riding'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Wüstenreiter – startet mit Reiten.', perk: { id: 'lookouts', name: 'Späher', desc: 'Reiter und Ritter sehen 1 Feld weiter.' } },
+  oumaji: { name: 'Oumaji', color: 0xffff00, startTechs: [], startUnits: ['warrior'], bonusStars: 3, blurb: 'Wüstenreiter – +3 Sterne zum Start, Reiten ist schnell erforscht.', perk: { id: 'lookouts', name: 'Späher', desc: 'Reiter und Ritter sehen 1 Feld weiter.' } },
   hoodrick: { name: 'Hoodrick', color: 0x996600, startTechs: ['archery'], startUnits: ['archer'], bonusStars: 0, blurb: 'Waldläufer – startet mit Bogenschützen.', perk: { id: 'longbow', name: 'Langbogen', desc: 'Bogenschützen kosten 1 Stern weniger.' } },
   quetzali: { name: 'Quetzali', color: 0x275c4a, startTechs: ['shields'], startUnits: ['defender'], bonusStars: 0, blurb: 'Startet mit Verteidiger.', perk: { id: 'guardians', name: 'Wächter', desc: 'Verteidiger kosten 1 Stern weniger.' } },
   vengir: { name: 'Vengir', color: 0xffffff, startTechs: ['smithery'], startUnits: ['swordsman'], bonusStars: 0, blurb: 'Kriegerisch – startet mit Schwertkämpfer.', perk: { id: 'forge', name: 'Schmiede', desc: 'Schwertkämpfer kosten 1 Stern weniger.' } },
@@ -331,6 +331,8 @@ export const RUIN_REWARDS = {
   reveal: { name: 'Alte Karte', weight: 10 }
 };
 export const RUIN_STARS = 10;
+// Beute: Sterne für jede besiegte gegnerische Einheit.
+export const BOUNTY = 1;
 
 // --- Leuchttürme --------------------------------------------------------------
 // In jeder Kartenecke steht ein Leuchtturm. Jeder Stamm kann jeden einmal
@@ -344,9 +346,10 @@ export const GAME_MODES = {
   perfection: { label: 'Perfektion (30 Runden)', turnLimit: 30 }
 };
 export const AI_LEVELS = {
-  easy: { label: 'Leicht', incomeFactor: 0.7, incomeBonus: 0, startBonus: 0 },
-  normal: { label: 'Normal', incomeFactor: 1, incomeBonus: 0, startBonus: 0 },
-  hard: { label: 'Schwer', incomeFactor: 1, incomeBonus: 2, startBonus: 3 }
+  // grace: so viele Runden greift die KI Menschen nicht an (außer sie werden angegriffen).
+  easy: { label: 'Leicht', incomeFactor: 0.7, incomeBonus: 0, startBonus: 0, grace: 12 },
+  normal: { label: 'Normal', incomeFactor: 1, incomeBonus: 0, startBonus: 0, grace: 6 },
+  hard: { label: 'Schwer', incomeFactor: 1, incomeBonus: 2, startBonus: 3, grace: 0 }
 };
 // Punktewertung (Perfektion und Endstatistik).
 export const SCORE = {

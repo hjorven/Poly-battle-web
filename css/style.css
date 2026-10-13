@@ -732,3 +732,8 @@ button:focus-visible {
 #tutor .btn { background: #27272a; color: #fafafa; border-color: #3f3f46; }
 #tutor .btn.primary { background: #facc15; color: #18181b; border-color: #facc15; }
 @media (max-width: 760px) { #tutor { top: auto; bottom: 120px; } }
+
+/* Niederlage: was man geschafft hat */
+.achieve { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 8px 0; }
+.achieve span { background: #fef3c7; color: #78350f; border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; }
+.tip { font-size: 14px; color: #3f3f46; margin: 8px 0 0; }
