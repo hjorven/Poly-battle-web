@@ -40,11 +40,11 @@
     <button id="soundBtn" class="btn ghost small" title="Ton an/aus" aria-label="Ton an/aus"></button>
     <canvas id="minimap" width="220" height="150" title="Minikarte – antippen, um dorthin zu springen"></canvas>
     <div id="camera-pad" aria-label="Kamera">
-      <button class="cam-btn" data-cam="rotL" title="Nach links drehen (Q)">↺</button>
-      <button class="cam-btn" data-cam="tiltUp" title="Steiler von oben (R)">▲</button>
-      <button class="cam-btn" data-cam="rotR" title="Nach rechts drehen (E)">↻</button>
+      <button class="cam-btn" data-cam="rotL" title="Nach links drehen (Q)" aria-label="Nach links drehen"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.5-5.8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="cam-btn" data-cam="tiltUp" title="Steiler von oben (R)" aria-label="Steiler"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="cam-btn" data-cam="rotR" title="Nach rechts drehen (E)" aria-label="Nach rechts drehen"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button class="cam-btn" data-cam="reset" title="Ansicht zurücksetzen (N)">N</button>
-      <button class="cam-btn" data-cam="tiltDown" title="Flacher (F)">▼</button>
+      <button class="cam-btn" data-cam="tiltDown" title="Flacher (F)" aria-label="Flacher"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
   </main>
 
@@ -132,7 +132,7 @@
         <summary>So wird gespielt</summary>
         <div class="menu-body">
           <ul>
-          <li><b>1–5 Stämme</b> starten auf einer großen prozedural erzeugten Welt (26×18: Feld, Wald, Berg, Wasser, Ozean, Eis). Jeder Stamm beginnt mit eigener Technologie und Einheit – nach den echten Polytopia-Werten.</li>
+          <li><b>1–5 Stämme</b> starten auf einer großen prozedural erzeugten Welt (Klein, Normal oder Groß: Feld, Wald, Berg, Wasser, Ozean, Eis). Jeder Stamm beginnt mit eigener Technologie und Einheit – nach den echten Polytopia-Werten.</li>
           <li><b>Städte</b> liefern Einkommen aus Bevölkerung, Ressourcen und Gebäuden im Stadtgebiet. Kaufe Bevölkerung, bilde Einheiten aus und baue Farmen, Sägewerke, Minen, Häfen und Tempel.</li>
           <li><b>Kampf</b> nach der echten Formel: Schaden hängt von Angriff, Leben und Verteidigungsbonus ab; ohne passende Tech kein Wald-/Berg-Bonus. Die <b>Kampfprognose</b> zeigt Schaden und Vergeltung vor dem Angriff.</li>
           <li><b>Fähigkeiten</b>: Verschanzen (heilt), Rückzug/Durchhalten (nach dem Angriff weiterziehen), Starr (Katapult/Gedankenbeuger: kein Zurückschlagen), Heilen/Bekehren (Gedankenbeuger).</li>

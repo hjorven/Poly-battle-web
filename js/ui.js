@@ -138,7 +138,7 @@ function buildTribePicker() {
     btn.dataset.tribe = id;
     btn.innerHTML = `<span class="tribe-name"><span class="dot" style="background:${hex(t.color)}"></span>${t.name}</span>
       <span class="tribe-tech">Start: ${startTech} · ${startUnits}</span>
-      ${t.perk ? `<span class="tribe-perk">★ ${t.perk.name}: ${t.perk.desc}</span>` : ''}`;
+      ${t.perk ? `<span class="tribe-perk">${STAR_ICON} ${t.perk.name}: ${t.perk.desc}</span>` : ''}`;
     btn.addEventListener('click', () => {
       selectedTribe = selectedTribe === id ? null : id;
       wrap.querySelectorAll('.tribe-opt').forEach(b => b.classList.toggle('active', b.dataset.tribe === selectedTribe));
@@ -188,6 +188,9 @@ export function updateStrip(state, ctx) {
 }
 
 // Lautsprecher als kleine Vektorgrafik (keine Emojis); durchgestrichen = stumm.
+// Kleine Symbole als SVG (keine Schriftzeichen/Emojis).
+const STAR_ICON = '<svg class="ico" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" fill="currentColor"/></svg>';
+const CHECK_ICON = '<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const SPEAKER = '<path d="M3 9v6h4l5 4V5L7 9H3z" fill="currentColor"/>';
 const WAVES = '<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
 const CROSS = '<path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
@@ -209,11 +212,11 @@ export function setIdle(count) {
   btn.innerHTML = `<span class="idle-dot"></span>${count}<span class="lbl"> bereit</span>`;
 }
 
-// „2× Krieger, 1× Reiter“
+// „2 Krieger, 1 Reiter“
 export function describeUnits(units) {
   const counts = new Map();
   for (const u of units) counts.set(u.type, (counts.get(u.type) || 0) + 1);
-  return [...counts].map(([t, n]) => `${n}× ${UNITS[t].name}`).join(', ');
+  return [...counts].map(([t, n]) => `${n} ${UNITS[t].name}`).join(', ');
 }
 
 export function hidePanel() {
@@ -257,7 +260,7 @@ export function showUnitChip(state, unit, ctx) {
     : opts.length ? 'kann noch: ' + opts.join(', ') : 'erledigt';
   chip.innerHTML = `
     <span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>
-    <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ★' : ''}</b>
+    <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ' + STAR_ICON : ''}</b>
       <span class="uc-sub">Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${unit.mp}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}</span></span>
     <button class="btn ghost small" data-details>Details</button>`;
   chip.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
@@ -343,7 +346,7 @@ export function showUnitPanel(state, unit, ctx) {
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ' <span class="vet-badge">★ Veteran</span>' : ''}</div>
+        <div class="panel-title">${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ' <span class="vet-badge">${STAR_ICON} Veteran</span>' : ''}</div>
         <div class="panel-sub" style="color:${hex(playerColor(state, unit.owner))}">${owner}${mine ? ' (deine Einheit)' : ''}</div>
       </div>
       <div class="panel-head-right">
@@ -362,7 +365,7 @@ export function showUnitPanel(state, unit, ctx) {
     <div class="ability-row">${abilityChips(unit.type)}</div>
     ${unit.vet ? '' : `<div class="hint">Siege: ${unit.kills || 0}/3 bis zur Beförderung (+5 Leben)</div>`}
     ${land ? '<div class="hint">Fährt als Boot; an Land gehen beendet die Bewegung.</div>' : ''}
-    <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ×${tb}</div>
+    <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ${tb}-fach</div>
     ${switchToCity(state, unit, ctx)}
     ${todo}
     ${found}
@@ -855,7 +858,7 @@ export function openTech(state, ctx, keepView = false) {
     btn.style.top = p.y + 'px';
     btn.style.setProperty('--branch', BRANCH_COLOR[branchOf(id)]);
     btn.dataset.tech = id;
-    btn.innerHTML = `<span class="tn-in"><span class="tn-name">${t.name}</span><span class="tn-cost">${status === 'done' ? '✓' : techCost(state, id, ctx.actAs) + ' Sterne'}</span></span>`;
+    btn.innerHTML = `<span class="tn-in"><span class="tn-name">${t.name}</span><span class="tn-cost">${status === 'done' ? CHECK_ICON : techCost(state, id, ctx.actAs) + ' Sterne'}</span></span>`;
     nodes.appendChild(btn);
   }
   renderTechDetail(state, ctx);

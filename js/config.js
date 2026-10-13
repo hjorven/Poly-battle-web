@@ -282,7 +282,7 @@ export const VETERAN_HP = 5;
 export const CITY_REWARDS = {
   workshop: { name: 'Werkstatt', desc: '+1 Stern pro Runde' },
   explorer: { name: 'Erkunder', desc: 'Deckt die Umgebung im Umkreis von 4 Feldern auf' },
-  wall: { name: 'Stadtmauer', desc: 'Verteidiger in dieser Stadt erhalten ×4 Verteidigung' },
+  wall: { name: 'Stadtmauer', desc: 'Verteidiger in dieser Stadt erhalten 4-fache Verteidigung' },
   resources: { name: 'Vorräte', desc: '+5 Sterne sofort' },
   growth: { name: 'Wachstum', desc: '+1 Bevölkerung (nächste Stufe)' },
   borders: { name: 'Grenzerweiterung', desc: 'Stadtgebiet wächst auf 2 Felder Umkreis' },

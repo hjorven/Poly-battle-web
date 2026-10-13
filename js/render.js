@@ -961,10 +961,25 @@ function drawHp(sprite, hp, vet = false, color = 0x18181b) {
   ctx.textBaseline = 'middle';
   ctx.lineWidth = 4;
   ctx.strokeStyle = light ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)';
-  const text = vet ? '★' + hp : String(hp);
-  ctx.strokeText(text, 64, 33);
+  const text = String(hp);
+  const tx = vet ? 76 : 64;
+  ctx.strokeText(text, tx, 33);
   ctx.fillStyle = light ? '#09090b' : '#ffffff';
-  ctx.fillText(text, 64, 33);
+  ctx.fillText(text, tx, 33);
+  // Veteranen: gezeichneter Stern statt Schriftzeichen.
+  if (vet) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? 6.5 : 15;
+      ctx.lineTo(36 + Math.cos(a) * rad, 32 + Math.sin(a) * rad);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#facc15';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(9,9,11,0.8)';
+    ctx.stroke();
+    ctx.fill();
+  }
   texture.needsUpdate = true;
 }
 
