@@ -510,18 +510,20 @@ test('Forschung: Voraussetzungen, Kostenskalierung, Philosophie-Rabatt', () => {
   st.stars.player_1 = 100;
 
   assert.ok(!R.research(st, 'shields', 'player_1').ok, 'Voraussetzung Organisation fehlt');
-  assert.strictEqual(R.techCost(st, 'organization', 'player_1'), 2, 'Tier1 * (1 + 1 Stadt)');
+  assert.strictEqual(R.techCost(st, 'organization', 'player_1'), 2, 'Tier1 * (1 + 1 Stadt), noch nichts erforscht');
   assert.ok(R.research(st, 'organization', 'player_1').ok);
   assert.ok(!R.research(st, 'organization', 'player_1').ok, 'nicht doppelt');
   assert.ok(R.research(st, 'shields', 'player_1').ok, 'Voraussetzung erfüllt');
 
   st.cities.push({ q: 5, r: 5, owner: 'player_1', pop: 1, trained: false });
-  assert.strictEqual(R.techCost(st, 'hunting', 'player_1'), 3, 'Tier1 * (1 + 2 Städte)');
+  assert.strictEqual(R.techCost(st, 'hunting', 'player_1'), 3 + 2 * 2, 'Tier1 * (1 + 2 Städte) + 2 je bekannter Technik');
+  assert.strictEqual(R.techCost(st, 'smithery', 'player_1'), 4 * 3 + 2 * 2, 'Stufe 3: Faktor 4');
+  assert.strictEqual(R.techCost(st, 'banking', 'player_1'), 6 * 3 + 2 * 2, 'Stufe 4: Faktor 6');
 
   const before = R.techCost(st, 'philosophy', 'player_1');
   st.techs.player_1.push('philosophy');
   const after = R.techCost(st, 'philosophy', 'player_1');
-  assert.strictEqual(after, Math.ceil(before * 0.8));
+  assert.strictEqual(after, Math.ceil((before + 2) * 0.8));
 });
 
 test('Zug beenden: Rotation, Einkommen, Rundenzähler, Verschanzen-Heilung', () => {

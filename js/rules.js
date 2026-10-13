@@ -1071,7 +1071,7 @@ export function techCost(state, techId, player) {
   const t = TECHS[techId];
   const cities = citiesFor(state, player).length;
   const discount = state.techs[player].includes('philosophy');
-  const cost = researchCost(t.tier, cities, discount);
+  const cost = researchCost(t.tier, cities, discount, state.techs[player].filter(x => x !== 'basic').length);
   return perkOf(state, player) === 'wisdom' ? Math.max(1, cost - 1) : cost;
 }
 
