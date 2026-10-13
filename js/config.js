@@ -1,8 +1,24 @@
 // Datenmodell orientiert an den echten Polytopia-Spieldaten
 // (GameLogicData28.txt) – Werte in Anzeigeeinheiten (Rohwert / 10).
 
-export const MAP_W = 26;
-export const MAP_H = 18;
+// Kartengröße ist pro Partie wählbar. `let` + Setter: Alle Module sehen über
+// die Live-Bindung von ES-Modulen sofort die Größe der aktuellen Partie.
+export let MAP_W = 26;
+export let MAP_H = 18;
+export function setMapSize(w, h) {
+  MAP_W = w;
+  MAP_H = h;
+}
+export const MAP_SIZES = {
+  small: { label: 'Klein', w: 18, h: 12 },
+  normal: { label: 'Normal', w: 26, h: 18 },
+  large: { label: 'Groß', w: 34, h: 22 }
+};
+export const MAP_TYPES = {
+  continents: { label: 'Kontinente' },
+  pangaea: { label: 'Pangäa' },
+  archipelago: { label: 'Archipel' }
+};
 export const HEX_SIZE = 1;
 
 export const MAX_POP = 5;
@@ -174,18 +190,18 @@ export const TECH_TIERS = [
 
 // Echte Stämme (reguläre Auswahl) mit Farbe, Start-Technologie und Starteinheit.
 export const TRIBES = {
-  imperius: { name: 'Imperius', color: 0x0000ff, startTechs: ['organization'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Ausgeglichene Fraktion des Imperiums.' },
-  bardur: { name: 'Bardur', color: 0x352514, startTechs: ['hunting'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Waldstämme des Nordens.' },
-  xinxi: { name: 'Xin-Xi', color: 0xcc0000, startTechs: ['climbing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Bergvolk der Berge.' },
-  kickoo: { name: 'Kickoo', color: 0x00ff00, startTechs: ['fishing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Inselvolk der Südsee.' },
-  oumaji: { name: 'Oumaji', color: 0xffff00, startTechs: ['riding'], startUnits: ['rider'], bonusStars: 0, blurb: 'Wüstenreiter – startet mit Reiter.' },
-  hoodrick: { name: 'Hoodrick', color: 0x996600, startTechs: ['archery'], startUnits: ['archer'], bonusStars: 0, blurb: 'Waldläufer – startet mit Bogenschützen.' },
-  quetzali: { name: 'Quetzali', color: 0x275c4a, startTechs: ['shields'], startUnits: ['defender'], bonusStars: 0, blurb: 'Startet mit Verteidiger.' },
-  vengir: { name: 'Vengir', color: 0xffffff, startTechs: ['smithery'], startUnits: ['swordsman'], bonusStars: 0, blurb: 'Kriegerisch – startet mit Schwertkämpfer.' },
-  zebasi: { name: 'Zebasi', color: 0xff9900, startTechs: ['farming'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Savannenbauern – starke Wirtschaft.' },
-  aimo: { name: 'Ai-Mo', color: 0x36e2aa, startTechs: ['philosophy'], startUnits: ['mindbender'], bonusStars: 0, blurb: 'Weise – startet mit Gedankenbeuger und günstiger Forschung.' },
-  yadakk: { name: 'Yădakk', color: 0x7d231c, startTechs: ['roads'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Händler der Steppe.' },
-  luxidoor: { name: 'Luxidoor', color: 0xab3bd6, startTechs: [], startUnits: ['warrior'], bonusStars: 3, blurb: 'Reich, aber ohne Starttechnologie (+3 Sterne).' }
+  imperius: { name: 'Imperius', color: 0x0000ff, startTechs: ['organization'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Ausgeglichene Fraktion des Imperiums.', perk: { id: 'legion', name: 'Legion', desc: 'Krieger kosten 1 Stern weniger.' } },
+  bardur: { name: 'Bardur', color: 0x352514, startTechs: ['hunting'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Waldstämme des Nordens.', perk: { id: 'woodland', name: 'Waldvolk', desc: 'Wald kostet nur 1 Bewegung.' } },
+  xinxi: { name: 'Xin-Xi', color: 0xcc0000, startTechs: ['climbing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Bergvolk der Berge.', perk: { id: 'mountaineer', name: 'Bergsteiger', desc: 'Berge kosten nur 1 Bewegung.' } },
+  kickoo: { name: 'Kickoo', color: 0x00ff00, startTechs: ['fishing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Inselvolk der Südsee.', perk: { id: 'seafarer', name: 'Seefahrer', desc: 'Schiffe und Boote haben +1 Bewegung.' } },
+  oumaji: { name: 'Oumaji', color: 0xffff00, startTechs: ['riding'], startUnits: ['rider'], bonusStars: 0, blurb: 'Wüstenreiter – startet mit Reiter.', perk: { id: 'horselords', name: 'Steppenreiter', desc: 'Reiter kosten 1 Stern weniger.' } },
+  hoodrick: { name: 'Hoodrick', color: 0x996600, startTechs: ['archery'], startUnits: ['archer'], bonusStars: 0, blurb: 'Waldläufer – startet mit Bogenschützen.', perk: { id: 'longbow', name: 'Langbogen', desc: 'Bogenschützen kosten 1 Stern weniger.' } },
+  quetzali: { name: 'Quetzali', color: 0x275c4a, startTechs: ['shields'], startUnits: ['defender'], bonusStars: 0, blurb: 'Startet mit Verteidiger.', perk: { id: 'guardians', name: 'Wächter', desc: 'Verteidiger kosten 1 Stern weniger.' } },
+  vengir: { name: 'Vengir', color: 0xffffff, startTechs: ['smithery'], startUnits: ['swordsman'], bonusStars: 0, blurb: 'Kriegerisch – startet mit Schwertkämpfer.', perk: { id: 'forge', name: 'Schmiede', desc: 'Schwertkämpfer kosten 1 Stern weniger.' } },
+  zebasi: { name: 'Zebasi', color: 0xff9900, startTechs: ['farming'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Savannenbauern – starke Wirtschaft.', perk: { id: 'harvest', name: 'Ernte', desc: 'Farmen bringen +1 Stern zusätzlich.' } },
+  aimo: { name: 'Ai-Mo', color: 0x36e2aa, startTechs: ['philosophy'], startUnits: ['mindbender'], bonusStars: 0, blurb: 'Weise – startet mit Gedankenbeuger und günstiger Forschung.', perk: { id: 'wisdom', name: 'Weisheit', desc: 'Jede Technologie kostet 1 Stern weniger.' } },
+  yadakk: { name: 'Yădakk', color: 0x7d231c, startTechs: ['roads'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Händler der Steppe.', perk: { id: 'traders', name: 'Händler', desc: '+1 Stern pro Runde für je 2 Städte.' } },
+  luxidoor: { name: 'Luxidoor', color: 0xab3bd6, startTechs: [], startUnits: ['warrior'], bonusStars: 3, blurb: 'Reich, aber ohne Starttechnologie (+3 Sterne).', perk: { id: 'splendor', name: 'Prunk', desc: 'Die Hauptstadt bringt +2 Sterne pro Runde.' } }
 };
 
 export const TRIBE_POOL = Object.keys(TRIBES);
@@ -225,6 +241,17 @@ export const IMPROVEMENTS = {
 export const BRIDGE = { tech: 'roads', costPerTile: 5, maxLen: 2 };
 // Auflösen einer Einheit erstattet diesen Anteil der Kosten.
 export const DISBAND_REFUND = 0.5;
+
+// Rabatte durch Stammes-Fähigkeiten (Perk-ID → Einheit).
+export const PERK_DISCOUNT = {
+  legion: 'warrior', horselords: 'rider', longbow: 'archer', guardians: 'defender', forge: 'swordsman'
+};
+
+// --- Veteranen ----------------------------------------------------------------
+// Nach VETERAN_KILLS Siegen wird eine Einheit befördert: +VETERAN_HP Leben
+// und volle Heilung.
+export const VETERAN_KILLS = 3;
+export const VETERAN_HP = 5;
 
 // --- Stadtstufen ------------------------------------------------------------
 // Stufe = Bevölkerung. Bei jeder neuen Stufe (2 bis 5) wählt der Besitzer

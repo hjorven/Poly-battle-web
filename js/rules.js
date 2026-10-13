@@ -3,7 +3,8 @@ import {
   TERRAIN, UNITS, TECHS, UNIT_ORDER, COLORS, VISION, ACCELERATOR,
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
-  AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND
+  AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -19,6 +20,122 @@ export function mulberry32(seed) {
 
 const idx = (q, r) => r * MAP_W + q;
 export const maxHp = type => UNITS[type].hp;
+
+// Lebens-Obergrenze einer konkreten Einheit: eingeschiffte Einheiten behalten
+// die ihres Landtyps, Veteranen haben mehr.
+export function hpCap(u) {
+  return UNITS[u.carry || u.type].hp + (u.vet ? VETERAN_HP : 0);
+}
+
+// Die Kartengröße der Partie aktivieren (beim Erstellen, Laden, Beitreten).
+export function useMap(state) {
+  const size = MAP_SIZES[state.mapSize] || MAP_SIZES.normal;
+  setMapSize(state.mapW || size.w, state.mapH || size.h);
+}
+
+// --- Stammes-Fähigkeiten ------------------------------------------------------
+
+export function perkOf(state, player) {
+  const t = tribeOf(state, player);
+  return t && t.perk ? t.perk.id : null;
+}
+
+export function unitCost(state, player, type) {
+  const base = UNITS[type].cost;
+  const perk = perkOf(state, player);
+  return perk && PERK_DISCOUNT[perk] === type ? Math.max(1, base - 1) : base;
+}
+
+// --- Diplomatie ---------------------------------------------------------------
+// Frieden zwischen zwei Stämmen: kein Angriff, kein Betreten der Städte des
+// anderen, keine Kontrollzone. Frieden braucht die Technologie Diplomatie.
+
+const pairKey = (a, b) => [a, b].sort().join('|');
+
+export function atPeace(state, a, b) {
+  return !!(a && b && a !== b && state.peace && state.peace[pairKey(a, b)] != null);
+}
+
+// Feind = anderer Besitzer, mit dem kein Frieden herrscht (neutral zählt mit).
+export function hostile(state, a, b) {
+  return a !== b && !atPeace(state, a, b);
+}
+
+export function hasMet(state, a, b) {
+  return !!(state.met && state.met[a] && state.met[a].includes(b));
+}
+
+function meet(state, a, b) {
+  if (!a || !b || a === b) return;
+  if (!state.met) state.met = {};
+  for (const [x, y] of [[a, b], [b, a]]) {
+    const list = state.met[x] || (state.met[x] = []);
+    if (!list.includes(y)) list.push(y);
+  }
+}
+
+export function pendingOffer(state, from, to) {
+  return (state.peaceOffers || []).find(o => o.from === from && o.to === to) || null;
+}
+
+export function canOfferPeace(state, from, to) {
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (from === to || !players(state).includes(to)) return { ok: false, reason: 'Unbekannter Stamm' };
+  if (!alive(state, to)) return { ok: false, reason: 'Stamm ist besiegt' };
+  if (!hasTech(state, from, 'diplomacy')) return { ok: false, reason: 'Technologie fehlt: Diplomatie' };
+  if (!hasMet(state, from, to)) return { ok: false, reason: 'Noch nicht begegnet' };
+  if (atPeace(state, from, to)) return { ok: false, reason: 'Bereits Frieden' };
+  const cool = state.warCooldown && state.warCooldown[pairKey(from, to)];
+  if (cool && state.round < cool) return { ok: false, reason: `Erst ab Runde ${cool} wieder möglich` };
+  if (pendingOffer(state, from, to)) return { ok: false, reason: 'Angebot läuft bereits' };
+  return { ok: true };
+}
+
+// KI nimmt Frieden an, wenn der Anbieter nicht deutlich schwächer ist und sie
+// nicht kurz vor dem Sieg über ihn steht.
+export function aiAcceptsPeace(state, ai, from) {
+  const mine = score(state, ai), theirs = score(state, from);
+  return mine <= theirs * 1.25;
+}
+
+function makePeace(state, a, b) {
+  if (!state.peace) state.peace = {};
+  state.peace[pairKey(a, b)] = state.round;
+  state.peaceOffers = (state.peaceOffers || []).filter(o => !((o.from === a && o.to === b) || (o.from === b && o.to === a)));
+}
+
+export function offerPeace(state, from, to) {
+  const chk = canOfferPeace(state, from, to);
+  if (!chk.ok) return chk;
+  if (isBot(state, to)) {
+    if (aiAcceptsPeace(state, to, from)) { makePeace(state, from, to); return { ok: true, accepted: true }; }
+    if (!state.warCooldown) state.warCooldown = {};
+    state.warCooldown[pairKey(from, to)] = state.round + 3;
+    return { ok: true, accepted: false };
+  }
+  if (!state.peaceOffers) state.peaceOffers = [];
+  state.peaceOffers.push({ from, to, round: state.round });
+  return { ok: true, pending: true };
+}
+
+export function respondPeace(state, to, from, accept) {
+  if (!pendingOffer(state, from, to)) return { ok: false, reason: 'Kein Angebot' };
+  if (accept) makePeace(state, from, to);
+  else {
+    state.peaceOffers = state.peaceOffers.filter(o => !(o.from === from && o.to === to));
+    if (!state.warCooldown) state.warCooldown = {};
+    state.warCooldown[pairKey(from, to)] = state.round + 3;
+  }
+  return { ok: true };
+}
+
+export function declareWar(state, a, b) {
+  if (!atPeace(state, a, b)) return { ok: false, reason: 'Kein Frieden' };
+  delete state.peace[pairKey(a, b)];
+  if (!state.warCooldown) state.warCooldown = {};
+  state.warCooldown[pairKey(a, b)] = state.round + 3;
+  return { ok: true };
+}
 
 export function players(state) {
   return state.players && state.players.length ? state.players : ['player_1', 'player_2'];
@@ -139,6 +256,11 @@ export function cityIncome(state, city) {
   }
   if (hasReward(city, 'workshop')) s += 1;
   if (hasReward(city, 'park')) s += 1;
+  const perk = city.owner ? perkOf(state, city.owner) : null;
+  if (perk === 'harvest') {
+    s += cityTiles(state, city).filter(([q, r]) => improvementAt(state, q, r) === 'farm').length;
+  }
+  if (perk === 'splendor' && city.isCapital) s += 2;
   return s;
 }
 
@@ -149,6 +271,7 @@ export function incomeFor(state, player) {
   const techs = state.techs[player] || [];
   if (techs.includes('construction')) s += cities;
   if (techs.includes('trade')) s += cities;
+  if (perkOf(state, player) === 'traders') s += Math.floor(cities / 2);
   if (isBot(state, player)) {
     const lvl = AI_LEVELS[state.aiLevel] || AI_LEVELS.normal;
     s = Math.floor(s * lvl.incomeFactor) + (cities ? lvl.incomeBonus : 0);
@@ -161,7 +284,8 @@ export function isBot(state, player) {
 }
 
 export function maxMove(state, owner, type) {
-  const base = UNITS[type].move;
+  let base = UNITS[type].move;
+  if (hasAbility(type, 'water') && perkOf(state, owner) === 'seafarer') base += 1;
   return state.techs[owner] && state.techs[owner].includes('roads') ? base + 1 : base;
 }
 
@@ -174,9 +298,13 @@ export function canEnter(state, unit, tile, q, r) {
   const t = TERRAIN[tile];
   if (!t) return false;
   if (hasAbility(unit.type, 'water')) {
-    return tile === 'water' || tile === 'ocean';
+    if (tile === 'water' || tile === 'ocean') return true;
+    // Eingeschiffte Landeinheiten dürfen wieder an Land gehen.
+    return !!unit.carry && canEnter(state, { ...unit, type: unit.carry, carry: null }, tile, q, r);
   }
   if (q != null && bridgeAt(state, q, r)) return true;
+  // Einschiffen: Landeinheiten betreten Wasser über einen eigenen Hafen.
+  if (q != null && isWet(tile) && ownPort(state, unit.owner, q, r)) return true;
   if (!t.walkable) return false;
   if (tile === 'mountain' && hasAbility(unit.type, 'scout')) return true;
   if (t.enterTech) return hasTech(state, unit.owner, t.enterTech);
@@ -187,9 +315,27 @@ export function canEnter(state, unit, tile, q, r) {
 // (sonst käme ein Boot mit Bewegung 2 nur ein Feld weit), Brücken kosten
 // für Landeinheiten wie ebenes Land 1.
 export function moveCost(state, unit, q, r) {
-  if (hasAbility(unit.type, 'water')) return 1;
+  const tile = terrainAt(state, q, r);
+  if (hasAbility(unit.type, 'water') && isWet(tile)) return 1;
   if (bridgeAt(state, q, r)) return 1;
-  return TERRAIN[terrainAt(state, q, r)].move;
+  const perk = perkOf(state, unit.owner);
+  if (tile === 'forest' && perk === 'woodland') return 1;
+  if (tile === 'mountain' && perk === 'mountaineer') return 1;
+  return TERRAIN[tile].move;
+}
+
+export function ownPort(state, owner, q, r) {
+  if (improvementAt(state, q, r) !== 'port') return false;
+  const c = tileCity(state, q, r);
+  return !!c && c.owner === owner;
+}
+
+// Wechselt die Einheit mit diesem Schritt zwischen Land und Wasser?
+// (Für Schiffe ist ein Brückenfeld Wasser, für Landeinheiten Land.)
+export function switchesDomain(state, unit, q, r) {
+  const wet = isWet(terrainAt(state, q, r));
+  if (hasAbility(unit.type, 'water')) return !wet;
+  return wet && !bridgeAt(state, q, r);
 }
 
 export function bridgeAt(state, q, r) {
@@ -213,8 +359,8 @@ export function defenceBonus(state, defender) {
 export function battleResults(state, attacker, defender) {
   const A = UNITS[attacker.type];
   const D = UNITS[defender.type];
-  const af = A.atk * (attacker.hp / A.hp);
-  const df = D.def * (defender.hp / D.hp) * defenceBonus(state, defender);
+  const af = A.atk * (attacker.hp / hpCap(attacker));
+  const df = D.def * (defender.hp / hpCap(defender)) * defenceBonus(state, defender);
   const total = af + df;
   if (total <= 0) return { damage: 0, retaliation: 0 };
   const damage = Math.round((af / total) * A.atk * ACCELERATOR);
@@ -260,6 +406,8 @@ export function updateExplored(state, player) {
     if (!known.has(k)) { known.add(k); state.explored[player].push(k); changed = true; }
   }
   rememberCities(state, player, visible);
+  for (const u of state.units) if (u.owner !== player && visible.has(hk(u.q, u.r))) meet(state, player, u.owner);
+  for (const c of state.cities) if (c.owner && c.owner !== player && visible.has(hk(c.q, c.r))) meet(state, player, c.owner);
   return changed;
 }
 
@@ -337,7 +485,7 @@ export function canAct(state, player) {
 // Steht eine feindliche Einheit so nah, dass sie diese Einheit angreifen könnte?
 export function threatened(state, u) {
   return state.units.some(e =>
-    e.owner !== u.owner && canEverAttack(e.type) &&
+    hostile(state, e.owner, u.owner) && canEverAttack(e.type) &&
     hexDistance(e.q, e.r, u.q, u.r) <= UNITS[e.type].range
   );
 }
@@ -346,7 +494,7 @@ export function threatened(state, u) {
 // und jede Einheit, die nicht angegriffen hat und außer Reichweite aller
 // Gegner steht – auch wenn sie sich bewegt hat.
 export function canRegenerate(state, u) {
-  if (u.hp >= maxHp(u.type) || u.acted) return false;
+  if (u.hp >= hpCap(u) || u.acted) return false;
   if (hasAbility(u.type, 'fortify') && !u.hasMoved) return true;
   return !threatened(state, u);
 }
@@ -357,7 +505,7 @@ export function startTurn(state) {
 
   for (const u of state.units) {
     if (u.owner !== p || !canRegenerate(state, u)) continue;
-    const cap = maxHp(u.type);
+    const cap = hpCap(u);
     if (u.hp >= cap) continue;
     const city = cityAt(state, u.q, u.r);
     const amt = (city && city.owner === p ? 4 : 2) + spirit;
@@ -368,7 +516,7 @@ export function startTurn(state) {
     for (const [nq, nr] of neighbors(u.q, u.r)) {
       const ally = unitAt(state, nq, nr);
       if (ally && ally.owner === p && ally !== u) {
-        ally.hp = Math.min(maxHp(ally.type), ally.hp + 4 + spirit);
+        ally.hp = Math.min(hpCap(ally), ally.hp + 4 + spirit);
       }
     }
   }
@@ -433,18 +581,32 @@ export function reachableMap(state, unit) {
       if (unitAt(state, nq, nr)) continue;
       const tile = terrainAt(state, nq, nr);
       if (!canEnter(state, unit, tile, nq, nr)) continue;
-      const nc = cost + moveCost(state, unit, nq, nr);
+      const c = cityAt(state, nq, nr);
+      if (c && atPeace(state, unit.owner, c.owner)) continue;
+      const switching = switchesDomain(state, unit, nq, nr);
+      // Ein- und Ausschiffen verbraucht die restliche Bewegung.
+      const nc = switching ? Math.max(cost + 1, budget) : cost + moveCost(state, unit, nq, nr);
       if (nc > budget) continue;
       const k = hk(nq, nr);
       if (nc < (dist.get(k) ?? Infinity)) {
         dist.set(k, nc);
-        queue.push([nq, nr, nc]);
+        // Kontrollzone: Neben einem Feind endet der Zug; auch nach dem
+        // Wechsel zwischen Land und Wasser geht es nicht weiter.
+        if (!switching && !inZoc(state, unit, nq, nr)) queue.push([nq, nr, nc]);
       }
     }
   }
   dist.delete(hk(unit.q, unit.r));
   for (const [k, v] of dist) out.set(k, v);
   return out;
+}
+
+// Kontrollzone: Ein Feld neben einer feindlichen Einheit beendet die Bewegung.
+export function inZoc(state, unit, q, r) {
+  return neighbors(q, r).some(([nq, nr]) => {
+    const e = unitAt(state, nq, nr);
+    return e && e !== unit && hostile(state, unit.owner, e.owner);
+  });
 }
 
 // Einheiten ohne Angriffswert (Siedler) greifen nie an – außer sie können
@@ -458,7 +620,7 @@ export function attackTargets(state, unit) {
   if (!canAttackNow(state, unit)) return [];
   const range = UNITS[unit.type].range;
   return state.units.filter(u =>
-    u.owner !== unit.owner &&
+    hostile(state, unit.owner, u.owner) &&
     hexDistance(unit.q, unit.r, u.q, u.r) <= range &&
     isVisible(state, unit.owner, u.q, u.r)
   );
@@ -492,6 +654,7 @@ export function attack(state, attacker, defender) {
     return { events, killed: false };
   }
 
+  meet(state, attacker.owner, defender.owner);
   const res = battleResults(state, attacker, defender);
   defender.hp -= res.damage;
   events.push({ kind: 'damage', from: attacker.id, to: defender.id, dmg: res.damage });
@@ -501,7 +664,9 @@ export function attack(state, attacker, defender) {
     state.units = state.units.filter(u => u !== defender);
     killed = true;
     events.push({ kind: 'kill', unit: defender });
-    if (UNITS[attacker.type].range === 1) {
+    const promo = addKill(attacker);
+    if (promo) events.push(promo);
+    if (UNITS[attacker.type].range === 1 && !switchesDomain(state, attacker, defender.q, defender.r)) {
       const tile = terrainAt(state, defender.q, defender.r);
       if (canEnter(state, attacker, tile, defender.q, defender.r) && !unitAt(state, defender.q, defender.r)) {
         attacker.q = defender.q;
@@ -523,6 +688,8 @@ export function attack(state, attacker, defender) {
     if (attacker.hp <= 0) {
       state.units = state.units.filter(u => u !== attacker);
       events.push({ kind: 'kill', unit: attacker });
+      const promo = addKill(defender);
+      if (promo) events.push(promo);
     }
   }
 
@@ -531,15 +698,37 @@ export function attack(state, attacker, defender) {
   return { events, killed };
 }
 
+// Sieg zählen; beim dritten Sieg wird die Einheit zum Veteranen befördert.
+function addKill(u) {
+  u.kills = (u.kills || 0) + 1;
+  if (u.vet || u.kills < VETERAN_KILLS || UNITS[u.carry || u.type].reward) return null;
+  u.vet = true;
+  u.hp = hpCap(u);
+  return { kind: 'promote', unit: u.id, type: u.carry || u.type };
+}
+
 export function moveUnit(state, unit, q, r) {
   const reach = reachableMap(state, unit);
   const k = hk(q, r);
   if (!reach.has(k)) return { ok: false };
+  const switching = switchesDomain(state, unit, q, r);
   unit.mp -= reach.get(k);
   unit.q = q;
   unit.r = r;
   unit.hasMoved = true;
   const events = [];
+  if (switching) {
+    if (unit.carry) {
+      unit.type = unit.carry;
+      delete unit.carry;
+      events.push({ kind: 'disembark', unit: unit.id });
+    } else {
+      unit.carry = unit.type;
+      unit.type = 'boat';
+      events.push({ kind: 'embark', unit: unit.id });
+    }
+    unit.mp = 0;
+  }
   const city = cityAt(state, q, r);
   if (city && city.owner !== unit.owner) {
     const prev = city.owner;
@@ -580,7 +769,7 @@ export function canTrain(state, city, type, player) {
   if (u.capital && !city.isCapital) return { ok: false, reason: 'Nur in der Hauptstadt' };
   if (u.tech && !state.techs[player].includes(u.tech)) return { ok: false, reason: 'Technologie fehlt' };
   if (hasAbility(type, 'water') && !coastal(state, city)) return { ok: false, reason: 'Küstenstadt nötig' };
-  if (state.stars[player] < u.cost) return { ok: false, reason: 'Zu wenig Sterne' };
+  if (state.stars[player] < unitCost(state, player, type)) return { ok: false, reason: 'Zu wenig Sterne' };
   return { ok: true };
 }
 
@@ -588,7 +777,7 @@ let unitSeq = 0;
 export function trainUnit(state, city, type, player) {
   const chk = canTrain(state, city, type, player);
   if (!chk.ok) return chk;
-  state.stars[player] -= UNITS[type].cost;
+  state.stars[player] -= unitCost(state, player, type);
   city.trained = true;
   state.units.push({
     id: `${player.replace('_', '')}_${Date.now().toString(36)}_${unitSeq++}`,
@@ -746,7 +935,7 @@ export function destroyBridge(state, unit, q, r, player) {
 // --- Auflösen ---------------------------------------------------------------
 
 export function disbandRefund(unit) {
-  return Math.floor(UNITS[unit.type].cost * DISBAND_REFUND);
+  return Math.floor(UNITS[unit.carry || unit.type].cost * DISBAND_REFUND);
 }
 
 export function disbandUnit(state, unit, player) {
@@ -803,7 +992,8 @@ export function techCost(state, techId, player) {
   const t = TECHS[techId];
   const cities = citiesFor(state, player).length;
   const discount = state.techs[player].includes('philosophy');
-  return researchCost(t.tier, cities, discount);
+  const cost = researchCost(t.tier, cities, discount);
+  return perkOf(state, player) === 'wisdom' ? Math.max(1, cost - 1) : cost;
 }
 
 export function canResearch(state, techId, player) {
@@ -847,13 +1037,21 @@ function makeNoise(rand) {
   };
 }
 
-function generateTerrain(rand) {
+function generateTerrain(rand, mapType = 'continents') {
   const noise = makeNoise(rand);
   const moist = (q, r) => noise(q + 1000, r + 1000, 3.2);
   const t = new Array(MAP_W * MAP_H);
   for (let r = 0; r < MAP_H; r++) {
     for (let q = 0; q < MAP_W; q++) {
-      const e = noise(q, r, 5) * 0.62 + noise(q, r, 2.6) * 0.38;
+      let e = noise(q, r, 5) * 0.62 + noise(q, r, 2.6) * 0.38;
+      if (mapType === 'pangaea') {
+        // Ein großer Kontinent: zur Mitte hin höher, am Rand Meer.
+        const dx = (q - (MAP_W - 1) / 2) / (MAP_W / 2), dy = (r - (MAP_H - 1) / 2) / (MAP_H / 2);
+        e = e * 0.55 + (1 - Math.min(1, Math.hypot(dx, dy))) * 0.55;
+      } else if (mapType === 'archipelago') {
+        // Viele kleine Inseln: feineres Rauschen, mehr Wasser.
+        e = noise(q, r, 2.2) * 0.7 + noise(q, r, 1.4) * 0.3 - 0.06;
+      }
       const edge = Math.min(q, r, MAP_W - 1 - q, MAP_H - 1 - r);
       let tile;
       if (edge < 1) tile = 'ocean';
@@ -862,7 +1060,8 @@ function generateTerrain(rand) {
       else if (e > 0.80) tile = 'mountain';
       else if (moist(q, r) > 0.6) tile = 'forest';
       else tile = 'field';
-      if ((r <= 0 || r >= MAP_H - 1) && tile !== 'ocean' && tile !== 'water') tile = 'ice';
+      // Polarreihen direkt neben dem Ozeanrand vereisen.
+      if ((r <= 1 || r >= MAP_H - 2) && tile !== 'ocean' && tile !== 'water') tile = 'ice';
       t[r * MAP_W + q] = tile;
     }
   }
@@ -1065,9 +1264,14 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   const rand = mulberry32(seed);
   const count = Math.min(Math.max(playerCount, 2), 5);
   const tribes = assignTribes(seed, count, tribe);
+  const mapSize = MAP_SIZES[o.mapSize] ? o.mapSize : 'normal';
+  const mapType = MAP_TYPES[o.mapType] ? o.mapType : 'continents';
+  setMapSize(MAP_SIZES[mapSize].w, MAP_SIZES[mapSize].h);
   const state = {
-    terrain: generateTerrain(rand),
+    mapSize, mapType, mapW: MAP_W, mapH: MAP_H,
+    terrain: generateTerrain(rand, mapType),
     cities: [], units: [], resources: {}, improvements: {}, bridges: {}, cityMemory: {},
+    peace: {}, peaceOffers: [], warCooldown: {}, met: {},
     players: Array.from({ length: count }, (_, k) => 'player_' + (k + 1)),
     tribes,
     stars: {}, techs: {}, explored: {},
@@ -1148,7 +1352,8 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   }
 
   let placed = count;
-  const maxCities = 4 + count * 2;
+  // Neutrale Städte mit der Kartenfläche skalieren (Normal: 26×18).
+  const maxCities = Math.max(count + 2, Math.round((4 + count * 2) * (MAP_W * MAP_H) / 468));
   for (const [q, r] of candidates) {
     if (placed >= maxCities) break;
     if (state.cities.some(c => c.q === q && c.r === r)) continue;
@@ -1384,7 +1589,7 @@ export function score(state, player) {
   }
   s += SCORE.improvement * imps.size;
   s += SCORE.tech * Math.max(0, (state.techs[player] || []).filter(t => t !== 'basic').length);
-  for (const u of state.units) if (u.owner === player) s += SCORE.unitCost * UNITS[u.type].cost;
+  for (const u of state.units) if (u.owner === player) s += SCORE.unitCost * UNITS[u.carry || u.type].cost;
   s += SCORE.explored * ((state.explored && state.explored[player]) ? state.explored[player].length : 0);
   s += SCORE.ruin * ((state.ruinsBy && state.ruinsBy[player]) || 0);
   return s;
