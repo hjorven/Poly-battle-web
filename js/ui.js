@@ -4,7 +4,7 @@ import {
   CITY_REWARDS, GAME_MODES, BRIDGE, MAP_SIZES, MAP_TYPES
 } from './config.js';
 import {
-  cityIncome, techCost, tribeName, playerColor, maxHp, maxMove,
+  cityIncome, techCost, tribeName, playerColor, maxHp, maxMove, attackOf, popCost,
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
@@ -354,7 +354,7 @@ export function showUnitPanel(state, unit, ctx) {
     <div class="hp-bar ${unit.hp / cap <= 0.35 ? 'low' : ''}"><div style="width:${hpPct}%"></div></div>
     <div class="stat-row">
       <div class="stat">Leben<b>${unit.hp}/${cap}</b></div>
-      <div class="stat">Angriff<b>${def.atk}</b></div>
+      <div class="stat">Angriff<b>${attackOf(state, unit)}</b></div>
       <div class="stat">Verteidigung<b>${def.def}</b></div>
       <div class="stat">Bewegung<b>${unit.mp}/${maxMove(state, unit.owner, unit.type)}</b></div>
       <div class="stat">Reichweite<b>${def.range}</b></div>
@@ -439,7 +439,7 @@ export function showCityPanel(state, city, ctx) {
       const u = UNITS[t];
       const reason = trainReason(state, city, t, ctx);
       actions += `<button class="btn action" data-train="${t}" ${reason ? 'disabled' : ''}>
-        <span>${u.name}<span class="sub">${reason || `Angriff ${u.atk} · Verteidigung ${u.def} · Bewegung ${u.move} · Reichweite ${u.range} · Leben ${u.hp}`}</span></span>
+        <span>${u.name}<span class="sub">${reason || `Angriff ${attackOf(state, { type: t, owner: city.owner })} · Verteidigung ${u.def} · Bewegung ${maxMove(state, city.owner, t)} · Reichweite ${u.range} · Leben ${u.hp}`}</span></span>
         <span class="cost">${unitCost(state, city.owner, t)} Sterne</span>
       </button>`;
     }
@@ -447,7 +447,7 @@ export function showCityPanel(state, city, ctx) {
     const popReason = popReasonFor(state, city, ctx);
     actions += `<div class="action-list"><button class="btn action ghost" data-buypop ${popReason ? 'disabled' : ''}>
       <span>Bevölkerung +1<span class="sub">Mehr Sterne pro Runde, neue Stufe mit Belohnung (max ${MAX_POP})</span></span>
-      <span class="cost">${city.pop + 2} Sterne</span>
+      <span class="cost">${popCost(city, state)} Sterne</span>
     </button></div>`;
     if (city.trained) actions += `<div class="hint">Diese Stadt hat bereits diese Runde ausgebildet.</div>`;
     if (occupied) actions += `<div class="hint">Einheit in der Stadt – zum Ausbilden zuerst wegziehen.</div>`;
@@ -727,28 +727,36 @@ function layoutTechs(portrait) {
     const rowY = [TREE_PAD + HEX_H / 2];
     rowY.push(rowY[0] + HEX_H * 0.75 + 6);
     rowY.push(rowY[1] + HEX_H + 12);
+    rowY.push(rowY[2] + HEX_H + 12);
     const colX = c => TREE_PAD + (c + 0.5) * COL_W;
     ROOTS.forEach((root, i) => {
       pos[root] = { x: TREE_PAD + (2 * i + 1) * COL_W, y: rowY[0] };
       (CHILDREN[root] || []).forEach((child, j) => {
         pos[child] = { x: colX(2 * i + j), y: rowY[1] };
-        for (const leaf of CHILDREN[child] || []) pos[leaf] = { x: colX(2 * i + j), y: rowY[2] };
+        for (const leaf of CHILDREN[child] || []) {
+          pos[leaf] = { x: colX(2 * i + j), y: rowY[2] };
+          for (const top of CHILDREN[leaf] || []) pos[top] = { x: colX(2 * i + j), y: rowY[3] };
+        }
       });
     });
-    return { pos, w: TREE_PAD * 2 + ROOTS.length * 2 * COL_W, h: rowY[2] + HEX_H / 2 + TREE_PAD };
+    return { pos, w: TREE_PAD * 2 + ROOTS.length * 2 * COL_W, h: rowY[3] + HEX_H / 2 + TREE_PAD };
   }
   const colX = [TREE_PAD + HEX_W / 2];
   colX.push(colX[0] + COL_W * 0.86);
   colX.push(colX[1] + COL_W + 6);
+  colX.push(colX[2] + COL_W + 6);
   const rowY = r => TREE_PAD + (r + 0.5) * ROW_H;
   ROOTS.forEach((root, i) => {
     pos[root] = { x: colX[0], y: TREE_PAD + (2 * i + 1) * ROW_H };
     (CHILDREN[root] || []).forEach((child, j) => {
       pos[child] = { x: colX[1], y: rowY(2 * i + j) };
-      for (const leaf of CHILDREN[child] || []) pos[leaf] = { x: colX[2], y: rowY(2 * i + j) };
+      for (const leaf of CHILDREN[child] || []) {
+        pos[leaf] = { x: colX[2], y: rowY(2 * i + j) };
+        for (const top of CHILDREN[leaf] || []) pos[top] = { x: colX[3], y: rowY(2 * i + j) };
+      }
     });
   });
-  return { pos, w: colX[2] + HEX_W / 2 + TREE_PAD, h: TREE_PAD * 2 + ROOTS.length * 2 * ROW_H };
+  return { pos, w: colX[3] + HEX_W / 2 + TREE_PAD, h: TREE_PAD * 2 + ROOTS.length * 2 * ROW_H };
 }
 
 // Was eine Technologie freischaltet (Einheiten, Gebäude) – für die Details.

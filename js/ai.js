@@ -344,7 +344,7 @@ export function botStep(state, player) {
   }
 
   for (const c of R.citiesFor(state, player)) {
-    const cost = R.popCost(c);
+    const cost = R.popCost(c, state);
     if (c.pop < 5 && state.stars[player] >= cost + 3 && R.canBuyPop(state, c, player).ok) {
       return { kind: 'buyPop', city: c };
     }
@@ -357,7 +357,9 @@ export function botStep(state, player) {
     'organization', 'hunting', 'archery', 'farming', 'riding', 'roads',
     'climbing', 'mining', 'shields', 'forestry', 'mathematics', 'meditation',
     'philosophy', 'smithery', 'construction', 'freespirit', 'chivalry',
-    'trade', 'spiritualism', 'fishing', 'sailing', 'ramming', 'navigation', 'aquatism', 'diplomacy'
+    'trade', 'spiritualism', 'fishing', 'sailing', 'ramming', 'navigation', 'aquatism', 'diplomacy',
+    'banking', 'steel', 'scholarship', 'planning', 'medicine', 'horseshoes', 'engineering', 'seapower',
+    'harbors', 'espionage'
   ];
   if (R.citiesFor(state, player).some(c => R.coastal(state, c))) {
     techOrder.splice(techOrder.indexOf('roads') + 1, 0, ...techOrder.splice(techOrder.indexOf('fishing'), 2));

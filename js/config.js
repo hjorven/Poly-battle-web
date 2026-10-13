@@ -179,13 +179,36 @@ export const TECHS = {
   spiritualism: { name: 'Spiritualismus', tier: 3, req: 'archery', desc: '+1 Heilung pro Runde' },
   mathematics: { name: 'Mathematik', tier: 3, req: 'forestry', desc: 'Katapult ausbilden' },
   trade: { name: 'Handel', tier: 3, req: 'roads', desc: '+1 Stern pro Stadt' },
-  chivalry: { name: 'Ritterlichkeit', tier: 3, req: 'freespirit', desc: 'Ritter ausbilden' }
+  chivalry: { name: 'Ritterlichkeit', tier: 3, req: 'freespirit', desc: 'Ritter ausbilden' },
+
+  planning: { name: 'Stadtplanung', tier: 4, req: 'construction', desc: 'Bevölkerung kaufen kostet 2 Sterne weniger' },
+  espionage: { name: 'Spionage', tier: 4, req: 'diplomacy', desc: 'Spione kosten 2 Sterne weniger und sehen 1 Feld weiter' },
+  steel: { name: 'Stahl', tier: 4, req: 'smithery', desc: 'Krieger, Verteidiger und Schwertkämpfer +1 Angriff' },
+  scholarship: { name: 'Gelehrsamkeit', tier: 4, req: 'philosophy', desc: '+1 Stern pro Stadt ab Stufe 3' },
+  seapower: { name: 'Seemacht', tier: 4, req: 'navigation', desc: 'Boote, Schiffe und Kriegsschiffe +1 Bewegung' },
+  harbors: { name: 'Hafenwirtschaft', tier: 4, req: 'aquatism', desc: 'Jeder Hafen bringt +1 Stern zusätzlich' },
+  medicine: { name: 'Heilkunst', tier: 4, req: 'spiritualism', desc: 'Einheiten heilen jede Runde 2 Leben mehr' },
+  engineering: { name: 'Ingenieurwesen', tier: 4, req: 'mathematics', desc: 'Katapulte kosten 3 Sterne weniger' },
+  banking: { name: 'Bankwesen', tier: 4, req: 'trade', desc: '+1 Stern pro Stadt' },
+  horseshoes: { name: 'Hufeisen', tier: 4, req: 'chivalry', desc: 'Reiter +1 Bewegung' }
+};
+
+// Stufe-4-Boni: Technologie → Wirkung (in rules.js ausgewertet).
+export const TECH_BONUS = {
+  planning: { popDiscount: 2 },
+  espionage: { unitDiscount: { spy: 2 }, sight: { spy: 1 } },
+  steel: { atk: { warrior: 1, defender: 1, swordsman: 1 } },
+  seapower: { move: { boat: 1, ship: 1, battleship: 1 } },
+  medicine: { heal: 2 },
+  engineering: { unitDiscount: { catapult: 3 } },
+  horseshoes: { move: { rider: 1 } }
 };
 
 export const TECH_TIERS = [
   ['organization', 'climbing', 'fishing', 'hunting', 'riding'],
   ['farming', 'shields', 'mining', 'meditation', 'sailing', 'ramming', 'archery', 'forestry', 'roads', 'freespirit'],
-  ['construction', 'diplomacy', 'smithery', 'philosophy', 'navigation', 'aquatism', 'spiritualism', 'mathematics', 'trade', 'chivalry']
+  ['construction', 'diplomacy', 'smithery', 'philosophy', 'navigation', 'aquatism', 'spiritualism', 'mathematics', 'trade', 'chivalry'],
+  ['planning', 'espionage', 'steel', 'scholarship', 'seapower', 'harbors', 'medicine', 'engineering', 'banking', 'horseshoes']
 ];
 
 // Echte Stämme (reguläre Auswahl) mit Farbe, Start-Technologie und Starteinheit.

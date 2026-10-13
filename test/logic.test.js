@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import * as R from '../js/rules.js';
 import {
   UNITS, TERRAIN, MAP_W, MAP_H, START_STARS, MAX_POP, TRIBES,
-  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE
+  RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE, TECHS
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
@@ -200,6 +200,53 @@ test('Wege: im eigenen Gebiet kosten Wald und Berg nur 1 Bewegung', () => {
   assert.strictEqual(R.moveCost(st, u, 9, 8), 2, 'außerhalb des Gebiets');
   assert.strictEqual(R.moveCost(st, unit('e', 'player_2', 'warrior', 7, 5), 6, 5), 2, 'fremdes Gebiet');
   assert.strictEqual(R.maxMove(st, 'player_1', 'rider'), UNITS.rider.move, 'keine Extra-Bewegung');
+});
+
+test('Stufe 4: Boni wirken (Kosten, Angriff, Bewegung, Einkommen, Heilung)', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 3 };
+  st.cities = [city];
+  const base = R.incomeFor(st, 'player_1');
+  st.techs.player_1.push('banking', 'scholarship');
+  assert.strictEqual(R.incomeFor(st, 'player_1'), base + 2, 'Bankwesen + Gelehrsamkeit');
+  assert.strictEqual(R.popCost(city, st), 5);
+  st.techs.player_1.push('planning');
+  assert.strictEqual(R.popCost(city, st), 3, 'Stadtplanung');
+  assert.strictEqual(R.unitCost(st, 'player_1', 'catapult'), UNITS.catapult.cost);
+  st.techs.player_1.push('engineering', 'espionage');
+  assert.strictEqual(R.unitCost(st, 'player_1', 'catapult'), UNITS.catapult.cost - 3);
+  assert.strictEqual(R.unitCost(st, 'player_1', 'spy'), UNITS.spy.cost - 2);
+  const w = unit('w', 'player_1', 'warrior', 5, 5), e = unit('e', 'player_2', 'warrior', 6, 5);
+  const before = R.battleResults(st, w, e).damage;
+  st.techs.player_1.push('steel');
+  assert.strictEqual(R.attackOf(st, w), UNITS.warrior.atk + 1);
+  assert.ok(R.battleResults(st, w, e).damage > before, 'Stahl erhöht den Schaden');
+  st.techs.player_1.push('horseshoes', 'seapower');
+  assert.strictEqual(R.maxMove(st, 'player_1', 'rider'), UNITS.rider.move + 1);
+  assert.strictEqual(R.maxMove(st, 'player_1', 'ship'), UNITS.ship.move + 1);
+  assert.strictEqual(R.maxMove(st, 'player_1', 'knight'), UNITS.knight.move);
+  st.techs.player_1.push('medicine');
+  const hurt = unit('h', 'player_1', 'warrior', 9, 9, { hp: 2 });
+  st.units = [hurt];
+  R.startTurn(st);
+  assert.strictEqual(hurt.hp, 2 + 2 + 2, 'Heilkunst: +2');
+  for (const [id, t] of Object.entries(TECHS)) if (t.tier === 4) assert.strictEqual(TECHS[t.req].tier, 3, id);
+});
+
+test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
+  const st = makeState();
+  st.explored = { player_1: [], player_2: [] };
+  const c = { q: 5, r: 5, owner: 'player_1', pop: 1 };
+  st.cities = [c];
+  st.units = [unit('a', 'player_2', 'archer', 8, 5)];
+  assert.deepStrictEqual(R.threatenedCities(st, 'player_1'), [], 'außer Sicht');
+  st.units.push(unit('s', 'player_1', 'warrior', 7, 5));
+  assert.deepStrictEqual(R.threatenedCities(st, 'player_1'), [c], 'Bogenschütze: 1 + 2 = 3 Felder');
+  st.units[0].q = 9;
+  st.units[1].q = 8;
+  assert.deepStrictEqual(R.threatenedCities(st, 'player_1'), [], '4 Felder: zu weit');
+  st.units.push(unit('sp', 'player_2', 'spy', 6, 5));
+  assert.deepStrictEqual(R.threatenedCities(st, 'player_1'), [], 'Spion greift nicht an');
 });
 
 test('Leuchttürme: in allen vier Ecken, je Stamm einmal Sterne, Bonus für alle vier', () => {
