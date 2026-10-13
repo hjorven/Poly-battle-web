@@ -14,6 +14,9 @@ const app = {
   hasOpponent: true,
   gameId: null,
   sel: null,
+  // Info-Menü einer gewählten Einheit offen? Einfaches Antippen wählt nur
+  // aus (kleine Leiste); erneutes Antippen/Doppeltipp oder „Details“ öffnet.
+  panelOpen: false,
   busy: false,
   online: false,
   // Wird bei jedem neuen/geladenen Spiel erhöht; eine noch laufende
@@ -91,7 +94,7 @@ function nextIdle() {
   if (!idle.length) return;
   const cur = app.sel && app.sel.kind === 'unit' ? idle.findIndex(u => u.id === app.sel.id) : -1;
   const u = idle[(cur + 1) % idle.length];
-  app.sel = { kind: 'unit', id: u.id };
+  selectUnit(u.id);
   render.cameraTo(u.q, u.r, true);
   refresh();
 }
@@ -106,6 +109,7 @@ function updateSelection() {
   if (!app.sel) {
     render.setHighlights({});
     ui.hidePanel();
+    ui.hideUnitChip();
     return;
   }
   if (app.sel.kind === 'unit') {
@@ -118,12 +122,27 @@ function updateSelection() {
       attack: canCommand ? R.attackTargets(st, u) : null,
       bridge: canBridge ? R.bridgeOptions(st, u).flatMap(o => o.tiles) : null
     });
-    ui.showUnitPanel(st, u, ctx());
+    if (app.panelOpen) {
+      ui.hideUnitChip();
+      ui.showUnitPanel(st, u, ctx());
+    } else {
+      ui.hidePanel();
+      ui.showUnitChip(st, u, ctx());
+    }
   } else {
     const city = R.cityAt(st, app.sel.q, app.sel.r);
     render.setHighlights({ selected: city.q + ',' + city.r });
+    ui.hideUnitChip();
     ui.showCityPanel(st, city, ctx());
   }
+}
+
+// Einheit wählen. Eine neu gewählte Einheit zeigt nur die kleine Leiste;
+// `open` öffnet direkt das Info-Menü.
+function selectUnit(id, open = false) {
+  const same = app.sel && app.sel.kind === 'unit' && app.sel.id === id;
+  app.sel = { kind: 'unit', id };
+  app.panelOpen = open || (same && app.panelOpen);
 }
 
 function humanDefeated() {
@@ -575,15 +594,25 @@ async function onHexPick(key) {
   // Städte im unentdeckten Nebel bleiben verborgen.
   const city = rawCity && R.cityView(st, v, rawCity) ? rawCity : null;
 
-  // Einheit in einer Stadt: erneutes Antippen wechselt zwischen beiden Menüs.
+  // Bereits gewählte Einheit erneut antippen (auch Doppeltipp): erst das
+  // Info-Menü öffnen; steht sie in einer Stadt, danach zum Stadtmenü wechseln.
   const prev = app.sel;
-  if (unit && city && prev) {
-    if (prev.kind === 'unit' && prev.id === unit.id) { app.sel = { kind: 'city', q, r }; refresh(); return; }
-    if (prev.kind === 'city' && prev.q === q && prev.r === r) { app.sel = { kind: 'unit', id: unit.id }; refresh(); return; }
+  if (unit && prev && prev.kind === 'unit' && prev.id === unit.id) {
+    if (!app.panelOpen) app.panelOpen = true;
+    else if (city) app.sel = { kind: 'city', q, r };
+    sfx('select');
+    refresh();
+    return;
+  }
+  if (unit && city && prev && prev.kind === 'city' && prev.q === q && prev.r === r) {
+    selectUnit(unit.id, true);
+    refresh();
+    return;
   }
 
   if (!myTurn()) {
-    app.sel = unit ? { kind: 'unit', id: unit.id } : (city ? { kind: 'city', q, r } : null);
+    if (unit) selectUnit(unit.id);
+    else app.sel = city ? { kind: 'city', q, r } : null;
     refresh();
     return;
   }
@@ -600,7 +629,7 @@ async function onHexPick(key) {
         const reach = R.reachableMap(st, me);
         if (reach.has(key)) return doMove(me, q, r);
       } else if (unit.owner === me.owner) {
-        app.sel = { kind: 'unit', id: unit.id };
+        selectUnit(unit.id);
         refresh();
         return;
       } else if (city && city.owner === actAs()) {
@@ -609,13 +638,13 @@ async function onHexPick(key) {
         return;
       }
     } else if (me && me.owner === actAs() && me.acted && unit && unit.owner === me.owner) {
-      app.sel = { kind: 'unit', id: unit.id };
+      selectUnit(unit.id);
       refresh();
       return;
     }
   }
 
-  if (unit) app.sel = { kind: 'unit', id: unit.id };
+  if (unit) selectUnit(unit.id);
   else if (city) app.sel = { kind: 'city', q, r };
   else app.sel = null;
   refresh();
@@ -786,7 +815,8 @@ function boot() {
     onDisband: doDisband,
     onNextIdle: nextIdle,
     onSelectCity: (q, r) => { app.sel = { kind: 'city', q, r }; sfx('select'); refresh(); },
-    onSelectUnit: id => { if (R.findUnit(app.state, id)) { app.sel = { kind: 'unit', id }; sfx('select'); refresh(); } },
+    onSelectUnit: id => { if (R.findUnit(app.state, id)) { selectUnit(id, true); sfx('select'); refresh(); } },
+    onUnitDetails: () => { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = true; refresh(); } },
     onCamera: cmd => {
       if (cmd === 'rotL') render.rotateCamera(-1);
       else if (cmd === 'rotR') render.rotateCamera(1);
@@ -805,7 +835,7 @@ function boot() {
       const u = R.findUnit(app.state, id);
       if (!u) return;
       ui.hideOverview();
-      app.sel = { kind: 'unit', id: u.id };
+      selectUnit(u.id);
       render.cameraTo(u.q, u.r, true);
       refresh();
     },

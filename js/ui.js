@@ -247,6 +247,27 @@ function wirePanel(p) {
   });
 }
 
+// Kleine Leiste für die gewählte Einheit (statt des großen Info-Menüs).
+export function showUnitChip(state, unit, ctx) {
+  const chip = $('unit-chip');
+  const def = UNITS[unit.carry || unit.type];
+  const mine = unit.owner === ctx.actAs;
+  const opts = mine && ctx.myTurn ? unitOptions(state, unit) : [];
+  const status = !mine ? (tribeName(state, unit.owner) || NAMES[unit.owner])
+    : opts.length ? 'kann noch: ' + opts.join(', ') : 'erledigt';
+  chip.innerHTML = `
+    <span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>
+    <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ★' : ''}</b>
+      <span class="uc-sub">Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${unit.mp}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}</span></span>
+    <button class="btn ghost small" data-details>Details</button>`;
+  chip.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
+  chip.classList.remove('hidden');
+}
+
+export function hideUnitChip() {
+  $('unit-chip').classList.add('hidden');
+}
+
 export function showUnitPanel(state, unit, ctx) {
   const def = UNITS[unit.type];
   const cap = hpCap(unit);
