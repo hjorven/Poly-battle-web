@@ -218,6 +218,12 @@ function rewardStep(state, player) {
 // Erreichbare Ruine (nicht für Siedler und Schiffe).
 function ruinStep(state, unit) {
   if (!state.ruins || unit.type === 'settler' || UNITS[unit.type].abilities.includes('water')) return null;
+  // Nur rechnen, wenn überhaupt eine Ruine in Bewegungsweite liegt.
+  const near = Object.keys(state.ruins).some(k => {
+    const [q, r] = k.split(',').map(Number);
+    return hexDistance(unit.q, unit.r, q, r) <= unit.mp;
+  });
+  if (!near) return null;
   const reach = R.reachableMap(state, unit);
   for (const [k] of reach) {
     if (state.ruins[k]) {
