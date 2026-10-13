@@ -1,20 +1,21 @@
 import {
   UNITS, UNIT_ORDER, TECHS, NAMES, MAX_POP,
   TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS,
-  CITY_REWARDS, GAME_MODES, BRIDGE
+  CITY_REWARDS, GAME_MODES, BRIDGE, MAP_SIZES, MAP_TYPES
 } from './config.js';
 import {
   cityIncome, techCost, tribeName, playerColor, maxHp, maxMove,
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
-  bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate
+  bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
+  hpCap, unitCost, tribeOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
 
 const $ = id => document.getElementById(id);
-const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'normal' };
+const settings = { bots: 3, stars: 'normal', gamemode: 'conquest', ai: 'normal', mapsize: 'normal', maptype: 'continents' };
 let handlers = {};
 let selectedTribe = null;
 
@@ -34,6 +35,8 @@ export function initUI(h) {
   });
   $('endTurnBtn').addEventListener('click', () => handlers.onEndTurn());
   $('idleBtn').addEventListener('click', () => handlers.onNextIdle());
+  $('undoBtn').addEventListener('click', () => handlers.onUndo());
+  $('soundBtn').addEventListener('click', () => handlers.onToggleSound());
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
   $('overviewBtn').addEventListener('click', () => handlers.onOpenOverview());
@@ -46,7 +49,11 @@ export function initUI(h) {
     hideConfirm();
     if (yes) yes();
   });
-  $('confirmNo').addEventListener('click', hideConfirm);
+  $('confirmNo').addEventListener('click', () => {
+    const no = handlers._confirmNo;
+    hideConfirm();
+    if (no) no();
+  });
   $('confirm-overlay').addEventListener('click', e => {
     if (e.target === e.currentTarget) hideConfirm();
   });
@@ -63,7 +70,9 @@ export function getSettings() {
     bots: settings.bots,
     stars: STARS_OPTIONS[settings.stars].stars,
     turnLimit: GAME_MODES[settings.gamemode].turnLimit,
-    aiLevel: settings.ai
+    aiLevel: settings.ai,
+    mapSize: MAP_SIZES[settings.mapsize] ? settings.mapsize : 'normal',
+    mapType: MAP_TYPES[settings.maptype] ? settings.maptype : 'continents'
   };
 }
 
@@ -96,6 +105,8 @@ function buildSettings() {
   };
   seg('gamemode', 'gamemode');
   seg('ai', 'ai');
+  seg('mapsize', 'mapsize');
+  seg('maptype', 'maptype');
 }
 
 function hex(c) {
@@ -117,7 +128,8 @@ function buildTribePicker() {
     btn.className = 'tribe-opt';
     btn.dataset.tribe = id;
     btn.innerHTML = `<span class="tribe-name"><span class="dot" style="background:${hex(t.color)}"></span>${t.name}</span>
-      <span class="tribe-tech">Start: ${startTech} · ${startUnits}</span>`;
+      <span class="tribe-tech">Start: ${startTech} · ${startUnits}</span>
+      ${t.perk ? `<span class="tribe-perk">★ ${t.perk.name}: ${t.perk.desc}</span>` : ''}`;
     btn.addEventListener('click', () => {
       selectedTribe = selectedTribe === id ? null : id;
       wrap.querySelectorAll('.tribe-opt').forEach(b => b.classList.toggle('active', b.dataset.tribe === selectedTribe));
@@ -166,6 +178,14 @@ export function updateStrip(state, ctx) {
   $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' / ' + state.turnLimit : '');
 }
 
+export function setUndo(available) {
+  $('undoBtn').classList.toggle('hidden', !available);
+}
+
+export function setSoundIcon(muted) {
+  $('soundBtn').textContent = muted ? '🔇' : '🔊';
+}
+
 export function setEndTurn(enabled) {
   $('endTurnBtn').disabled = !enabled;
 }
@@ -174,7 +194,7 @@ export function setEndTurn(enabled) {
 export function setIdle(count) {
   const btn = $('idleBtn');
   btn.classList.toggle('hidden', !count);
-  btn.innerHTML = `<span class="idle-dot"></span>${count} bereit`;
+  btn.innerHTML = `<span class="idle-dot"></span>${count}<span class="lbl"> bereit</span>`;
 }
 
 // „2× Krieger, 1× Reiter“
@@ -217,8 +237,9 @@ function wirePanel(p) {
 
 export function showUnitPanel(state, unit, ctx) {
   const def = UNITS[unit.type];
-  const cap = maxHp(unit.type);
+  const cap = hpCap(unit);
   const owner = tribeName(state, unit.owner) || NAMES[unit.owner];
+  const land = unit.carry ? UNITS[unit.carry] : null;
   const mine = unit.owner === ctx.actAs;
   const hpPct = Math.max(0, (unit.hp / cap) * 100);
   const tile = TERRAIN[terrainAt(state, unit.q, unit.r)];
@@ -289,7 +310,7 @@ export function showUnitPanel(state, unit, ctx) {
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">${def.icon} ${def.name}</div>
+        <div class="panel-title">${def.icon} ${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ' <span class="vet-badge">★ Veteran</span>' : ''}</div>
         <div class="panel-sub" style="color:${hex(playerColor(state, unit.owner))}">${owner}${mine ? ' (deine Einheit)' : ''}</div>
       </div>
       <div class="panel-head-right">
@@ -306,6 +327,8 @@ export function showUnitPanel(state, unit, ctx) {
       <div class="stat">Reichweite<b>${def.range}</b></div>
     </div>
     <div class="ability-row">${abilityChips(unit.type)}</div>
+    ${unit.vet ? '' : `<div class="hint">Siege: ${unit.kills || 0}/3 bis zur Beförderung (+5 Leben)</div>`}
+    ${land ? '<div class="hint">Fährt als Boot; an Land gehen beendet die Bewegung.</div>' : ''}
     <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ×${tb}</div>
     ${todo}
     ${found}
@@ -365,7 +388,7 @@ export function showCityPanel(state, city, ctx) {
       const reason = trainReason(state, city, t, ctx);
       actions += `<button class="btn action" data-train="${t}" ${reason ? 'disabled' : ''}>
         <span>${u.icon} ${u.name}<span class="sub">${reason || `Angriff ${u.atk} · Verteidigung ${u.def} · Bewegung ${u.move} · Reichweite ${u.range} · Leben ${u.hp}`}</span></span>
-        <span class="cost">${u.cost} Sterne</span>
+        <span class="cost">${unitCost(state, city.owner, t)} Sterne</span>
       </button>`;
     }
     actions += `</div>`;
@@ -824,14 +847,24 @@ export function hideWinner() {
   $('winner-overlay').classList.add('hidden');
 }
 
-export function showConfirm(text, onYes) {
+export function showConfirm(text, onYes, opts = {}) {
   $('confirm-text').textContent = text;
   handlers._confirmYes = onYes;
+  handlers._confirmNo = opts.onNo || null;
+  if (!$('confirmYes').dataset.label) $('confirmYes').dataset.label = $('confirmYes').textContent;
+  if (!$('confirmNo').dataset.label) $('confirmNo').dataset.label = $('confirmNo').textContent;
+  $('confirmYes').textContent = opts.yes || $('confirmYes').dataset.label;
+  $('confirmNo').textContent = opts.no || $('confirmNo').dataset.label;
   $('confirm-overlay').classList.remove('hidden');
+}
+
+export function isConfirmOpen() {
+  return !$('confirm-overlay').classList.contains('hidden');
 }
 
 export function hideConfirm() {
   handlers._confirmYes = null;
+  handlers._confirmNo = null;
   $('confirm-overlay').classList.add('hidden');
 }
 
@@ -884,7 +917,7 @@ export function showOverview(state, ctx) {
     for (const u of myUnits) {
       const def = UNITS[u.type];
       const st = unitStatus(u, actAs);
-      const cap = maxHp(u.type);
+      const cap = hpCap(u);
       const row = document.createElement('button');
       row.className = 'btn action overview-row' + (st === 'aktiv' ? '' : ' dimmed');
       row.innerHTML = `<span>${def.icon} ${def.name}<span class="sub">${st === 'aktiv' ? 'bereit' : st} · Leben ${u.hp}/${cap}</span></span>`;
@@ -893,8 +926,47 @@ export function showOverview(state, ctx) {
     }
   }
 
+  const perk = tribeOf(state, actAs)?.perk;
+  if (perk) {
+    const p = document.createElement('div');
+    p.className = 'hint';
+    p.innerHTML = `<b>Stammes-Fähigkeit – ${perk.name}:</b> ${perk.desc}`;
+    menu.insertBefore(p, menu.children[1] || null);
+  }
+
+  const others = playersOf(state).filter(p => p !== actAs && alive(state, p));
+  if (others.length) {
+    const head = document.createElement('div');
+    head.className = 'panel-head';
+    head.innerHTML = `<div class="panel-sub">Diplomatie</div>`;
+    menu.appendChild(head);
+    for (const p of others) {
+      const row = document.createElement('div');
+      row.className = 'dip-row';
+      const met = hasMet(state, actAs, p);
+      const peace = atPeace(state, actAs, p);
+      const name = met ? (tribeName(state, p) || NAMES[p]) : 'Unbekannter Stamm';
+      let status = !met ? 'noch nicht begegnet' : peace ? 'Frieden' : 'Krieg';
+      if (pendingOffer(state, actAs, p)) status += ' · Angebot gesendet';
+      let action = '';
+      if (met && ctx.myTurn) {
+        if (peace) action = `<button class="btn ghost" data-war="${p}">Krieg erklären</button>`;
+        else {
+          const chk = canOfferPeace(state, actAs, p);
+          action = `<button class="btn ghost" data-peace="${p}" ${chk.ok ? '' : 'disabled'} title="${esc(chk.reason || 'Frieden anbieten')}">Frieden anbieten</button>`;
+          if (!chk.ok) status += ` · ${chk.reason}`;
+        }
+      }
+      row.innerHTML = `<span><span class="dip-name"><span class="dot" style="background:${met ? hex(playerColor(state, p)) : '#a1a1aa'}"></span>${esc(name)}</span>
+        <span class="dip-state ${peace ? 'peace' : ''}">${esc(status)}</span></span>${action}`;
+      row.querySelector('[data-peace]')?.addEventListener('click', () => handlers.onOfferPeace(p));
+      row.querySelector('[data-war]')?.addEventListener('click', () => handlers.onDeclareWar(p));
+      menu.appendChild(row);
+    }
+  }
+
   if (!myCities.length && !myUnits.length) {
-    menu.innerHTML += `<div class="hint">Du besitzt keine Städte oder Einheiten.</div>`;
+    menu.insertAdjacentHTML('beforeend', `<div class="hint">Du besitzt keine Städte oder Einheiten.</div>`);
   }
   $('overview-overlay').classList.remove('hidden');
 }
