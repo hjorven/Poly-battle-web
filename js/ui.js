@@ -215,6 +215,26 @@ export function setSoundIcon(muted) {
   btn.setAttribute('aria-label', btn.title);
 }
 
+// Tutorial-Karte: Text, Fortschritt, Weiter (nur beim letzten/Info-Schritt) und Überspringen.
+export function showTutor({ text, step, total, next }) {
+  const box = $('tutor');
+  box.innerHTML = `<div class="tu-head"><span>Tutorial · Schritt ${step + 1} von ${total}</span></div>
+    <div class="tu-bar"><div style="width:${Math.round((step + 1) / total * 100)}%"></div></div>
+    <p class="tu-text">${esc(text)}</p>
+    <div class="tu-btns">
+      <button class="btn small" data-tu-skip>${next === 'Fertig' ? 'Schließen' : 'Tutorial beenden'}</button>
+      ${next ? `<button class="btn small primary" data-tu-next>${esc(next)}</button>` : ''}
+    </div>`;
+  box.querySelector('[data-tu-skip]').addEventListener('click', () => handlers.onTutor('skip'));
+  const n = box.querySelector('[data-tu-next]');
+  if (n) n.addEventListener('click', () => handlers.onTutor('next'));
+  box.classList.remove('hidden');
+}
+
+export function hideTutor() {
+  $('tutor').classList.add('hidden');
+}
+
 // Rückblick: Liste {text, q?, r?}; antippen springt zum Ort.
 export function showNews(lines) {
   const box = $('news');

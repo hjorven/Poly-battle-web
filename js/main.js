@@ -85,6 +85,7 @@ function refresh() {
   warnThreats();
   announceMonuments();
   showNews();
+  tutorTick();
   render.drawMinimap(app.state, viewer());
   updateSelection();
   checkWinnerUI();
@@ -717,7 +718,68 @@ async function onHexPick(key) {
   refresh();
 }
 
-function startLocal(mode) {
+// --- Tutorial ---------------------------------------------------------------
+// Schritte mit Erfolgsbedingung; `base` merkt sich Werte vom Schrittbeginn.
+const TUTOR = [
+  { text: 'Willkommen! Das ist deine Hauptstadt mit einem Krieger. Tippe den Krieger an (oder drücke die Leertaste).',
+    done: () => app.sel && app.sel.kind === 'unit' },
+  { text: 'Die hellen Felder zeigen, wohin er ziehen kann. Tippe ein helles Feld an, um zu ziehen. Der Nebel lichtet sich, wo deine Einheiten sind.',
+    done: st => st.units.some(u => u.owner === 'player_1' && u.hasMoved) },
+  { text: 'Gut! Graue Städte sind neutrale Dörfer: Ziehe hinein, um sie einzunehmen. Ruinen (Steinsäulen) bringen Belohnungen. Wenn deine Einheiten fertig sind, tippe oben auf „Zug beenden“.',
+    done: (st, base) => st.round > base.round },
+  { text: 'Jede Runde bekommst du Sterne (oben links). Tippe deine Hauptstadt an und bilde unter „Einheiten ausbilden“ eine Einheit aus. Steht dort eine Einheit, tippe die Stadt mehrmals an.',
+    init: st => ({ units: st.units.filter(u => u.owner === 'player_1').length }),
+    done: (st, base) => st.cities.some(c => c.owner === 'player_1' && c.trained) },
+  { text: 'Öffne oben die „Forschung“ und erforsche eine Technologie. Sie schaltet neue Einheiten, Gebäude und Fähigkeiten frei.',
+    init: st => ({ techs: st.techs.player_1.length }),
+    done: (st, base) => st.techs.player_1.length > base.techs },
+  { text: 'Städte wachsen durch Gebäude (Farm, Mine, Hafen …) im Stadtmenü und bringen dann mehr Sterne. Ein roter Ring warnt dich, wenn eine Stadt bedroht ist.',
+    next: 'Weiter' },
+  { text: 'Ziel: Nimm die Hauptstadt des Gegners ein. Mehr steht im Menü unter Hilfe, z. B. zu Brücken, Straßen, Leuchttürmen und Monumenten. Viel Erfolg!',
+    next: 'Fertig' }
+];
+
+function tutorTick() {
+  const st = app.state;
+  const t = st && st.tutorial;
+  if (!t || app.mode !== 'bot' || st.winner) { ui.hideTutor(); return; }
+  let step = TUTOR[t.step];
+  while (step && step.done && step.done(st, t.base || {})) {
+    t.step++;
+    step = TUTOR[t.step];
+    t.base = step ? { round: st.round, ...(step.init ? step.init(st) : {}) } : {};
+    sfx('select');
+    persist();
+  }
+  if (!step) { delete st.tutorial; ui.hideTutor(); persist(); return; }
+  ui.showTutor({ text: step.text, step: t.step, total: TUTOR.length, next: step.next });
+}
+
+function onTutor(action) {
+  const st = app.state;
+  if (!st || !st.tutorial) return;
+  const step = TUTOR[st.tutorial.step];
+  if (action === 'next' && step && step.next) {
+    st.tutorial.step++;
+    const nx = TUTOR[st.tutorial.step];
+    st.tutorial.base = nx ? { round: st.round, ...(nx.init ? nx.init(st) : {}) } : {};
+  } else if (action === 'skip') {
+    delete st.tutorial;
+  }
+  persist();
+  tutorTick();
+}
+
+function startTutorial() {
+  startLocal('bot', {
+    count: 2, tribe: 'imperius', mapSize: 'small', mapType: 'continents', aiLevel: 'easy', turnLimit: null
+  });
+  app.state.tutorial = { step: 0, base: { round: app.state.round } };
+  persist();
+  refresh();
+}
+
+function startLocal(mode, override = null) {
   app.gen++;
   app.mode = mode;
   app.online = false;
@@ -727,9 +789,9 @@ function startLocal(mode) {
   app.sel = null;
   app.busy = false;
   app.idleWarned = null;
-  const settings = ui.getSettings();
-  const count = mode === 'bot' ? settings.bots + 1 : settings.humans;
-  const tribe = mode === 'bot' ? ui.getTribe() : null;
+  const settings = { ...ui.getSettings(), ...(override || {}) };
+  const count = override && override.count ? override.count : mode === 'bot' ? settings.bots + 1 : settings.humans;
+  const tribe = mode === 'bot' ? (override && override.tribe) || ui.getTribe() : null;
   const map = { mapSize: settings.mapSize, mapType: settings.mapType };
   const opts = mode === 'bot'
     ? {
@@ -951,7 +1013,8 @@ function boot() {
     onMenu: () => showMenu(),
     onRestart: () => { ui.hideWinner(); showMenu(); },
     onContinue: continueGame,
-    onMode: mode => mode === 'online' ? startOnline() : startLocal(mode),
+    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : startLocal(mode),
+    onTutor,
     onCopyLink: copyLink
   });
 
