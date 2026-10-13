@@ -5,7 +5,7 @@ import * as net from './net.js';
 import { botStep, applyStep } from './ai.js';
 import { sfx, isMuted, setMuted } from './sound.js';
 import { saveGame, loadGame, saveInfo, clearSave } from './save.js';
-import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS } from './config.js';
+import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS } from './config.js';
 
 const app = {
   mode: null,
@@ -65,7 +65,7 @@ function statusText() {
   }
   if (app.mode === 'online') {
     if (!app.myRole) return `Zuschauer · Am Zug: ${needName(st, st.turn)}`;
-    if (!app.hasOpponent) return 'Warte auf Mitspieler – teile den Link (Menü → Link kopieren).';
+    if (!app.hasOpponent) return `Warte auf Mitspieler (${app.seated || 1}/${app.humanSeats || 2} da) – teile den Link (Menü → Link kopieren).`;
     if (myTurn()) return `Du bist am Zug (${needName(st, app.myRole)})`;
     if (R.isBot(st, st.turn)) return `KI zieht (${needName(st, st.turn)}) …`;
     return `Gegner ist am Zug (${needName(st, st.turn)})`;
@@ -83,12 +83,68 @@ function refresh() {
   ui.setIdle(idle.length);
   render.setIdleMarkers(idle);
   warnThreats();
+  announceMonuments();
+  showNews();
+  turnStartFeedback();
+  tutorTick();
   render.drawMinimap(app.state, viewer());
   updateSelection();
   checkWinnerUI();
 }
 
 // Bedrohte Städte rot markieren und einmal pro Zug darauf hinweisen.
+// Zugbeginn: Einkommen über der Hauptstadt zeigen, Schonfrist ankündigen.
+function turnStartFeedback() {
+  if (!myTurn() || app.state.winner) return;
+  const p = actAs(), st = app.state;
+  const key = `${app.gen}:${st.round}:${p}`;
+  if (app.turnGreeted === key) return;
+  app.turnGreeted = key;
+  const cities = R.citiesFor(st, p);
+  const home = cities.find(c => c.isCapital) || cities[0];
+  if (home && st.round > 1) render.floatAt(home.q, home.r, `+${R.incomeFor(st, p)}`, '#facc15');
+  const grace = R.graceUntil(st);
+  const bots = st.players.filter(o => R.isBot(st, o) && R.alive(st, o));
+  if (!grace || !bots.some(o => R.graceProtects(st, o, p))) return;
+  if (st.round === 1) ui.toast(`Schonfrist: Die KI greift dich bis Runde ${grace} nicht an – außer du greifst sie zuerst an. Nutze die Zeit zum Ausbauen!`, 'good');
+  else if (st.round === grace) ui.toast('Letzte Runde der Schonfrist – ab der nächsten Runde kann die KI angreifen.', 'warn');
+}
+
+// Rückblick auf die Züge der anderen seit dem eigenen letzten Zug.
+function showNews() {
+  if (!myTurn()) return;
+  const p = actAs();
+  const news = R.takeNews(app.state, p);
+  if (!news.length) return;
+  const name = pl => needName(app.state, pl);
+  // „deinen Krieger“, aber „dein Schiff“.
+  const ACC = { archer: 'Bogenschützen', giant: 'Riesen' };
+  const your = t => (['catapult', 'boat', 'ship', 'battleship'].includes(t) ? 'dein ' : 'deinen ') + (ACC[t] || UNITS[t].name);
+  const lines = [];
+  for (const e of news.filter(e => e.kind === 'war')) lines.push({ text: `${name(e.by)} hat dir den Krieg erklärt` });
+  for (const e of news.filter(e => e.kind === 'cityLost')) lines.push({ text: `${name(e.by)} hat eine deiner Städte erobert`, q: e.q, r: e.r });
+  for (const e of news.filter(e => e.kind === 'unitLost')) lines.push({ text: `${name(e.by)} hat ${your(e.unit)} besiegt`, q: e.q, r: e.r });
+  for (const e of news.filter(e => e.kind === 'converted')) lines.push({ text: `${name(e.by)} hat ${your(e.unit)} bekehrt`, q: e.q, r: e.r });
+  for (const e of news.filter(e => e.kind === 'hit')) lines.push({ text: `${name(e.by)} hat ${your(e.unit)} angegriffen (−${e.dmg} Leben)`, q: e.q, r: e.r });
+  ui.showNews(lines);
+  persist();
+}
+
+// Neu freigeschaltete Monumente einmal ankündigen.
+function announceMonuments() {
+  if (!myTurn()) return;
+  const p = actAs();
+  R.checkMonuments(app.state, p);
+  if (!app.monAnnounced) app.monAnnounced = new Set();
+  for (const t of R.readyMonuments(app.state, p)) {
+    const key = `${app.gen}:${p}:${t}`;
+    if (app.monAnnounced.has(key)) continue;
+    app.monAnnounced.add(key);
+    ui.toast(`Monument freigeschaltet: ${IMPROVEMENTS[t].name} – im Stadtmenü auf einem freien Feld errichten (+3 Bevölkerung)`, 'good');
+    sfx('promote');
+  }
+}
+
 function warnThreats() {
   const mine = myTurn() && !app.state.winner;
   const threats = mine ? R.threatenedCities(app.state, actAs()) : [];
@@ -173,7 +229,11 @@ function checkWinnerUI() {
     sfx(app.state.winner && (app.mode === 'hotseat' || app.state.winner === me) ? 'win' : 'lose');
   }
   if (app.state.winner) { clearSave(); ui.showWinner(app.state, ctx()); }
-  else if (humanDefeated()) { clearSave(); ui.showDefeat(app.state, ctx()); }
+  else if (humanDefeated()) {
+    clearSave();
+    const easier = app.state.aiLevel !== 'easy' || app.state.players.length > 2;
+    ui.showDefeat(app.state, ctx(), { easier, retry: true });
+  }
 }
 
 // Lokale Partien nach jeder Aktion sichern (Neuladen / Tab schließen).
@@ -211,6 +271,11 @@ function announce(events) {
     if (ev.kind === 'capture') {
       ui.toast(ev.to ? `Stadt erobert! (${needName(app.state, ev.to)})` : 'Stadt neutralisiert', 'good');
       sfx('capture');
+      if (ev.city) render.celebrate(ev.city.q, ev.city.r, R.playerColor(app.state, ev.to), true);
+    } else if (ev.kind === 'bounty') {
+      if (ev.player === actAs()) ui.toast(`Gegner besiegt: +${ev.stars} Stern Beute`, 'good');
+    } else if (ev.kind === 'provoke') {
+      ui.toast(`Du hast ${needName(app.state, ev.player)} angegriffen – die Schonfrist gegen diesen Stamm ist vorbei.`, 'warn');
     } else if (ev.kind === 'ruin') {
       ui.toast(`Ruine erkundet: ${ev.text}`, 'good');
       sfx('coin');
@@ -379,6 +444,7 @@ async function doBuyPop(city) {
   app.busy = true;
   ui.toast('Bevölkerung wächst', 'good');
   sfx('coin');
+  render.celebrate(city.q, city.r);
   await render.syncBoard(app.state, viewer());
   await afterAction();
 }
@@ -391,6 +457,18 @@ async function doImprove(city, type, q, r) {
   app.busy = true;
   const def = IMPROVEMENTS[type];
   ui.toast(`${def ? def.name + ' gebaut' : 'Gebäude gebaut'}`, 'good');
+  sfx(def && def.monument ? 'win' : 'build');
+  render.celebrate(q, r, def && def.monument ? 0xfacc15 : 0x86efac, !!(def && def.monument));
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
+async function doBuildRoad(q, r, unit) {
+  if (unit) { unit = liveUnit(unit); if (!unit) return; }
+  const res = R.buildRoad(app.state, actAs(), q, r, unit);
+  if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  app.busy = true;
+  ui.toast('Straße gebaut', 'good');
   sfx('build');
   await render.syncBoard(app.state, viewer());
   await afterAction();
@@ -453,6 +531,7 @@ function anyIdle(owner) {
 }
 
 function doEndTurnNow() {
+  ui.hideNews();
   app.busy = true;
   app.sel = null;
   R.endTurn(app.state);
@@ -668,7 +747,68 @@ async function onHexPick(key) {
   refresh();
 }
 
-function startLocal(mode) {
+// --- Tutorial ---------------------------------------------------------------
+// Schritte mit Erfolgsbedingung; `base` merkt sich Werte vom Schrittbeginn.
+const TUTOR = [
+  { text: 'Willkommen! Das ist deine Hauptstadt mit einem Krieger. Tippe den Krieger an (oder drücke die Leertaste).',
+    done: () => app.sel && app.sel.kind === 'unit' },
+  { text: 'Die hellen Felder zeigen, wohin er ziehen kann. Tippe ein helles Feld an, um zu ziehen. Der Nebel lichtet sich, wo deine Einheiten sind.',
+    done: st => st.units.some(u => u.owner === 'player_1' && u.hasMoved) },
+  { text: 'Gut! Graue Städte sind neutrale Dörfer: Ziehe hinein, um sie einzunehmen. Ruinen (Steinsäulen) bringen Belohnungen. Wenn deine Einheiten fertig sind, tippe oben auf „Zug beenden“.',
+    done: (st, base) => st.round > base.round },
+  { text: 'Jede Runde bekommst du Sterne (oben links). Tippe deine Hauptstadt an und bilde unter „Einheiten ausbilden“ eine Einheit aus. Steht dort eine Einheit, tippe die Stadt mehrmals an.',
+    init: st => ({ units: st.units.filter(u => u.owner === 'player_1').length }),
+    done: (st, base) => st.cities.some(c => c.owner === 'player_1' && c.trained) },
+  { text: 'Öffne oben die „Forschung“ und erforsche eine Technologie. Sie schaltet neue Einheiten, Gebäude und Fähigkeiten frei.',
+    init: st => ({ techs: st.techs.player_1.length }),
+    done: (st, base) => st.techs.player_1.length > base.techs },
+  { text: 'Städte wachsen durch Gebäude (Farm, Mine, Hafen …) im Stadtmenü und bringen dann mehr Sterne. Ein roter Ring warnt dich, wenn eine Stadt bedroht ist.',
+    next: 'Weiter' },
+  { text: 'Ziel: Nimm die Hauptstadt des Gegners ein. Mehr steht im Menü unter Hilfe, z. B. zu Brücken, Straßen, Leuchttürmen und Monumenten. Viel Erfolg!',
+    next: 'Fertig' }
+];
+
+function tutorTick() {
+  const st = app.state;
+  const t = st && st.tutorial;
+  if (!t || app.mode !== 'bot' || st.winner) { ui.hideTutor(); return; }
+  let step = TUTOR[t.step];
+  while (step && step.done && step.done(st, t.base || {})) {
+    t.step++;
+    step = TUTOR[t.step];
+    t.base = step ? { round: st.round, ...(step.init ? step.init(st) : {}) } : {};
+    sfx('select');
+    persist();
+  }
+  if (!step) { delete st.tutorial; ui.hideTutor(); persist(); return; }
+  ui.showTutor({ text: step.text, step: t.step, total: TUTOR.length, next: step.next });
+}
+
+function onTutor(action) {
+  const st = app.state;
+  if (!st || !st.tutorial) return;
+  const step = TUTOR[st.tutorial.step];
+  if (action === 'next' && step && step.next) {
+    st.tutorial.step++;
+    const nx = TUTOR[st.tutorial.step];
+    st.tutorial.base = nx ? { round: st.round, ...(nx.init ? nx.init(st) : {}) } : {};
+  } else if (action === 'skip') {
+    delete st.tutorial;
+  }
+  persist();
+  tutorTick();
+}
+
+function startTutorial() {
+  startLocal('bot', {
+    count: 2, tribe: 'imperius', mapSize: 'small', mapType: 'continents', aiLevel: 'easy', turnLimit: null
+  });
+  app.state.tutorial = { step: 0, base: { round: app.state.round } };
+  persist();
+  refresh();
+}
+
+function startLocal(mode, override = null) {
   app.gen++;
   app.mode = mode;
   app.online = false;
@@ -678,9 +818,9 @@ function startLocal(mode) {
   app.sel = null;
   app.busy = false;
   app.idleWarned = null;
-  const settings = ui.getSettings();
-  const count = mode === 'bot' ? settings.bots + 1 : 2;
-  const tribe = mode === 'bot' ? ui.getTribe() : null;
+  const settings = { ...ui.getSettings(), ...(override || {}) };
+  const count = override && override.count ? override.count : mode === 'bot' ? settings.bots + 1 : settings.humans;
+  const tribe = mode === 'bot' ? (override && override.tribe) || ui.getTribe() : null;
   const map = { mapSize: settings.mapSize, mapType: settings.mapType };
   const opts = mode === 'bot'
     ? {
@@ -699,6 +839,7 @@ function enterLocal() {
     app.channel = null;
   }
   history.replaceState(null, '', location.pathname);
+  ui.hideNews();
   ui.hideMenu();
   ui.hideWinner();
   document.getElementById('copyLinkBtn').classList.add('hidden');
@@ -755,7 +896,7 @@ async function startOnline() {
     if (error) { ui.toast(error, 'warn'); showMenu(); return; }
     adopt(match.game_state);
     app.myRole = role;
-    app.hasOpponent = !!match.player_2;
+    app.hasOpponent = allSeated(match);
     ui.hideMenu();
     render.syncBoard(app.state, viewer());
     focusHome();
@@ -763,17 +904,18 @@ async function startOnline() {
     if (!app.myRole) ui.toast('Spiel läuft bereits – du schaust zu.');
   } else {
     const settings = ui.getSettings();
-    const bots = settings.onlineBots;
-    const state = R.createGame(Math.floor(Math.random() * 2 ** 31), 2 + bots, {
+    const humans = settings.humans;
+    const bots = Math.min(settings.onlineBots, 5 - humans);
+    const state = R.createGame(Math.floor(Math.random() * 2 ** 31), humans + bots, {
       tribe: ui.getTribe(), stars: settings.stars, turnLimit: settings.turnLimit, aiLevel: settings.aiLevel,
       mapSize: settings.mapSize, mapType: settings.mapType,
-      ai: Array.from({ length: bots }, (_, k) => 'player_' + (k + 3))
+      ai: Array.from({ length: bots }, (_, k) => 'player_' + (k + humans + 1))
     });
     const { match, error } = await net.createMatch(state);
     if (error) { ui.toast(error, 'warn'); showMenu(); return; }
     adopt(match.game_state);
     app.myRole = 'player_1';
-    app.hasOpponent = false;
+    app.hasOpponent = allSeated(match);
     app.gameId = match.id;
     location.hash = match.id;
     ui.hideMenu();
@@ -790,7 +932,7 @@ async function startOnline() {
   }
   app.channel = net.subscribe(app.gameId, match => {
     if (!app.online || !match.game_state) return;
-    if (match.player_2) app.hasOpponent = true;
+    if (allSeated(match)) app.hasOpponent = true;
     // Nur echte Neuerungen übernehmen. Das Echo des eigenen Zuges (gleiche
     // rev) würde den Stand durch eine identische Kopie ersetzen und offene
     // Panels/Dialoge auf verwaiste Objekte zeigen lassen.
@@ -801,6 +943,21 @@ async function startOnline() {
     }
     refresh();
   });
+}
+
+// Haben alle menschlichen Plätze einen Spieler? (Öffentliche Antwort der
+// Datenbank: `joined`; Realtime liefert die Zeile mit `seats`; ältere Server
+// kennen nur player_2.)
+function allSeated(match) {
+  const st = match.game_state || app.state;
+  if (!st) return !!match.player_2;
+  const humans = (st.players || []).filter(p => !(st.ai || []).includes(p));
+  const joined = Array.isArray(match.joined) ? match.joined
+    : match.seats && typeof match.seats === 'object' ? Object.keys(match.seats)
+    : [match.player_1 ? 'player_1' : null, match.player_2 ? 'player_2' : null].filter(Boolean);
+  app.seated = humans.filter(h => joined.includes(h)).length;
+  app.humanSeats = humans.length;
+  return humans.every(h => joined.includes(h));
 }
 
 async function copyLink() {
@@ -829,6 +986,8 @@ function boot() {
     onImprove: doImprove,
     onFound: doFound,
     onBuildBridge: doBuildBridge,
+    onBuildRoad: doBuildRoad,
+    onJump: (q, r) => render.cameraTo(q, r, true),
     onDestroyBridge: doDestroyBridge,
     onDisband: doDisband,
     onNextIdle: nextIdle,
@@ -841,6 +1000,23 @@ function boot() {
       else if (cmd === 'tiltUp') render.tiltCamera(-1);
       else if (cmd === 'tiltDown') render.tiltCamera(1);
       else render.resetCamera();
+    },
+    onHotkey: key => {
+      if (!app.state) return;
+      if (key === 'next') nextIdle();
+      else if (key === 'end') { if (myTurn()) doEndTurn(); }
+      else if (key === 'tech') ui.openTech(app.state, ctx());
+      else if (key === 'overview') ui.showOverview(app.state, ctx());
+      else if (key === 'details') { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = !app.panelOpen; refresh(); } }
+      else if (key === 'home') focusHome();
+      else if (key === 'sound') { setMuted(!isMuted()); ui.setSoundIcon(isMuted()); }
+      else if (key === 'deselect') { app.sel = null; refresh(); }
+      else if (key === 'panL') render.panCamera(-1, 0);
+      else if (key === 'panR') render.panCamera(1, 0);
+      else if (key === 'panU') render.panCamera(0, 1);
+      else if (key === 'panD') render.panCamera(0, -1);
+      else if (key === 'zoomIn') render.zoomCamera(0.8);
+      else if (key === 'zoomOut') render.zoomCamera(1.25);
     },
     onToggleSound: () => { setMuted(!isMuted()); ui.setSoundIcon(isMuted()); if (!isMuted()) sfx('select'); },
     onOfferPeace: doOfferPeace,
@@ -865,8 +1041,20 @@ function boot() {
     },
     onMenu: () => showMenu(),
     onRestart: () => { ui.hideWinner(); showMenu(); },
+    onRetry: easier => {
+      const st = app.state;
+      ui.hideWinner();
+      if (!st) return showMenu();
+      const levels = ['easy', 'normal', 'hard'];
+      let aiLevel = st.aiLevel || 'normal', count = st.players.length;
+      // Leichter: erst die Stufe senken, dann einen Gegner weniger.
+      if (easier) { if (aiLevel !== 'easy') aiLevel = levels[levels.indexOf(aiLevel) - 1]; else count = Math.max(2, count - 1); }
+      startLocal('bot', { count, aiLevel, tribe: st.tribes && st.tribes.player_1, mapSize: st.mapSize, mapType: st.mapType, turnLimit: st.turnLimit });
+      if (easier) ui.toast(`Neues Spiel: ${AI_LEVELS[aiLevel].label}, ${count - 1} ${count === 2 ? 'Gegner' : 'Gegner'}`, 'good');
+    },
     onContinue: continueGame,
-    onMode: mode => mode === 'online' ? startOnline() : startLocal(mode),
+    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : startLocal(mode),
+    onTutor,
     onCopyLink: copyLink
   });
 

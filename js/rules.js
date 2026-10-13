@@ -4,7 +4,7 @@ import {
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
-  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -152,6 +152,7 @@ export function respondPeace(state, to, from, accept) {
 export function declareWar(state, a, b) {
   if (!atPeace(state, a, b)) return { ok: false, reason: 'Kein Frieden' };
   delete state.peace[pairKey(a, b)];
+  logEvent(state, { kind: 'war', victim: b });
   if (!state.warCooldown) state.warCooldown = {};
   state.warCooldown[pairKey(a, b)] = state.round + 3;
   return { ok: true };
@@ -373,6 +374,47 @@ export function bridgeAt(state, q, r) {
   return !!(state.bridges && state.bridges[hk(q, r)] != null);
 }
 
+export function roadAt(state, q, r) {
+  return !!(state.roads && state.roads[hk(q, r)]);
+}
+
+// Teil des Straßennetzes: Straße, Stadt oder Brücke.
+export function onRoadNet(state, q, r) {
+  return roadAt(state, q, r) || !!cityAt(state, q, r) || bridgeAt(state, q, r);
+}
+
+// Straße auf (q, r) möglich? `byUnit`: Bau durch eine Einheit vor Ort statt
+// über das Stadtmenü (dann auch außerhalb des eigenen Gebiets erlaubt).
+export function canBuildRoad(state, player, q, r, byUnit = false) {
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (!hasTech(state, player, ROAD.tech)) return { ok: false, reason: `Technologie fehlt: ${TECHS[ROAD.tech].name}` };
+  if (!inBounds(q, r)) return { ok: false, reason: 'Außerhalb der Karte' };
+  const t = TERRAIN[terrainAt(state, q, r)];
+  if (!t.walkable) return { ok: false, reason: 'Nur auf Land' };
+  if (roadAt(state, q, r)) return { ok: false, reason: 'Hier ist schon eine Straße' };
+  if (cityAt(state, q, r)) return { ok: false, reason: 'Städte sind schon angebunden' };
+  const owner = tileCity(state, q, r);
+  if (owner && owner.owner && owner.owner !== player) return { ok: false, reason: 'Fremdes Gebiet' };
+  if (!byUnit && !(owner && owner.owner === player)) return { ok: false, reason: 'Nicht im eigenen Gebiet' };
+  if (state.stars[player] < ROAD.cost) return { ok: false, reason: 'Zu wenig Sterne' };
+  return { ok: true };
+}
+
+export function buildRoad(state, player, q, r, unit = null) {
+  if (unit) {
+    if (unit.owner !== player || unit.q !== q || unit.r !== r) return { ok: false, reason: 'Einheit steht nicht hier' };
+    if (unit.carry || hasAbility(unit.type, 'water')) return { ok: false, reason: 'Nur Landeinheiten' };
+    if (unit.mp <= 0 && unit.hasMoved) return { ok: false, reason: 'Keine Bewegung mehr' };
+  }
+  const chk = canBuildRoad(state, player, q, r, !!unit);
+  if (!chk.ok) return chk;
+  if (!state.roads) state.roads = {};
+  state.roads[hk(q, r)] = true;
+  state.stars[player] -= ROAD.cost;
+  if (unit) { unit.mp = 0; unit.hasMoved = true; }
+  return { ok: true };
+}
+
 export function defenceBonus(state, defender) {
   const tile = terrainAt(state, defender.q, defender.r);
   const t = TERRAIN[tile];
@@ -577,6 +619,9 @@ export function startTurn(state) {
     if (c.owner === p) c.trained = false;
   }
   state.stars[p] += incomeFor(state, p);
+  checkMonuments(state, p);
+  if (!state.peak) state.peak = {};
+  state.peak[p] = Math.max(state.peak[p] || 0, citiesFor(state, p).length);
   updateExplored(state, p);
 }
 
@@ -624,7 +669,9 @@ export function reachableMap(state, unit) {
   const out = new Map();
   if (unit.mp <= 0) return out;
   if (unit.acted && !(hasAbility(unit.type, 'escape') || hasAbility(unit.type, 'persist'))) return out;
-  const budget = unit.mp;
+  // Intern in halben Schritten rechnen (Straße zu Straße = 1 halber Schritt).
+  const budget = Math.round(unit.mp * 2);
+  const land = !hasAbility(unit.type, 'water');
   const occ = occupancy(state);
   const zocCache = new Map();
   const zoc = (q, r) => {
@@ -647,7 +694,9 @@ export function reachableMap(state, unit) {
         if (c && atPeace(state, unit.owner, c.owner)) continue;
         const switching = switchesDomain(state, unit, nq, nr);
         // Ein- und Ausschiffen verbraucht die restliche Bewegung.
-        const nc = switching ? Math.max(cost + 1, budget) : cost + moveCost(state, unit, nq, nr);
+        const road = land && onRoadNet(state, q, r) && onRoadNet(state, nq, nr);
+        const step = road ? 1 : moveCost(state, unit, nq, nr) * 2;
+        const nc = switching ? Math.max(cost + 2, budget) : cost + step;
         if (nc > budget) continue;
         if (nc < (dist.get(k) ?? Infinity)) {
           dist.set(k, nc);
@@ -659,7 +708,7 @@ export function reachableMap(state, unit) {
     }
   }
   dist.delete(hk(unit.q, unit.r));
-  for (const [k, v] of dist) out.set(k, v);
+  for (const [k, v] of dist) out.set(k, v / 2);
   return out;
 }
 
@@ -696,6 +745,46 @@ function finishAction(attacker) {
   }
 }
 
+// --- Schonfrist -------------------------------------------------------------
+// In den ersten Runden greift die KI Menschen nicht an – bis ein Mensch diese
+// KI selbst angreift oder ihr eine Stadt nimmt.
+
+export function graceUntil(state) {
+  return (AI_LEVELS[state.aiLevel] || AI_LEVELS.normal).grace || 0;
+}
+
+export function graceProtects(state, ai, target) {
+  if (!target || !isBot(state, ai) || isBot(state, target)) return false;
+  if (state.provoked && state.provoked[ai]) return false;
+  return state.round <= graceUntil(state);
+}
+
+// Ein Mensch greift eine KI an: deren Schonfrist endet (Ereignis nur beim ersten Mal).
+function provoke(state, human, ai) {
+  if (!ai || !isBot(state, ai) || isBot(state, human)) return null;
+  if (state.round > graceUntil(state) || (state.provoked && state.provoked[ai])) return null;
+  if (!state.provoked) state.provoked = {};
+  state.provoked[ai] = true;
+  return { kind: 'provoke', player: ai };
+}
+
+// --- Ereignisprotokoll (für den Rückblick zu Beginn des eigenen Zuges) -------
+
+export function logEvent(state, entry) {
+  if (!state.log) state.log = [];
+  state.logSeq = (state.logSeq || 0) + 1;
+  state.log.push({ seq: state.logSeq, round: state.round, by: state.turn, ...entry });
+  if (state.log.length > 80) state.log.shift();
+}
+
+// Was anderen seit dem letzten Abruf mit `player` passiert ist; markiert als gelesen.
+export function takeNews(state, player) {
+  if (!state.logSeen) state.logSeen = {};
+  const seen = state.logSeen[player] || 0;
+  state.logSeen[player] = state.logSeq || 0;
+  return (state.log || []).filter(e => e.seq > seen && e.victim === player && e.by !== player);
+}
+
 export function attack(state, attacker, defender) {
   const events = [];
   // Regelprüfung auch hier, damit KI, Online-Gegner oder Konsole keine
@@ -705,11 +794,13 @@ export function attack(state, attacker, defender) {
 
   if (hasAbility(attacker.type, 'convert')) {
     if (dist === 1) {
+      const prevOwner = defender.owner;
       defender.owner = attacker.owner;
       defender.acted = true;
       defender.mp = 0;
       defender.hasMoved = true;
       events.push({ kind: 'convert', unit: defender.id, to: attacker.owner });
+      logEvent(state, { kind: 'converted', victim: prevOwner, unit: defender.type, q: defender.q, r: defender.r });
       finishAction(attacker);
       updateExplored(state, attacker.owner);
     }
@@ -717,6 +808,8 @@ export function attack(state, attacker, defender) {
   }
 
   meet(state, attacker.owner, defender.owner);
+  const prov = provoke(state, attacker.owner, defender.owner);
+  if (prov) events.push(prov);
   const res = battleResults(state, attacker, defender);
   defender.hp -= res.damage;
   events.push({ kind: 'damage', from: attacker.id, to: defender.id, dmg: res.damage });
@@ -726,6 +819,11 @@ export function attack(state, attacker, defender) {
     state.units = state.units.filter(u => u !== defender);
     killed = true;
     events.push({ kind: 'kill', unit: defender });
+    logEvent(state, { kind: 'unitLost', victim: defender.owner, unit: defender.type, q: defender.q, r: defender.r });
+    if (!state.killsBy) state.killsBy = {};
+    state.killsBy[attacker.owner] = (state.killsBy[attacker.owner] || 0) + 1;
+    state.stars[attacker.owner] += BOUNTY;
+    events.push({ kind: 'bounty', player: attacker.owner, stars: BOUNTY });
     const promo = addKill(attacker);
     if (promo) events.push(promo);
     if (UNITS[attacker.type].range === 1 && !switchesDomain(state, attacker, defender.q, defender.r)) {
@@ -738,13 +836,17 @@ export function attack(state, attacker, defender) {
           const prev = city.owner;
           city.owner = attacker.owner;
           events.push({ kind: 'capture', city, from: prev, to: attacker.owner });
+          logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
           checkWinner(state);
         }
         const ruin = claimRuin(state, attacker);
         if (ruin) events.push(ruin);
       }
     }
-  } else if (!hasAbility(defender.type, 'stiff') && UNITS[defender.type].range >= dist && res.retaliation > 0) {
+  } else {
+    logEvent(state, { kind: 'hit', victim: defender.owner, unit: defender.type, dmg: res.damage, q: defender.q, r: defender.r });
+  }
+  if (!killed && !hasAbility(defender.type, 'stiff') && UNITS[defender.type].range >= dist && res.retaliation > 0) {
     attacker.hp -= res.retaliation;
     events.push({ kind: 'retaliate', from: defender.id, to: attacker.id, dmg: res.retaliation });
     if (attacker.hp <= 0) {
@@ -796,6 +898,9 @@ export function moveUnit(state, unit, q, r) {
     const prev = city.owner;
     city.owner = unit.owner;
     events.push({ kind: 'capture', city, from: prev, to: unit.owner });
+    const prov = provoke(state, unit.owner, prev);
+    if (prov) events.push(prov);
+    logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
     checkWinner(state);
   }
   const ruin = claimRuin(state, unit);
@@ -905,6 +1010,9 @@ export function canImprove(state, city, type, q, r) {
   if (resourceAt(state, q, r)) return { ok: false, reason: 'Ressource wird genutzt' };
   if (bridgeAt(state, q, r)) return { ok: false, reason: 'Brücke im Weg' };
   if (unitAt(state, q, r)) return { ok: false, reason: 'Einheit im Weg' };
+  if (def.monument && city.owner && !monumentReady(state, city.owner, type)) {
+    return { ok: false, reason: `Erfolg fehlt: ${MONUMENTS[type].goal}` };
+  }
   return { ok: true };
 }
 
@@ -913,6 +1021,13 @@ export function improve(state, city, type, q, r, player) {
   if (!chk.ok) return chk;
   if (city.owner !== player) return { ok: false, reason: 'Fremde Stadt' };
   const def = IMPROVEMENTS[type];
+  if (def.monument) {
+    if (!state.improvements) state.improvements = {};
+    state.improvements[hk(q, r)] = type;
+    state.monumentsBuilt[player].push(type);
+    growCity(state, city, MONUMENT_POP);
+    return { ok: true };
+  }
   if (def.tech && !state.techs[player].includes(def.tech)) return { ok: false, reason: 'Technologie fehlt' };
   if (state.stars[player] < def.cost) return { ok: false, reason: 'Zu wenig Sterne' };
   state.stars[player] -= def.cost;
@@ -1071,7 +1186,7 @@ export function techCost(state, techId, player) {
   const t = TECHS[techId];
   const cities = citiesFor(state, player).length;
   const discount = state.techs[player].includes('philosophy');
-  const cost = researchCost(t.tier, cities, discount);
+  const cost = researchCost(t.tier, cities, discount, state.techs[player].filter(x => x !== 'basic').length);
   return perkOf(state, player) === 'wisdom' ? Math.max(1, cost - 1) : cost;
 }
 
@@ -1647,6 +1762,42 @@ function generateRuins(state, rand) {
   }
 }
 
+// --- Monumente ------------------------------------------------------------------
+
+function monumentAchieved(state, player, type) {
+  const mine = citiesFor(state, player);
+  switch (type) {
+    case 'm_wisdom': return (state.techs[player] || []).filter(t => t !== 'basic').length >= 20;
+    case 'm_valor': return ((state.killsBy && state.killsBy[player]) || 0) >= 10;
+    case 'm_eye': return lighthouseKeys(state).length > 0 && lighthouseCount(state, player) === lighthouseKeys(state).length;
+    case 'm_treasury': return (state.stars[player] || 0) >= 100;
+    case 'm_park': return mine.filter(c => c.pop >= MAX_POP).length >= 3;
+    case 'm_palace': return mine.length >= 8;
+    default: return false;
+  }
+}
+
+// Neu erreichte Erfolge dauerhaft freischalten; gibt die neuen Monumente zurück.
+export function checkMonuments(state, player) {
+  if (!state.monumentsUnlocked) state.monumentsUnlocked = {};
+  if (!state.monumentsBuilt) state.monumentsBuilt = {};
+  const have = state.monumentsUnlocked[player] || (state.monumentsUnlocked[player] = []);
+  if (!state.monumentsBuilt[player]) state.monumentsBuilt[player] = [];
+  const fresh = Object.keys(MONUMENTS).filter(t => !have.includes(t) && monumentAchieved(state, player, t));
+  have.push(...fresh);
+  return fresh;
+}
+
+// Freigeschaltet und noch nicht errichtet.
+export function monumentReady(state, player, type) {
+  return !!(state.monumentsUnlocked && (state.monumentsUnlocked[player] || []).includes(type) &&
+    !((state.monumentsBuilt && state.monumentsBuilt[player]) || []).includes(type));
+}
+
+export function readyMonuments(state, player) {
+  return Object.keys(MONUMENTS).filter(t => monumentReady(state, player, t));
+}
+
 // --- Leuchttürme ---------------------------------------------------------------
 
 function placeLighthouses(state) {
@@ -1706,6 +1857,7 @@ export function score(state, player) {
   s += SCORE.explored * ((state.explored && state.explored[player]) ? state.explored[player].length : 0);
   s += SCORE.ruin * ((state.ruinsBy && state.ruinsBy[player]) || 0);
   s += SCORE.lighthouse * lighthouseCount(state, player);
+  s += SCORE.monument * ((state.monumentsBuilt && state.monumentsBuilt[player]) || []).length;
   return s;
 }
 

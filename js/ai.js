@@ -1,5 +1,5 @@
 import * as R from './rules.js';
-import { UNITS, IMPROVEMENTS, TECHS, BRIDGE } from './config.js';
+import { UNITS, IMPROVEMENTS, TECHS, BRIDGE, ROAD } from './config.js';
 import { hexDistance, hk, forEachHex } from './hex.js';
 
 const UNIT_VALUE = {
@@ -23,7 +23,7 @@ function attackScore(state, attacker, defender) {
 
 // Kriegsziele: Städte aller Stämme ohne Frieden (auch neutrale).
 function targetCities(state, player) {
-  return state.cities.filter(c => R.hostile(state, player, c.owner));
+  return state.cities.filter(c => R.hostile(state, player, c.owner) && !R.graceProtects(state, player, c.owner));
 }
 
 // Frieden brechen, wenn er die KI blockiert (keine anderen Ziele mehr) oder
@@ -83,6 +83,9 @@ function spyMove(state, spy) {
   let best = null;
   for (const [k] of reach) {
     const [q, r] = k.split(',').map(Number);
+    // Spione erobern keine Städte.
+    const city = R.cityAt(state, q, r);
+    if (city && city.owner !== spy.owner) continue;
     const sight = R.unitSight(state, { ...spy, q, r });
     const reveal = unknown.filter(([uq, ur]) => hexDistance(q, r, uq, ur) <= sight).length;
     const near = Math.min(...unknown.map(([uq, ur]) => hexDistance(q, r, uq, ur)));
@@ -112,6 +115,16 @@ function bridgeStep(state, player) {
 }
 
 function bestBuilding(state, player) {
+  // Freigeschaltete Monumente sofort errichten – bevorzugt in kleinen Städten.
+  const monuments = R.readyMonuments(state, player);
+  if (monuments.length) {
+    const cities = R.citiesFor(state, player).slice().sort((a, b) => a.pop - b.pop);
+    for (const city of cities) {
+      for (const [q, r] of R.cityTiles(state, city)) {
+        if (R.canImprove(state, city, monuments[0], q, r).ok) return { kind: 'improve', city, type: monuments[0], q, r, score: 99 };
+      }
+    }
+  }
   const stars = state.stars[player];
   // Ohne Hafen keine Schiffe: mit Segeln den ersten Hafen bevorzugen.
   const needsPort = state.techs[player].includes('sailing') &&
@@ -126,7 +139,7 @@ function bestBuilding(state, player) {
       if (state.units.some(u => u.q === q && u.r === r)) continue;
       for (const type of Object.keys(IMPROVEMENTS)) {
         const def = IMPROVEMENTS[type];
-        if (def.tech && !state.techs[player].includes(def.tech)) continue;
+        if (def.monument || (def.tech && !state.techs[player].includes(def.tech))) continue;
         if (type === 'port' && hasPort) continue;
         if (stars < def.cost + 2) continue;
         if (!R.canImprove(state, city, type, q, r).ok) continue;
@@ -175,7 +188,7 @@ function bestMove(state, unit, player) {
   const reach = R.reachableMap(state, unit);
   if (!reach.size) return null;
   const enemyCities = targetCities(state, player);
-  const enemyUnits = state.units.filter(u => R.hostile(state, player, u.owner));
+  const enemyUnits = state.units.filter(u => R.hostile(state, player, u.owner) && !R.graceProtects(state, player, u.owner));
   let target = null;
   if (enemyCities.length) {
     target = enemyCities.reduce((a, b) =>
@@ -191,6 +204,9 @@ function bestMove(state, unit, player) {
   let best = null;
   for (const [k, cost] of reach) {
     const [q, r] = k.split(',').map(Number);
+    // Schonfrist: keine Stadt eines geschützten Menschen betreten.
+    const city = R.cityAt(state, q, r);
+    if (city && R.graceProtects(state, player, city.owner)) continue;
     const d = hexDistance(q, r, target.q, target.r);
     const canHit = d <= range;
     let score = -d * 10;
@@ -222,6 +238,45 @@ function lighthouseMove(state, unit) {
     if (d < cur && (!best || d < best.d)) best = { q, r, d };
   }
   return best ? { kind: 'move', unit, q: best.q, r: best.r } : null;
+}
+
+// Felder auf der Linie zwischen zwei Hexfeldern (Würfelkoordinaten runden).
+function hexLine(q1, r1, q2, r2) {
+  const n = hexDistance(q1, r1, q2, r2);
+  const out = [];
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const qf = q1 + (q2 - q1) * t + 1e-6, rf = r1 + (r2 - r1) * t + 1e-6, sf = -qf - rf;
+    let q = Math.round(qf), r = Math.round(rf);
+    const s = Math.round(sf);
+    const dq = Math.abs(q - qf), dr = Math.abs(r - rf), ds = Math.abs(s - sf);
+    if (dq > dr && dq > ds) q = -r - s;
+    else if (dr > ds) r = -q - s;
+    out.push([q, r]);
+  }
+  return out;
+}
+
+// Eigene, nahe Städte mit Straßen verbinden – höchstens ein Stück pro Runde,
+// nur im eigenen Gebiet (dort ohne Einheit möglich).
+function roadStep(state, player) {
+  if (!state.techs[player].includes(ROAD.tech) || state.stars[player] < ROAD.cost + 9) return null;
+  if (state.aiRoadRound && state.aiRoadRound[player] === state.round) return null;
+  const cities = R.citiesFor(state, player);
+  const pairs = [];
+  for (let i = 0; i < cities.length; i++) {
+    for (let j = i + 1; j < cities.length; j++) {
+      const d = hexDistance(cities[i].q, cities[i].r, cities[j].q, cities[j].r);
+      if (d <= 6) pairs.push([d, cities[i], cities[j]]);
+    }
+  }
+  pairs.sort((a, b) => a[0] - b[0]);
+  for (const [, a, b] of pairs) {
+    for (const [q, r] of hexLine(a.q, a.r, b.q, b.r)) {
+      if (R.canBuildRoad(state, player, q, r).ok) return { kind: 'road', q, r };
+    }
+  }
+  return null;
 }
 
 // Belohnung für eine aufgestiegene Stadt wählen.
@@ -275,6 +330,7 @@ export function botStep(state, player) {
   for (const u of mine) {
     if (u.acted) continue;
     for (const t of R.attackTargets(state, u)) {
+      if (R.graceProtects(state, player, t.owner)) continue;
       const res = R.battleResults(state, u, t);
       if (res.damage < t.hp && res.retaliation >= u.hp) continue;
       // Leichte KI greift nur an, wenn sie dabei mehr austeilt als einsteckt.
@@ -371,6 +427,9 @@ export function botStep(state, player) {
     }
   }
 
+  const road = roadStep(state, player);
+  if (road) return road;
+
   return null;
 }
 
@@ -387,6 +446,11 @@ export function applyStep(state, step, player) {
     case 'research': return R.research(state, step.tech, player);
     case 'reward': return R.chooseReward(state, step.city, step.choice, player);
     case 'war': return R.declareWar(state, player, step.target);
+    case 'road': {
+      const res = R.buildRoad(state, player, step.q, step.r);
+      if (res.ok) { if (!state.aiRoadRound) state.aiRoadRound = {}; state.aiRoadRound[player] = state.round; }
+      return res;
+    }
     case 'bridge': {
       const res = R.buildBridge(state, step.unit, step.dir, player);
       if (res.ok) { if (!state.aiBridgeRound) state.aiBridgeRound = {}; state.aiBridgeRound[player] = state.round; }
