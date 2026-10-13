@@ -395,7 +395,7 @@ button:focus-visible {
   max-height: calc(100dvh - 40px);
   display: flex;
   flex-direction: column;
-  width: min(680px, 96vw);
+  width: min(1060px, 96vw);
 }
 #tech-list { display: flex; flex-direction: column; gap: 8px; overflow: hidden; flex: 1; }
 #tech-stars { white-space: nowrap; }
@@ -403,9 +403,9 @@ button:focus-visible {
 #tech-tree {
   position: relative;
   width: 100%;
-  height: min(70vh, 640px);
-  height: min(70dvh, 640px);
-  min-height: 320px;
+  height: min(46vh, 420px);
+  height: min(46dvh, 420px);
+  min-height: 240px;
   overflow: hidden;
   background:
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0) 40%, var(--bg) 80%),
@@ -418,49 +418,60 @@ button:focus-visible {
 #tech-viewport { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
 #tech-lines { position: absolute; inset: 0; pointer-events: none; }
 #tech-nodes { position: absolute; inset: 0; }
-.tech-node {
+/* Wabenbaum: Sechseck-Knoten wie die Spielfelder. Der äußere Teil ist der
+   Rahmen (Zweigfarbe), der innere die Fläche. */
+.tech-hex {
   position: absolute;
   transform: translate(-50%, -50%);
-  width: 74px;
-  height: 74px;
-  border-radius: 50%;
-  border: 1px solid var(--border-strong);
-  background: var(--panel);
-  color: var(--text);
+  width: 92px;
+  height: 104px;
+  padding: 3px;
+  border: 0;
+  background: var(--branch);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
   font-family: inherit;
   cursor: pointer;
+  transition: transform 0.15s, background 0.15s, opacity 0.15s;
+}
+.tech-hex .tn-in {
+  width: 100%;
+  height: 100%;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: var(--panel);
+  color: var(--text);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  padding: 0;
-  transition: transform 0.15s, background 0.15s, border-color 0.15s, opacity 0.15s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+  gap: 3px;
+  padding: 0 8px;
 }
-.tech-node .tn-name { font-size: 10px; font-weight: 700; text-align: center; line-height: 1.1; }
-.tech-node .tn-cost { font-size: 11px; color: var(--accent); font-weight: 700; }
-.tech-node:hover:not(:disabled) {
-  transform: translate(-50%, -50%) scale(1.08);
-  border-color: var(--text);
-  background: var(--hover);
+.tech-hex .tn-name { font-size: 11px; font-weight: 700; text-align: center; line-height: 1.15; }
+.tech-hex .tn-cost { font-size: 10px; font-weight: 700; color: var(--accent); }
+.tech-hex:hover { transform: translate(-50%, -50%) scale(1.06); }
+.tech-hex.done .tn-in { background: var(--branch); color: #fff; }
+.tech-hex.done .tn-cost { color: #fff; }
+.tech-hex.poor .tn-cost { color: #b91c1c; }
+.tech-hex.locked { background: #d4d4d8; }
+.tech-hex.locked .tn-in { background: #f4f4f5; color: var(--faint, #a1a1aa); }
+.tech-hex.locked .tn-cost { color: var(--faint, #a1a1aa); }
+.tech-hex.selected { background: #18181b; padding: 5px; transform: translate(-50%, -50%) scale(1.08); }
+
+#tech-detail {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 96px;
 }
-.tech-node.done {
-  border-color: var(--ok);
-  background: #f0fdf4;
-  cursor: default;
-  opacity: 0.85;
-}
-.tech-node.done .tn-cost { color: var(--ok); }
-.tech-node.done:disabled { opacity: 0.85; }
-.tech-node.locked, .tech-node:disabled {
-  opacity: 0.42;
-  cursor: default;
-}
-.tech-node:disabled:not(.done):not(.locked):hover {
-  transform: translate(-50%, -50%);
-  border-color: var(--border-strong);
-}
+#tech-detail .td-head { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+#tech-detail .td-dot { width: 12px; height: 12px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
+#tech-detail .td-tier { margin-left: auto; font-size: 12px; color: var(--muted); }
+#tech-detail .td-desc { font-size: 13px; }
+#tech-detail .td-unlock { font-size: 12px; color: var(--muted); }
+#tech-detail .td-buy { align-self: flex-start; }
 
 .forecast-list { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
 .forecast {
@@ -525,10 +536,9 @@ button:focus-visible {
 
 @media (hover: none) {
   .ability { min-height: 44px; }
-  .tech-node:hover:not(:disabled) { background: var(--panel); border-color: var(--border); }
+  .tech-hex:hover:not(.selected) { transform: translate(-50%, -50%); }
   .btn.chip-btn { min-height: 40px; }
   .action { min-height: 48px; }
-  .tech-node { min-width: 74px; min-height: 74px; }
   #techBtn, #overviewBtn, #menuBtn { min-height: 44px; }
 }
 
@@ -665,3 +675,19 @@ button:focus-visible {
 }
 
 #soundBtn { display: inline-flex; align-items: center; justify-content: center; }
+
+/* Kleine Leiste der gewählten Einheit (Info-Menü erst bei erneutem Antippen) */
+#unit-chip {
+  position: absolute; left: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 12;
+  display: flex; align-items: center; gap: 10px; max-width: min(440px, calc(100vw - 28px));
+  background: var(--panel); border: 1px solid var(--border); padding: 8px 10px 8px 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+#unit-chip.hidden { display: none; }
+#unit-chip .uc-main { display: flex; flex-direction: column; min-width: 0; }
+#unit-chip .uc-sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#unit-chip .dot { flex: none; width: 10px; height: 10px; }
+#unit-chip [data-details] { flex: none; margin-left: auto; }
+@media (max-width: 760px) {
+  #unit-chip { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); max-width: none; }
+}

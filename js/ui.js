@@ -247,6 +247,27 @@ function wirePanel(p) {
   });
 }
 
+// Kleine Leiste für die gewählte Einheit (statt des großen Info-Menüs).
+export function showUnitChip(state, unit, ctx) {
+  const chip = $('unit-chip');
+  const def = UNITS[unit.carry || unit.type];
+  const mine = unit.owner === ctx.actAs;
+  const opts = mine && ctx.myTurn ? unitOptions(state, unit) : [];
+  const status = !mine ? (tribeName(state, unit.owner) || NAMES[unit.owner])
+    : opts.length ? 'kann noch: ' + opts.join(', ') : 'erledigt';
+  chip.innerHTML = `
+    <span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>
+    <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ★' : ''}</b>
+      <span class="uc-sub">Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${unit.mp}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}</span></span>
+    <button class="btn ghost small" data-details>Details</button>`;
+  chip.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
+  chip.classList.remove('hidden');
+}
+
+export function hideUnitChip() {
+  $('unit-chip').classList.add('hidden');
+}
+
 export function showUnitPanel(state, unit, ctx) {
   const def = UNITS[unit.type];
   const cap = hpCap(unit);
@@ -581,14 +602,17 @@ const CHILDREN = (() => {
   }
   return map;
 })();
-const ANGLE = {};
-ROOTS.forEach((id, i) => { ANGLE[id] = (-90 + i * 72) * Math.PI / 180; });
+// Zweigfarben (dezent, passend zu den Teamfarben-Plaketten).
+const BRANCH_COLOR = {
+  organization: '#d97706', climbing: '#64748b', fishing: '#0284c7', hunting: '#16a34a', riding: '#a16207'
+};
+const branchOf = id => { let t = id; while (TECHS[t].req) t = TECHS[t].req; return t; };
 
 const techNav = { scale: 1, tx: 0, ty: 0, bound: false, lastDrag: 0, home: { scale: 1, tx: 0, ty: 0 } };
-// Der Baum wird in einem festen virtuellen Raum ausgelegt (Abstände so
-// gewählt, dass sich die 74-px-Knoten nie überlappen) und dann passend in
-// das sichtbare Feld skaliert – unabhängig von Bildschirmgröße und Ausrichtung.
-const TECH_SPACE = 660;
+// Der Baum ist eine Wabe aus Sechsecken in einem festen virtuellen Raum und
+// wird passend in das sichtbare Feld skaliert (zoom-/verschiebbar).
+const HEX_W = 92, HEX_H = 104, COL_W = 98, ROW_H = HEX_H + 8, TREE_PAD = 24;
+let selectedTech = null;
 let lastTechClick = null;
 let lastTechTarget = null;
 function resetTechNav() {
@@ -623,7 +647,7 @@ function bindTechNav() {
   const pinch = { prevDist: 0, cx: 0, cy: 0 };
   let dragAcc = 0;
   tree.addEventListener('pointerdown', e => {
-    lastTechTarget = e.target.closest('.tech-node') || null;
+    lastTechTarget = e.target.closest('.tech-hex') || null;
     tree.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     dragAcc = 0;
@@ -694,26 +718,83 @@ function bindTechNav() {
   }, true);
 }
 
-function layoutTechs() {
-  const cx = TECH_SPACE / 2, cy = TECH_SPACE / 2;
-  const radius = { 1: 105, 2: 200, 3: 288 };
+// Querformat: Wurzeln oben, je zwei Zweige darunter (Wabe), die dritte
+// Stufe direkt unter ihrem Zweig. Hochformat (Handy): dieselbe Struktur
+// gedreht – Wurzeln links, Stufen nach rechts, Zweige untereinander.
+function layoutTechs(portrait) {
   const pos = {};
-  const polar = (r, a) => ({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
-  const place = id => {
-    const t = TECHS[id];
-    if (t.req) {
-      const sibs = CHILDREN[t.req] || [id];
-      const i = sibs.indexOf(id);
-      const spread = t.tier === 2 ? 0.62 : 0.4;
-      const off = sibs.length > 1 ? (i - (sibs.length - 1) / 2) * spread : 0;
-      ANGLE[id] = ANGLE[t.req] + off;
-    }
-    pos[id] = polar(radius[t.tier], ANGLE[id]);
-  };
-  ROOTS.forEach(place);
-  for (const id in TECHS) if (TECHS[id].tier === 2) place(id);
-  for (const id in TECHS) if (TECHS[id].tier === 3) place(id);
-  return pos;
+  if (!portrait) {
+    const rowY = [TREE_PAD + HEX_H / 2];
+    rowY.push(rowY[0] + HEX_H * 0.75 + 6);
+    rowY.push(rowY[1] + HEX_H + 12);
+    const colX = c => TREE_PAD + (c + 0.5) * COL_W;
+    ROOTS.forEach((root, i) => {
+      pos[root] = { x: TREE_PAD + (2 * i + 1) * COL_W, y: rowY[0] };
+      (CHILDREN[root] || []).forEach((child, j) => {
+        pos[child] = { x: colX(2 * i + j), y: rowY[1] };
+        for (const leaf of CHILDREN[child] || []) pos[leaf] = { x: colX(2 * i + j), y: rowY[2] };
+      });
+    });
+    return { pos, w: TREE_PAD * 2 + ROOTS.length * 2 * COL_W, h: rowY[2] + HEX_H / 2 + TREE_PAD };
+  }
+  const colX = [TREE_PAD + HEX_W / 2];
+  colX.push(colX[0] + COL_W * 0.86);
+  colX.push(colX[1] + COL_W + 6);
+  const rowY = r => TREE_PAD + (r + 0.5) * ROW_H;
+  ROOTS.forEach((root, i) => {
+    pos[root] = { x: colX[0], y: TREE_PAD + (2 * i + 1) * ROW_H };
+    (CHILDREN[root] || []).forEach((child, j) => {
+      pos[child] = { x: colX[1], y: rowY(2 * i + j) };
+      for (const leaf of CHILDREN[child] || []) pos[leaf] = { x: colX[2], y: rowY(2 * i + j) };
+    });
+  });
+  return { pos, w: colX[2] + HEX_W / 2 + TREE_PAD, h: TREE_PAD * 2 + ROOTS.length * 2 * ROW_H };
+}
+
+// Was eine Technologie freischaltet (Einheiten, Gebäude) – für die Details.
+function techUnlocks(id) {
+  const out = [];
+  for (const t of UNIT_ORDER) if (UNITS[t].tech === id) out.push(UNITS[t].name);
+  for (const k of Object.keys(IMPROVEMENTS)) if (IMPROVEMENTS[k].tech === id) out.push(IMPROVEMENTS[k].name);
+  return out;
+}
+
+function techStatus(state, id, actAs) {
+  const t = TECHS[id];
+  const mine = state.techs[actAs];
+  if (mine.includes(id)) return 'done';
+  if (t.req && !mine.includes(t.req)) return 'locked';
+  return state.stars[actAs] >= techCost(state, id, actAs) ? 'ready' : 'poor';
+}
+
+function renderTechDetail(state, ctx) {
+  const box = $('tech-detail');
+  if (!box) return;
+  if (!selectedTech || !TECHS[selectedTech]) {
+    box.innerHTML = '<div class="hint">Tippe auf eine Technologie, um Details zu sehen und sie zu erforschen.</div>';
+    return;
+  }
+  const id = selectedTech, t = TECHS[id];
+  const status = techStatus(state, id, ctx.actAs);
+  const cost = techCost(state, id, ctx.actAs);
+  const unlocks = techUnlocks(id);
+  let reason = '';
+  if (status === 'done') reason = 'Bereits erforscht';
+  else if (status === 'locked') reason = `Benötigt zuerst: ${TECHS[t.req].name}`;
+  else if (status === 'poor') reason = `Zu wenig Sterne (${state.stars[ctx.actAs]} von ${cost})`;
+  else if (!ctx.myTurn) reason = 'Nicht dein Zug';
+  box.innerHTML = `
+    <div class="td-head">
+      <span class="td-dot" style="background:${BRANCH_COLOR[branchOf(id)]}"></span>
+      <b>${t.name}</b>
+      <span class="td-tier">Stufe ${t.tier}</span>
+    </div>
+    <div class="td-desc">${esc(t.desc)}</div>
+    ${unlocks.length ? `<div class="td-unlock">Schaltet frei: ${unlocks.map(esc).join(', ')}</div>` : ''}
+    <button class="btn primary td-buy" ${reason ? 'disabled' : ''}>${status === 'done' ? 'Erforscht' : `Erforschen · ${cost} Sterne`}</button>
+    ${reason && status !== 'done' ? `<div class="hint">${esc(reason)}</div>` : ''}`;
+  const buy = box.querySelector('.td-buy');
+  if (buy && !reason) buy.addEventListener('click', () => handlers.onResearch(id));
 }
 
 export function openTech(state, ctx, keepView = false) {
@@ -726,56 +807,55 @@ export function openTech(state, ctx, keepView = false) {
   const nodes = $('tech-nodes');
   nodes.innerHTML = '';
   const W = tree.clientWidth || 560;
-  const H = tree.clientHeight || 420;
-  const pos = layoutTechs();
-  const fit = Math.min(1.15, W / TECH_SPACE, H / TECH_SPACE);
-  techNav.home = { scale: fit, tx: (W - TECH_SPACE * fit) / 2, ty: (H - TECH_SPACE * fit) / 2 };
-  // Beim erneuten Öffnen (z. B. nach dem Erforschen) Ansicht behalten,
-  // beim ersten Öffnen auf die Gesamtansicht setzen.
-  if (!keepView) resetTechNav();
-  const VW = TECH_SPACE, VH = TECH_SPACE;
+  const H = tree.clientHeight || 360;
+  const portrait = W < 560;
+  const { pos, w: TREE_W, h: TREE_H } = layoutTechs(portrait);
+  // Hochformat: auf Breite skalieren, oben beginnen, nach unten verschieben.
+  const fit = portrait ? Math.min(1.1, W / TREE_W) : Math.min(1.2, W / TREE_W, H / TREE_H);
+  techNav.home = { scale: fit, tx: (W - TREE_W * fit) / 2, ty: portrait ? 0 : (H - TREE_H * fit) / 2 };
+  // Beim erneuten Öffnen (z. B. nach dem Erforschen) Ansicht und Auswahl
+  // behalten, beim ersten Öffnen auf die Gesamtansicht setzen.
+  if (!keepView) { resetTechNav(); selectedTech = null; }
   const vp = $('tech-viewport');
   vp.style.right = 'auto';
   vp.style.bottom = 'auto';
-  vp.style.width = VW + 'px';
-  vp.style.height = VH + 'px';
+  vp.style.width = TREE_W + 'px';
+  vp.style.height = TREE_H + 'px';
 
+  const mine = state.techs[ctx.actAs];
   let lines = '';
   for (const id in TECHS) {
     const t = TECHS[id];
     if (!t.req) continue;
     const a = pos[t.req], b = pos[id];
-    const done = state.techs[ctx.actAs].includes(id);
-    lines += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${done ? '#16a34a' : '#d4d4d8'}" stroke-width="2" />`;
+    const color = mine.includes(id) ? BRANCH_COLOR[branchOf(id)] : '#d4d4d8';
+    lines += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${color}" stroke-width="4" stroke-linecap="round" />`;
   }
-  svg.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
-  svg.setAttribute('width', VW);
-  svg.setAttribute('height', VH);
+  svg.setAttribute('viewBox', `0 0 ${TREE_W} ${TREE_H}`);
+  svg.setAttribute('width', TREE_W);
+  svg.setAttribute('height', TREE_H);
   svg.innerHTML = lines;
 
-  lastTechIds = new Set(state.techs[ctx.actAs]);
+  lastTechIds = new Set(mine);
   for (const id in TECHS) {
     const t = TECHS[id];
     const p = pos[id];
-    const done = lastTechIds.has(id);
-    const locked = t.req && !state.techs[ctx.actAs].includes(t.req);
-    const cost = techCost(state, id, ctx.actAs);
+    const status = techStatus(state, id, ctx.actAs);
     const btn = document.createElement('button');
-    btn.className = 'tech-node' + (done ? ' done' : locked ? ' locked' : '');
+    btn.className = `tech-hex ${status}${id === selectedTech ? ' selected' : ''}`;
     btn.style.left = p.x + 'px';
     btn.style.top = p.y + 'px';
+    btn.style.setProperty('--branch', BRANCH_COLOR[branchOf(id)]);
     btn.dataset.tech = id;
-    btn.innerHTML = `<span class="tn-name">${t.name}</span><span class="tn-cost">${done ? '✓' : cost}</span>`;
+    btn.innerHTML = `<span class="tn-in"><span class="tn-name">${t.name}</span><span class="tn-cost">${status === 'done' ? '✓' : techCost(state, id, ctx.actAs) + ' Sterne'}</span></span>`;
     nodes.appendChild(btn);
   }
+  renderTechDetail(state, ctx);
+  // Antippen wählt nur aus – erforscht wird über den Knopf in den Details.
   lastTechClick = node => {
-    const id = node.dataset.tech;
-    const t = TECHS[id];
-    if (!ctx.myTurn) { toast('Nicht dein Zug'); return; }
-    if (doneFor(id)) { toast(`${t.name} bereits erforscht`); return; }
-    if (t.req && !state.techs[ctx.actAs].includes(t.req)) { toast(`Benötigt zuerst: ${TECHS[t.req].name}`); return; }
-    if (state.stars[ctx.actAs] < techCost(state, id, ctx.actAs)) { toast('Zu wenig Sterne für ' + t.name); return; }
-    handlers.onResearch(id);
+    selectedTech = node.dataset.tech;
+    nodes.querySelectorAll('.tech-hex').forEach(b => b.classList.toggle('selected', b.dataset.tech === selectedTech));
+    renderTechDetail(state, ctx);
   };
 }
 
