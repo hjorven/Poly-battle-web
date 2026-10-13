@@ -88,59 +88,59 @@ export function hasAbility(type, name) {
 // Echte Einheiten. hp/atk/def/move/range/cost in Anzeigeeinheiten.
 export const UNITS = {
   warrior: {
-    name: 'Krieger', icon: '⚔️', hp: 10, atk: 2, def: 2, move: 1, range: 1, cost: 2, sight: 1,
+    name: 'Krieger', hp: 10, atk: 2, def: 2, move: 1, range: 1, cost: 2, sight: 1,
     tech: null, abilities: ['dash', 'fortify', 'land']
   },
   archer: {
-    name: 'Bogenschütze', icon: '🏹', hp: 10, atk: 2, def: 1, move: 1, range: 2, cost: 3, sight: 2,
+    name: 'Bogenschütze', hp: 10, atk: 2, def: 1, move: 1, range: 2, cost: 3, sight: 2,
     tech: 'archery', abilities: ['dash', 'fortify', 'land']
   },
   rider: {
-    name: 'Reiter', icon: '🐎', hp: 10, atk: 2, def: 1, move: 2, range: 1, cost: 3, sight: 1,
+    name: 'Reiter', hp: 10, atk: 2, def: 1, move: 2, range: 1, cost: 3, sight: 1,
     tech: 'riding', abilities: ['dash', 'escape', 'fortify', 'land']
   },
   defender: {
-    name: 'Verteidiger', icon: '🛡️', hp: 15, atk: 1, def: 3, move: 1, range: 1, cost: 3, sight: 1,
+    name: 'Verteidiger', hp: 15, atk: 1, def: 3, move: 1, range: 1, cost: 3, sight: 1,
     tech: 'shields', abilities: ['fortify', 'land']
   },
   swordsman: {
-    name: 'Schwertkämpfer', icon: '🗡️', hp: 15, atk: 3, def: 3, move: 1, range: 1, cost: 5, sight: 1,
+    name: 'Schwertkämpfer', hp: 15, atk: 3, def: 3, move: 1, range: 1, cost: 5, sight: 1,
     tech: 'smithery', abilities: ['dash', 'land']
   },
   catapult: {
-    name: 'Katapult', icon: '💣', hp: 10, atk: 4, def: 0, move: 1, range: 3, cost: 8, sight: 2,
+    name: 'Katapult', hp: 10, atk: 4, def: 0, move: 1, range: 3, cost: 8, sight: 2,
     tech: 'mathematics', abilities: ['stiff', 'land']
   },
   mindbender: {
-    name: 'Gedankenbeuger', icon: '🔮', hp: 10, atk: 0, def: 1, move: 1, range: 1, cost: 5, sight: 1,
+    name: 'Gedankenbeuger', hp: 10, atk: 0, def: 1, move: 1, range: 1, cost: 5, sight: 1,
     tech: 'philosophy', abilities: ['heal', 'convert', 'stiff', 'land']
   },
   knight: {
-    name: 'Ritter', icon: '⚜️', hp: 10, atk: 3.5, def: 1, move: 3, range: 1, cost: 8, sight: 1,
+    name: 'Ritter', hp: 10, atk: 3.5, def: 1, move: 3, range: 1, cost: 8, sight: 1,
     tech: 'chivalry', abilities: ['dash', 'persist', 'fortify', 'land']
   },
   giant: {
-    name: 'Riese', icon: '🗿', hp: 40, atk: 5, def: 4, move: 1, range: 1, cost: 10, sight: 1,
+    name: 'Riese', hp: 40, atk: 5, def: 4, move: 1, range: 1, cost: 10, sight: 1,
     tech: null, abilities: ['static', 'land'], reward: true
   },
   boat: {
-    name: 'Boot', icon: '🛶', hp: 10, atk: 2, def: 0, move: 2, range: 1, cost: 3, sight: 2,
+    name: 'Boot', hp: 10, atk: 2, def: 0, move: 2, range: 1, cost: 3, sight: 2,
     tech: 'sailing', abilities: ['dash', 'fortify', 'water']
   },
   ship: {
-    name: 'Schiff', icon: '⛵', hp: 14, atk: 3, def: 1, move: 2, range: 1, cost: 5, sight: 2,
+    name: 'Schiff', hp: 14, atk: 3, def: 1, move: 2, range: 1, cost: 5, sight: 2,
     tech: 'sailing', abilities: ['dash', 'fortify', 'water']
   },
   battleship: {
-    name: 'Kriegsschiff', icon: '🚤', hp: 18, atk: 4, def: 2, move: 3, range: 1, cost: 8, sight: 2,
+    name: 'Kriegsschiff', hp: 18, atk: 4, def: 2, move: 3, range: 1, cost: 8, sight: 2,
     tech: 'navigation', abilities: ['dash', 'fortify', 'water']
   },
   spy: {
-    name: 'Spion', icon: '🕵️', hp: 6, atk: 0, def: 1, move: 2, range: 1, cost: 4, sight: 2,
+    name: 'Spion', hp: 6, atk: 0, def: 1, move: 2, range: 1, cost: 4, sight: 2,
     tech: null, abilities: ['scout', 'land']
   },
   settler: {
-    name: 'Siedler', icon: '🧑‍🌾', hp: 10, atk: 0, def: 0, move: 1, range: 1, cost: 5, sight: 1,
+    name: 'Siedler', hp: 10, atk: 0, def: 0, move: 1, range: 1, cost: 5, sight: 1,
     tech: null, abilities: ['static', 'land', 'settle'], capital: true
   }
 };
@@ -153,33 +153,33 @@ export const UNIT_ORDER = [
 
 // Echter Technologiebaum (Basis-Äste; `req` = Voraussetzung, `tier` = Stufe/Kosten).
 export const TECHS = {
-  organization: { name: 'Organisation', icon: '🏛️', tier: 1, req: null, desc: 'Zweig: Landwirtschaft, Schildmacher' },
-  climbing: { name: 'Klettern', icon: '⛰️', tier: 1, req: null, desc: 'Einheiten können Berge betreten' },
-  fishing: { name: 'Fischerei', icon: '🎣', tier: 1, req: null, desc: 'Zweig: Segeln, Rammen' },
-  hunting: { name: 'Jagd', icon: '🦌', tier: 1, req: null, desc: 'Zweig: Bogenschießen, Forstwirtschaft' },
-  riding: { name: 'Reiten', icon: '🐎', tier: 1, req: null, desc: 'Zweig: Wege, Freier Geist' },
+  organization: { name: 'Organisation', tier: 1, req: null, desc: 'Zweig: Landwirtschaft, Schildmacher' },
+  climbing: { name: 'Klettern', tier: 1, req: null, desc: 'Einheiten können Berge betreten' },
+  fishing: { name: 'Fischerei', tier: 1, req: null, desc: 'Zweig: Segeln, Rammen' },
+  hunting: { name: 'Jagd', tier: 1, req: null, desc: 'Zweig: Bogenschießen, Forstwirtschaft' },
+  riding: { name: 'Reiten', tier: 1, req: null, desc: 'Zweig: Wege, Freier Geist' },
 
-  farming: { name: 'Landwirtschaft', icon: '🌾', tier: 2, req: 'organization', desc: 'Farmen bauen (+1 Einkommen)' },
-  shields: { name: 'Schildmacher', icon: '🛡️', tier: 2, req: 'organization', desc: 'Verteidiger ausbilden' },
-  mining: { name: 'Bergbau', icon: '⛏️', tier: 2, req: 'climbing', desc: 'Minerven bauen (+1 Einkommen)' },
-  meditation: { name: 'Meditation', icon: '🧘', tier: 2, req: 'climbing', desc: 'Tempel bauen' },
-  sailing: { name: 'Segeln', icon: '⛵', tier: 2, req: 'fishing', desc: 'Boote & Schiffe; Häfen; +1 Sicht' },
-  ramming: { name: 'Rammen', icon: '🛳️', tier: 2, req: 'fishing', desc: 'Zweig: Aquatismus' },
-  archery: { name: 'Bogenschießen', icon: '🎯', tier: 2, req: 'hunting', desc: 'Bogenschützen; Wald-Verteidigung' },
-  forestry: { name: 'Forstwirtschaft', icon: '🌲', tier: 2, req: 'hunting', desc: 'Sägewerke bauen (+1 Einkommen)' },
-  roads: { name: 'Wege', icon: '🛣️', tier: 2, req: 'riding', desc: '+1 Bewegung für alle Einheiten; Brücken bauen' },
-  freespirit: { name: 'Freier Geist', icon: '🕊️', tier: 2, req: 'riding', desc: 'Zweig: Ritterlichkeit' },
+  farming: { name: 'Landwirtschaft', tier: 2, req: 'organization', desc: 'Farmen bauen (+1 Einkommen)' },
+  shields: { name: 'Schildmacher', tier: 2, req: 'organization', desc: 'Verteidiger ausbilden' },
+  mining: { name: 'Bergbau', tier: 2, req: 'climbing', desc: 'Minerven bauen (+1 Einkommen)' },
+  meditation: { name: 'Meditation', tier: 2, req: 'climbing', desc: 'Tempel bauen' },
+  sailing: { name: 'Segeln', tier: 2, req: 'fishing', desc: 'Boote & Schiffe; Häfen; +1 Sicht' },
+  ramming: { name: 'Rammen', tier: 2, req: 'fishing', desc: 'Zweig: Aquatismus' },
+  archery: { name: 'Bogenschießen', tier: 2, req: 'hunting', desc: 'Bogenschützen; Wald-Verteidigung' },
+  forestry: { name: 'Forstwirtschaft', tier: 2, req: 'hunting', desc: 'Sägewerke bauen (+1 Einkommen)' },
+  roads: { name: 'Wege', tier: 2, req: 'riding', desc: '+1 Bewegung für alle Einheiten; Brücken bauen' },
+  freespirit: { name: 'Freier Geist', tier: 2, req: 'riding', desc: 'Zweig: Ritterlichkeit' },
 
-  construction: { name: 'Baukunst', icon: '🏗️', tier: 3, req: 'farming', desc: '+1 Stern pro Stadt' },
-  diplomacy: { name: 'Diplomatie', icon: '🤝', tier: 3, req: 'shields', desc: 'Botschaften und Bündnisse' },
-  smithery: { name: 'Schmiedekunst', icon: '⚒️', tier: 3, req: 'mining', desc: 'Schwertkämpfer ausbilden' },
-  philosophy: { name: 'Philosophie', icon: '📜', tier: 3, req: 'meditation', desc: 'Gedankenbeuger; Forschung -20 %' },
-  navigation: { name: 'Navigation', icon: '🧭', tier: 3, req: 'sailing', desc: 'Kriegsschiffe ausbilden' },
-  aquatism: { name: 'Aquatismus', icon: '🌊', tier: 3, req: 'ramming', desc: 'Verteidigungsbonus auf Wasser' },
-  spiritualism: { name: 'Spiritualismus', icon: '✨', tier: 3, req: 'archery', desc: '+1 Heilung pro Runde' },
-  mathematics: { name: 'Mathematik', icon: '➗', tier: 3, req: 'forestry', desc: 'Katapult ausbilden' },
-  trade: { name: 'Handel', icon: '💰', tier: 3, req: 'roads', desc: '+1 Stern pro Stadt' },
-  chivalry: { name: 'Ritterlichkeit', icon: '⚔️', tier: 3, req: 'freespirit', desc: 'Ritter ausbilden' }
+  construction: { name: 'Baukunst', tier: 3, req: 'farming', desc: '+1 Stern pro Stadt' },
+  diplomacy: { name: 'Diplomatie', tier: 3, req: 'shields', desc: 'Botschaften und Bündnisse' },
+  smithery: { name: 'Schmiedekunst', tier: 3, req: 'mining', desc: 'Schwertkämpfer ausbilden' },
+  philosophy: { name: 'Philosophie', tier: 3, req: 'meditation', desc: 'Gedankenbeuger; Forschung -20 %' },
+  navigation: { name: 'Navigation', tier: 3, req: 'sailing', desc: 'Kriegsschiffe ausbilden' },
+  aquatism: { name: 'Aquatismus', tier: 3, req: 'ramming', desc: 'Verteidigungsbonus auf Wasser' },
+  spiritualism: { name: 'Spiritualismus', tier: 3, req: 'archery', desc: '+1 Heilung pro Runde' },
+  mathematics: { name: 'Mathematik', tier: 3, req: 'forestry', desc: 'Katapult ausbilden' },
+  trade: { name: 'Handel', tier: 3, req: 'roads', desc: '+1 Stern pro Stadt' },
+  chivalry: { name: 'Ritterlichkeit', tier: 3, req: 'freespirit', desc: 'Ritter ausbilden' }
 };
 
 export const TECH_TIERS = [
@@ -219,20 +219,20 @@ export function researchCost(tier, cityCount, hasPhilosophy = false) {
 
 // Ressourcen auf Feldern. „bonus“ = +1 Einkommen der angrenzenden Stadt.
 export const RESOURCES = {
-  fruit: { name: 'Obst', icon: '🍎', terrain: ['field'], color: 0xe0526e },
-  animals: { name: 'Wildtiere', icon: '🦌', terrain: ['forest'], color: 0x9c5a2b },
-  fish: { name: 'Fische', icon: '🐟', terrain: ['water'], color: 0x4aa3df },
-  minerals: { name: 'Mineralien', icon: '⛏️', terrain: ['mountain'], color: 0x8a8f98 }
+  fruit: { name: 'Obst', terrain: ['field'], color: 0xe0526e },
+  animals: { name: 'Wildtiere', terrain: ['forest'], color: 0x9c5a2b },
+  fish: { name: 'Fische', terrain: ['water'], color: 0x4aa3df },
+  minerals: { name: 'Mineralien', terrain: ['mountain'], color: 0x8a8f98 }
 };
 
 // Gebäude (Improvements) in einem Stadtfeld. `terrain` = zulässige Felder,
 // `tech` = Freischaltung, `pop` = +Einkommen für die Stadt.
 export const IMPROVEMENTS = {
-  farm: { name: 'Farm', icon: '🌾', tech: 'farming', terrain: ['field'], cost: 6, pop: 1 },
-  sawmill: { name: 'Sägewerk', icon: '🪵', tech: 'forestry', terrain: ['forest'], cost: 7, pop: 1 },
-  mine: { name: 'Mine', icon: '⛏️', tech: 'mining', terrain: ['mountain'], cost: 8, pop: 1 },
-  port: { name: 'Hafen', icon: '⚓', tech: 'sailing', terrain: ['water', 'ocean', 'ice'], cost: 7, pop: 1 },
-  temple: { name: 'Tempel', icon: '🛕', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 }
+  farm: { name: 'Farm', tech: 'farming', terrain: ['field'], cost: 6, pop: 1 },
+  sawmill: { name: 'Sägewerk', tech: 'forestry', terrain: ['forest'], cost: 7, pop: 1 },
+  mine: { name: 'Mine', tech: 'mining', terrain: ['mountain'], cost: 8, pop: 1 },
+  port: { name: 'Hafen', tech: 'sailing', terrain: ['water', 'ocean', 'ice'], cost: 7, pop: 1 },
+  temple: { name: 'Tempel', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 }
 };
 
 // --- Brücken ----------------------------------------------------------------

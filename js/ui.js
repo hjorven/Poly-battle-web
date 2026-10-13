@@ -35,7 +35,6 @@ export function initUI(h) {
   });
   $('endTurnBtn').addEventListener('click', () => handlers.onEndTurn());
   $('idleBtn').addEventListener('click', () => handlers.onNextIdle());
-  $('undoBtn').addEventListener('click', () => handlers.onUndo());
   $('soundBtn').addEventListener('click', () => handlers.onToggleSound());
   document.querySelectorAll('[data-cam]').forEach(btn => btn.addEventListener('click', () => handlers.onCamera(btn.dataset.cam)));
   // Tastatur: Q/E drehen, R/F neigen, N Standardansicht (nicht beim Tippen in Feldern).
@@ -188,12 +187,15 @@ export function updateStrip(state, ctx) {
   $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' / ' + state.turnLimit : '');
 }
 
-export function setUndo(available) {
-  $('undoBtn').classList.toggle('hidden', !available);
-}
-
+// Lautsprecher als kleine Vektorgrafik (keine Emojis); durchgestrichen = stumm.
+const SPEAKER = '<path d="M3 9v6h4l5 4V5L7 9H3z" fill="currentColor"/>';
+const WAVES = '<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+const CROSS = '<path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
 export function setSoundIcon(muted) {
-  $('soundBtn').textContent = muted ? '🔇' : '🔊';
+  const btn = $('soundBtn');
+  btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${SPEAKER}${muted ? CROSS : WAVES}</svg>`;
+  btn.title = muted ? 'Ton ist aus – einschalten' : 'Ton ist an – ausschalten';
+  btn.setAttribute('aria-label', btn.title);
 }
 
 export function setEndTurn(enabled) {
@@ -272,7 +274,7 @@ export function showUnitPanel(state, unit, ctx) {
           const t = UNITS[p.target.type];
           const lethal = p.damage >= p.target.hp;
           const back = p.retaliation > 0 ? `· Vergeltung −${p.retaliation}` : '· keine Vergeltung';
-          return `<div class="forecast"><span>${t.icon} ${t.name} <span class="fc-hp">${p.target.hp} LP</span></span><b class="${lethal ? 'lethal' : ''}">${lethal ? 'Besiegt' : '−' + p.damage} ${back}</b></div>`;
+          return `<div class="forecast"><span>${t.name} <span class="fc-hp">${p.target.hp} LP</span></span><b class="${lethal ? 'lethal' : ''}">${lethal ? 'Besiegt' : '−' + p.damage} ${back}</b></div>`;
         }).join('')}</div>`;
     }
   }
@@ -294,7 +296,7 @@ export function showUnitPanel(state, unit, ctx) {
       for (const o of bridges) {
         const chk = canBuildBridge(state, unit, o.dir, ctx.actAs);
         extra += `<button class="btn action" data-bridge="${o.dir}" ${chk.ok ? '' : 'disabled'}>
-          <span>🌉 Nach ${DIR_NAMES[o.dir]} (${o.tiles.length} ${o.tiles.length === 1 ? 'Feld' : 'Felder'})<span class="sub">${chk.ok ? 'Blau markiert · verbraucht den Zug der Einheit' : chk.reason}</span></span>
+          <span>Brücke nach ${DIR_NAMES[o.dir]} (${o.tiles.length} ${o.tiles.length === 1 ? 'Feld' : 'Felder'})<span class="sub">${chk.ok ? 'Blau markiert · verbraucht den Zug der Einheit' : chk.reason}</span></span>
           <span class="cost">${o.cost} Sterne</span></button>`;
       }
       extra += `</div>`;
@@ -302,10 +304,10 @@ export function showUnitPanel(state, unit, ctx) {
     const breakable = destroyableBridges(state, unit);
     if (breakable.length) {
       extra += `<div class="action-list">${breakable.map(([q, r]) =>
-        `<button class="btn action" data-unbridge="${q},${r}"><span>💥 Brücke einreißen<span class="sub">${q === unit.q && r === unit.r ? 'Unter dem Schiff' : 'Auf dem Nachbarfeld'} · verbraucht den Zug</span></span></button>`).join('')}</div>`;
+        `<button class="btn action" data-unbridge="${q},${r}"><span>Brücke einreißen<span class="sub">${q === unit.q && r === unit.r ? 'Unter dem Schiff' : 'Auf dem Nachbarfeld'} · verbraucht den Zug</span></span></button>`).join('')}</div>`;
     }
     extra += `<div class="action-list"><button class="btn action ghost" data-disband>
-      <span>🗑️ Einheit auflösen<span class="sub">Entfernt die Einheit dauerhaft</span></span>
+      <span>Einheit auflösen<span class="sub">Entfernt die Einheit dauerhaft</span></span>
       <span class="cost">+${disbandRefund(unit)} Sterne</span></button></div>`;
   }
 
@@ -313,14 +315,14 @@ export function showUnitPanel(state, unit, ctx) {
   if (mine && ctx.myTurn && unit.type === 'settler') {
     const f = canFound(state, unit, ctx.actAs);
     found = `<div class="action-list"><button class="btn action" data-found ${f.ok ? '' : 'disabled'}>
-      <span>🏙️ Stadt gründen<span class="sub">${f.ok ? 'Gründet auf diesem Feld eine neue Stadt' : f.reason}</span></span>
+      <span>Stadt gründen<span class="sub">${f.ok ? 'Gründet auf diesem Feld eine neue Stadt' : f.reason}</span></span>
     </button></div>`;
   }
 
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">${def.icon} ${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ' <span class="vet-badge">★ Veteran</span>' : ''}</div>
+        <div class="panel-title">${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ' <span class="vet-badge">★ Veteran</span>' : ''}</div>
         <div class="panel-sub" style="color:${hex(playerColor(state, unit.owner))}">${owner}${mine ? ' (deine Einheit)' : ''}</div>
       </div>
       <div class="panel-head-right">
@@ -763,7 +765,7 @@ export function openTech(state, ctx, keepView = false) {
     btn.style.left = p.x + 'px';
     btn.style.top = p.y + 'px';
     btn.dataset.tech = id;
-    btn.innerHTML = `<span class="tn-icon">${t.icon || '•'}</span><span class="tn-name">${t.name}</span><span class="tn-cost">${done ? '✓' : cost}</span>`;
+    btn.innerHTML = `<span class="tn-name">${t.name}</span><span class="tn-cost">${done ? '✓' : cost}</span>`;
     nodes.appendChild(btn);
   }
   lastTechClick = node => {
@@ -952,7 +954,7 @@ export function showOverview(state, ctx) {
       const cap = hpCap(u);
       const row = document.createElement('button');
       row.className = 'btn action overview-row' + (st === 'aktiv' ? '' : ' dimmed');
-      row.innerHTML = `<span>${def.icon} ${def.name}<span class="sub">${st === 'aktiv' ? 'bereit' : st} · Leben ${u.hp}/${cap}</span></span>`;
+      row.innerHTML = `<span>${def.name}<span class="sub">${st === 'aktiv' ? 'bereit' : st} · Leben ${u.hp}/${cap}</span></span>`;
       row.addEventListener('click', () => handlers.onFocusUnit(u.id));
       menu.appendChild(row);
     }
