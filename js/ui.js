@@ -41,8 +41,20 @@ export function initUI(h) {
   document.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
     const map = { q: 'rotL', e: 'rotR', r: 'tiltUp', f: 'tiltDown', n: 'reset' };
+    // Offene Dialoge (Menü, Bestätigung, Belohnung …): nur Escape gilt dort.
+    const dialog = [...document.querySelectorAll('.overlay')].some(o => !o.classList.contains('hidden'));
+    if (dialog) return;
     const cmd = map[e.key.toLowerCase()];
-    if (cmd) handlers.onCamera(cmd);
+    if (cmd) { handlers.onCamera(cmd); return; }
+    const keys = {
+      ' ': 'next', Enter: 'end', t: 'tech', o: 'overview', i: 'details', h: 'home', m: 'sound',
+      Escape: 'deselect', ArrowLeft: 'panL', ArrowRight: 'panR', ArrowUp: 'panU', ArrowDown: 'panD',
+      '+': 'zoomIn', '=': 'zoomIn', '-': 'zoomOut'
+    };
+    const action = keys[e.key] || keys[e.key.toLowerCase()];
+    if (!action || e.target.closest && e.target.closest('button, select') && (action === 'next' || action === 'end')) return;
+    e.preventDefault();
+    handlers.onHotkey(action);
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());

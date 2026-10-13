@@ -1699,6 +1699,31 @@ function orbit(dTheta, dPhi, dur = 260) {
   });
 }
 
+// Kamera in Blickrichtung verschieben (Pfeiltasten): dx nach rechts, dz nach vorn.
+export function panCamera(dx, dz) {
+  if (!initialized) return;
+  const fwd = controls.target.clone().sub(camera.position).setY(0).normalize();
+  const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+  const step = right.multiplyScalar(dx * 3).add(fwd.multiplyScalar(dz * 3));
+  const fromT = controls.target.clone(), fromP = camera.position.clone();
+  addTween({
+    dur: 180, ease: easeOut,
+    update: k => {
+      controls.target.copy(fromT).addScaledVector(step, k);
+      camera.position.copy(fromP).addScaledVector(step, k);
+    }
+  });
+}
+
+// Näher heran (factor < 1) oder weiter weg (factor > 1), in den Zoomgrenzen.
+export function zoomCamera(factor) {
+  if (!initialized) return;
+  const off = camera.position.clone().sub(controls.target);
+  const len = THREE.MathUtils.clamp(off.length() * factor, controls.minDistance || 4, controls.maxDistance || 80);
+  const from = camera.position.clone(), to = controls.target.clone().add(off.setLength(len));
+  addTween({ dur: 180, ease: easeOut, update: k => camera.position.lerpVectors(from, to, k) });
+}
+
 export function rotateCamera(steps) { if (initialized) orbit(steps * Math.PI / 4, 0); }
 export function tiltCamera(steps) { if (initialized) orbit(0, steps * 0.18); }
 
