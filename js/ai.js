@@ -119,12 +119,15 @@ function bestBuilding(state, player) {
   let best = null;
   for (const city of R.citiesFor(state, player)) {
     if (!needsPort && city.pop < 2 && state.cities.filter(c => c.owner === player).length < 3) continue;
+    // Ein Hafen pro Stadt reicht – mehr bringt der KI nur leere Wasserfelder.
+    const hasPort = R.cityPorts(state, city).length > 0;
     for (const [q, r] of R.cityTiles(state, city)) {
       if (R.improvementAt(state, q, r) || R.resourceAt(state, q, r)) continue;
       if (state.units.some(u => u.q === q && u.r === r)) continue;
       for (const type of Object.keys(IMPROVEMENTS)) {
         const def = IMPROVEMENTS[type];
         if (def.tech && !state.techs[player].includes(def.tech)) continue;
+        if (type === 'port' && hasPort) continue;
         if (stars < def.cost + 2) continue;
         if (!R.canImprove(state, city, type, q, r).ok) continue;
         const score = def.pop / def.cost + (type === 'port' && needsPort ? 1 : 0);
