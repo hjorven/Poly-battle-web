@@ -128,11 +128,11 @@ export const UNITS = {
     tech: 'sailing', abilities: ['dash', 'fortify', 'water']
   },
   ship: {
-    name: 'Schiff', hp: 14, atk: 3, def: 1, move: 2, range: 1, cost: 5, sight: 2,
+    name: 'Schiff', hp: 14, atk: 3, def: 1, move: 2, range: 2, cost: 5, sight: 2,
     tech: 'sailing', abilities: ['dash', 'fortify', 'water']
   },
   battleship: {
-    name: 'Kriegsschiff', hp: 18, atk: 4, def: 2, move: 3, range: 1, cost: 8, sight: 2,
+    name: 'Kriegsschiff', hp: 18, atk: 4, def: 2, move: 3, range: 2, cost: 8, sight: 2,
     tech: 'navigation', abilities: ['dash', 'fortify', 'water']
   },
   spy: {
