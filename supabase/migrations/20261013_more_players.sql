@@ -182,3 +182,9 @@ revoke all on function public.save_match(uuid, text, jsonb) from public;
 grant execute on function public.create_match(jsonb, text) to anon, authenticated;
 grant execute on function public.join_match(uuid, text) to anon, authenticated;
 grant execute on function public.save_match(uuid, text, jsonb) to anon, authenticated;
+
+-- Supabase vergibt für neue Funktionen Rechte an anon/authenticated: interne
+-- Hilfsfunktionen nur über die security-definer-Funktionen nutzbar machen.
+revoke execute on function public.pb_human_roles(jsonb) from anon, authenticated;
+revoke execute on function public.pb_role_of(public.matches, text) from anon, authenticated;
+revoke execute on function public.pb_public_match(public.matches) from public, anon, authenticated;
