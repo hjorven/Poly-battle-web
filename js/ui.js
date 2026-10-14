@@ -8,7 +8,7 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, loadOptions, unloadOptions, upgradeOption, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS } from './hex.js';
 
@@ -491,7 +491,7 @@ export function showUnitPanel(state, unit, ctx) {
     <div class="stat-row">
       <div class="stat">Leben<b>${unit.hp}/${cap}</b></div>
       <div class="stat">Angriff<b>${attackOf(state, unit)}</b></div>
-      <div class="stat">Verteidigung<b>${def.def}</b></div>
+      <div class="stat">Verteidigung<b>${defenseOf(state, unit)}</b></div>
       <div class="stat">Bewegung<b>${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}</b></div>
       <div class="stat">Reichweite<b>${def.range}</b></div>
     </div>
@@ -725,10 +725,10 @@ function buildRows(state, city, ctx) {
       const chk = canImprove(state, city, t, q, r);
       if (!chk.ok) reason = chk.reason;
       else if (d.tech && !state.techs[city.owner].includes(d.tech)) reason = 'Technologie fehlt';
-      else if (state.stars[city.owner] < d.cost) reason = 'Zu wenig Sterne';
+      else if (state.stars[city.owner] < improvementCost(state, city.owner, t)) reason = 'Zu wenig Sterne';
       if (!ctx.myTurn && !reason) reason = 'Nicht dein Zug';
       const locked = !ctx.myTurn;
-      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.name} <span class="cost">${d.monument ? 'frei' : d.cost}</span></button>`;
+      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.name} <span class="cost">${d.monument ? 'frei' : improvementCost(state, city.owner, t)}</span></button>`;
     }).join('') + (road ? (() => {
       const chk = canBuildRoad(state, city.owner, q, r);
       const reason = !ctx.myTurn ? 'Nicht dein Zug' : chk.ok ? '' : chk.reason;

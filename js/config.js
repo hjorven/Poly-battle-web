@@ -33,7 +33,7 @@ export const VISION = { unit: 1, city: 2 };
 
 // Kampfformel-Konstante (siehe BattleHelpers / Wiki).
 export const ACCELERATOR = 4.5;
-export const DEF_BONUS = { none: 1, standard: 1.5, wall: 4 };
+export const DEF_BONUS = { none: 1, standard: 1.5, fort: 3, wall: 4 };
 
 export const NAMES = {
   player_1: 'Spieler 1',
@@ -82,7 +82,8 @@ export const ABILITY_INFO = {
   air: { name: 'Fliegen', desc: 'Fliegt über Wasser, Berge und Wald (je 1 Bewegung) und ignoriert Kontrollzonen. Nahkämpfer erreichen sie nicht. Erobert keine Städte, heilt nur im eigenen Gebiet.' },
   fragile: { name: 'Zerbrechlich', desc: 'Ein Treffer eines Fernkämpfers (Bogenschütze, Katapult, Schiff, Luftschiff) zerstört sie sofort.' },
   flak: { name: 'Große Hülle', desc: 'Nimmt von Fernkämpfern doppelten Schaden.' },
-  cargo: { name: 'Transport', desc: 'Nimmt eine benachbarte eigene Landeinheit auf und setzt sie anderswo ab.' }
+  cargo: { name: 'Transport', desc: 'Nimmt eine benachbarte eigene Landeinheit auf und setzt sie anderswo ab.' },
+  pikes: { name: 'Pikenwall', desc: 'Anderthalbfacher Schaden gegen Reiter, Ritter und Paladine – auch beim Gegenschlag.' }
 };
 
 export function hasAbility(type, name) {
@@ -139,6 +140,18 @@ export const UNITS = {
     name: 'Kriegsschiff', hp: 18, atk: 4, def: 2, move: 3, range: 2, cost: 8, sight: 2,
     tech: 'navigation', abilities: ['dash', 'fortify', 'water']
   },
+  pikeman: {
+    name: 'Pikenier', hp: 10, atk: 2, def: 2, move: 1, range: 1, cost: 4, sight: 1,
+    tech: 'pikes', abilities: ['dash', 'fortify', 'land', 'pikes']
+  },
+  crossbow: {
+    name: 'Armbrustschütze', hp: 10, atk: 3, def: 1, move: 1, range: 2, cost: 6, sight: 2,
+    tech: 'crossbows', abilities: ['dash', 'fortify', 'land']
+  },
+  paladin: {
+    name: 'Paladin', hp: 15, atk: 4, def: 2, move: 3, range: 1, cost: 13, sight: 1,
+    tech: 'paladins', abilities: ['dash', 'persist', 'fortify', 'land']
+  },
   balloon: {
     name: 'Heißluftballon', hp: 4, atk: 0, def: 1, move: 3, range: 1, cost: 4, sight: 3,
     tech: 'ballooning', abilities: ['air', 'fragile']
@@ -166,8 +179,8 @@ export const UNITS = {
 };
 
 export const UNIT_ORDER = [
-  'warrior', 'archer', 'rider', 'defender', 'swordsman',
-  'catapult', 'mindbender', 'knight', 'giant',
+  'warrior', 'archer', 'rider', 'defender', 'pikeman', 'swordsman', 'crossbow',
+  'catapult', 'mindbender', 'knight', 'paladin', 'giant',
   'boat', 'ship', 'battleship', 'balloon', 'cargoballoon', 'fireballoon', 'airship', 'spy', 'settler'
 ];
 
@@ -190,51 +203,80 @@ export const TECHS = {
   roads: { name: 'Wege', tier: 2, req: 'riding', desc: 'Straßen (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1' },
   freespirit: { name: 'Freier Geist', tier: 2, req: 'riding', desc: 'Zweig: Ritterlichkeit' },
 
+  // Je Ast: Stufe 2 → 3 → 4 → 5 → 6. Neue Inhalte stehen auch früh (Stufe 3/4),
+  // einige reine Boni sind dafür nach hinten gerückt.
   construction: { name: 'Baukunst', tier: 3, req: 'farming', desc: '+1 Stern pro Stadt' },
-  diplomacy: { name: 'Diplomatie', tier: 3, req: 'shields', desc: 'Botschaften und Bündnisse' },
+  mills: { name: 'Mühlenbau', tier: 4, req: 'construction', desc: 'Windmühle: +1 Stern je angrenzender Farm' },
+  planning: { name: 'Stadtplanung', tier: 5, req: 'mills', desc: 'Bevölkerung kaufen kostet 2 Sterne weniger' },
+  rotation: { name: 'Fruchtfolge', tier: 6, req: 'planning', desc: 'Jede Farm bringt +1 Stern zusätzlich' },
+
+  pikes: { name: 'Pikeniere', tier: 3, req: 'shields', desc: 'Pikenier: stark gegen Reiter, Ritter und Paladine' },
+  diplomacy: { name: 'Diplomatie', tier: 4, req: 'pikes', desc: 'Botschaften und Bündnisse' },
+  espionage: { name: 'Spionage', tier: 5, req: 'diplomacy', desc: 'Spione kosten 2 Sterne weniger und sehen 1 Feld weiter' },
+  castles: { name: 'Burgbau', tier: 6, req: 'espionage', desc: 'Burg: Einheiten darauf haben 3-fache Verteidigung' },
+
   smithery: { name: 'Schmiedekunst', tier: 3, req: 'mining', desc: 'Schwertkämpfer ausbilden' },
+  smelting: { name: 'Verhüttung', tier: 4, req: 'smithery', desc: 'Schmelzhütte: +2 Sterne je angrenzender Mine' },
+  steel: { name: 'Stahl', tier: 5, req: 'smelting', desc: 'Krieger, Verteidiger, Pikeniere und Schwertkämpfer +1 Angriff' },
+  plate: { name: 'Plattenrüstung', tier: 6, req: 'steel', desc: 'Nahkämpfer zu Fuß und zu Pferd +1 Verteidigung' },
+
   philosophy: { name: 'Philosophie', tier: 3, req: 'meditation', desc: 'Gedankenbeuger; Forschung -20 %' },
-  navigation: { name: 'Navigation', tier: 3, req: 'sailing', desc: 'Kriegsschiffe ausbilden' },
-  aquatism: { name: 'Aquatismus', tier: 3, req: 'ramming', desc: 'Verteidigungsbonus auf Wasser' },
-  spiritualism: { name: 'Spiritualismus', tier: 3, req: 'archery', desc: '+1 Heilung pro Runde' },
-  mathematics: { name: 'Mathematik', tier: 3, req: 'forestry', desc: 'Katapult ausbilden' },
-  trade: { name: 'Handel', tier: 3, req: 'roads', desc: '+1 Stern pro Stadt' },
-  chivalry: { name: 'Ritterlichkeit', tier: 3, req: 'freespirit', desc: 'Ritter ausbilden' },
-
-  planning: { name: 'Stadtplanung', tier: 4, req: 'construction', desc: 'Bevölkerung kaufen kostet 2 Sterne weniger' },
-  espionage: { name: 'Spionage', tier: 4, req: 'diplomacy', desc: 'Spione kosten 2 Sterne weniger und sehen 1 Feld weiter' },
-  steel: { name: 'Stahl', tier: 4, req: 'smithery', desc: 'Krieger, Verteidiger und Schwertkämpfer +1 Angriff' },
   scholarship: { name: 'Gelehrsamkeit', tier: 4, req: 'philosophy', desc: '+1 Stern pro Stadt ab Stufe 3' },
-  seapower: { name: 'Seemacht', tier: 4, req: 'navigation', desc: 'Boote, Schiffe und Kriegsschiffe +1 Bewegung' },
-  harbors: { name: 'Hafenwirtschaft', tier: 4, req: 'aquatism', desc: 'Jeder Hafen bringt +1 Stern zusätzlich' },
-  medicine: { name: 'Heilkunst', tier: 4, req: 'spiritualism', desc: 'Einheiten heilen jede Runde 2 Leben mehr' },
-  engineering: { name: 'Ingenieurwesen', tier: 4, req: 'mathematics', desc: 'Katapulte kosten 3 Sterne weniger' },
-  banking: { name: 'Bankwesen', tier: 4, req: 'trade', desc: '+1 Stern pro Stadt' },
-  horseshoes: { name: 'Hufeisen', tier: 4, req: 'chivalry', desc: 'Reiter +1 Bewegung' },
+  printing: { name: 'Buchdruck', tier: 5, req: 'scholarship', desc: 'Forschung noch einmal -15 %' },
+  monastic: { name: 'Klosterwesen', tier: 6, req: 'printing', desc: 'Kloster: +2 Sterne, Einheiten im Stadtgebiet heilen 2 mehr' },
 
+  navigation: { name: 'Navigation', tier: 3, req: 'sailing', desc: 'Kriegsschiffe ausbilden' },
+  cartography: { name: 'Kartografie', tier: 4, req: 'navigation', desc: 'Alle Einheiten sehen 1 Feld weiter' },
+  seapower: { name: 'Seemacht', tier: 5, req: 'cartography', desc: 'Boote, Schiffe und Kriegsschiffe +1 Bewegung' },
+  naval: { name: 'Seeherrschaft', tier: 6, req: 'seapower', desc: 'Boote, Schiffe und Kriegsschiffe +1 Angriff' },
+
+  aquatism: { name: 'Aquatismus', tier: 3, req: 'ramming', desc: 'Verteidigungsbonus auf Wasser' },
+  fishfarming: { name: 'Fischzucht', tier: 4, req: 'aquatism', desc: 'Fischgründe bringen +1 Stern zusätzlich' },
+  harbors: { name: 'Hafenwirtschaft', tier: 5, req: 'fishfarming', desc: 'Jeder Hafen bringt +1 Stern zusätzlich' },
+  shipyards: { name: 'Werften', tier: 6, req: 'harbors', desc: 'Boote, Schiffe und Kriegsschiffe kosten 2 Sterne weniger' },
+
+  crossbows: { name: 'Armbrust', tier: 3, req: 'archery', desc: 'Armbrustschütze: Reichweite 2, Angriff 3' },
+  spiritualism: { name: 'Spiritualismus', tier: 4, req: 'crossbows', desc: '+1 Heilung pro Runde' },
+  medicine: { name: 'Heilkunst', tier: 5, req: 'spiritualism', desc: 'Einheiten heilen jede Runde 2 Leben mehr' },
+  marksmen: { name: 'Meisterschützen', tier: 6, req: 'medicine', desc: 'Bogen- und Armbrustschützen +1 Angriff' },
+
+  mathematics: { name: 'Mathematik', tier: 3, req: 'forestry', desc: 'Katapult ausbilden' },
+  engineering: { name: 'Ingenieurwesen', tier: 4, req: 'mathematics', desc: 'Katapulte kosten 3 Sterne weniger' },
   ballooning: { name: 'Ballonfahrt', tier: 5, req: 'engineering', desc: 'Ballonplatz, Heißluftballon (Späher) und Lastenballon' },
-  airships: { name: 'Luftschiffbau', tier: 6, req: 'ballooning', desc: 'Brandballon und Kriegsluftschiff' }
+  airships: { name: 'Luftschiffbau', tier: 6, req: 'ballooning', desc: 'Brandballon und Kriegsluftschiff' },
+
+  trade: { name: 'Handel', tier: 3, req: 'roads', desc: '+1 Stern pro Stadt' },
+  markets: { name: 'Märkte', tier: 4, req: 'trade', desc: 'Markt: +1 Stern je angrenzendem Gebäude (bis 4)' },
+  banking: { name: 'Bankwesen', tier: 5, req: 'markets', desc: '+1 Stern pro Stadt' },
+  guilds: { name: 'Zünfte', tier: 6, req: 'banking', desc: 'Alle Gebäude kosten 2 Sterne weniger' },
+
+  chivalry: { name: 'Ritterlichkeit', tier: 3, req: 'freespirit', desc: 'Ritter ausbilden' },
+  horseshoes: { name: 'Hufeisen', tier: 4, req: 'chivalry', desc: 'Reiter +1 Bewegung' },
+  tournaments: { name: 'Turniere', tier: 5, req: 'horseshoes', desc: 'Ritter und Paladine +1 Angriff' },
+  paladins: { name: 'Ritterorden', tier: 6, req: 'tournaments', desc: 'Paladin: schwerer Ritter' }
 };
 
 // Stufe-4-Boni: Technologie → Wirkung (in rules.js ausgewertet).
 export const TECH_BONUS = {
   planning: { popDiscount: 2 },
   espionage: { unitDiscount: { spy: 2 }, sight: { spy: 1 } },
-  steel: { atk: { warrior: 1, defender: 1, swordsman: 1 } },
+  steel: { atk: { warrior: 1, defender: 1, pikeman: 1, swordsman: 1 } },
+  plate: { def: { warrior: 1, defender: 1, pikeman: 1, swordsman: 1, rider: 1, knight: 1, paladin: 1 } },
   seapower: { move: { boat: 1, ship: 1, battleship: 1 } },
+  naval: { atk: { boat: 1, ship: 1, battleship: 1 } },
+  shipyards: { unitDiscount: { boat: 2, ship: 2, battleship: 2 } },
   medicine: { heal: 2 },
+  marksmen: { atk: { archer: 1, crossbow: 1 } },
   engineering: { unitDiscount: { catapult: 3 } },
-  horseshoes: { move: { rider: 1 } }
+  horseshoes: { move: { rider: 1 } },
+  tournaments: { atk: { knight: 1, paladin: 1 } },
+  cartography: { sightAll: 1 },
+  rotation: { farmBonus: 1 },
+  fishfarming: { fishBonus: 1 },
+  guilds: { buildDiscount: 2 }
 };
 
-export const TECH_TIERS = [
-  ['organization', 'climbing', 'fishing', 'hunting', 'riding'],
-  ['farming', 'shields', 'mining', 'meditation', 'sailing', 'ramming', 'archery', 'forestry', 'roads', 'freespirit'],
-  ['construction', 'diplomacy', 'smithery', 'philosophy', 'navigation', 'aquatism', 'spiritualism', 'mathematics', 'trade', 'chivalry'],
-  ['planning', 'espionage', 'steel', 'scholarship', 'seapower', 'harbors', 'medicine', 'engineering', 'banking', 'horseshoes'],
-  ['ballooning'],
-  ['airships']
-];
+export const TECH_TIERS = [1, 2, 3, 4, 5, 6].map(t => Object.keys(TECHS).filter(k => TECHS[k].tier === t));
 
 // Echte Stämme (reguläre Auswahl) mit Farbe, Start-Technologie und Starteinheit.
 export const TRIBES = {
@@ -286,6 +328,12 @@ export const IMPROVEMENTS = {
   temple: { name: 'Tempel', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 },
   // Ballonplatz: dort steigen Luft-Einheiten auf (wie Schiffe im Hafen).
   airfield: { name: 'Ballonplatz', tech: 'ballooning', terrain: ['field'], cost: 8, pop: 1 },
+  // Gebäude mit Nachbarschaftsbonus (siehe rules.js: improvementIncome).
+  mill: { name: 'Windmühle', tech: 'mills', terrain: ['field'], cost: 6, pop: 0, adjacent: { farm: 1 } },
+  forge: { name: 'Schmelzhütte', tech: 'smelting', terrain: ['field'], cost: 8, pop: 0, adjacent: { mine: 2 } },
+  market: { name: 'Markt', tech: 'markets', terrain: ['field'], cost: 10, pop: 0, adjacent: { '*': 1 }, max: 4 },
+  fort: { name: 'Burg', tech: 'castles', terrain: ['field', 'forest'], cost: 10, pop: 0 },
+  monastery: { name: 'Kloster', tech: 'monastic', terrain: ['field'], cost: 12, pop: 2 },
   // Monumente: kostenlos, einmal je Stamm, nach einem Erfolg (siehe MONUMENTS).
   m_wisdom: { name: 'Turm der Weisheit', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
   m_valor: { name: 'Tor der Tapferkeit', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
@@ -319,7 +367,7 @@ export const ROAD = { tech: 'roads', cost: 3 };
 export const DISBAND_REFUND = 0.5;
 // Aufrüsten: Einheit → nächste Stufe derselben Gattung (Kosten = Preisunterschied).
 export const UPGRADES = {
-  warrior: 'swordsman', archer: 'catapult', rider: 'knight',
+  warrior: 'swordsman', archer: 'crossbow', rider: 'knight', knight: 'paladin',
   boat: 'ship', ship: 'battleship',
   balloon: 'fireballoon', fireballoon: 'airship'
 };

@@ -156,9 +156,13 @@ function bestBuilding(state, player) {
         // Ein Ballonplatz pro Stamm reicht.
         if (type === 'airfield' && state.cities.some(c => c.owner === player && R.cityAirfields(state, c).length)) continue;
         if (type === 'port' && hasPort) continue;
-        if (stars < def.cost + 2) continue;
+        const cost = R.improvementCost(state, player, type);
+        if (stars < cost + 2) continue;
         if (!R.canImprove(state, city, type, q, r).ok) continue;
-        const score = def.pop / def.cost + (type === 'port' && needsPort ? 1 : 0) + (type === 'airfield' && needsAirfield ? 1 : 0);
+        // Ertrag je Stern, inklusive Nachbarschaftsbonus (Mühle, Schmelzhütte, Markt).
+        const gain = R.improvementIncome(state, player, type, q, r);
+        const score = gain / cost + (type === 'port' && needsPort ? 1 : 0) + (type === 'airfield' && needsAirfield ? 1 : 0);
+        if (score <= 0) continue;
         if (!best || score > best.score) best = { kind: 'improve', city, type, q, r, score };
       }
     }
@@ -377,9 +381,14 @@ export function botStep(state, player) {
     const unlocked = R.unlockedUnits(state, player);
     const stars = state.stars[player];
     const order = [
-      'giant', 'knight', 'battleship', 'airship', 'ship', 'swordsman', 'catapult', 'fireballoon',
-      'boat', 'mindbender', 'archer', 'defender', 'rider', 'warrior'
+      'giant', 'paladin', 'knight', 'battleship', 'airship', 'ship', 'swordsman', 'catapult', 'crossbow', 'fireballoon',
+      'boat', 'mindbender', 'archer', 'pikeman', 'defender', 'rider', 'warrior'
     ];
+    // Gegen nahe Reiterei Pikeniere aufstellen.
+    const cavalry = state.units.some(e => R.hostile(state, player, e.owner) &&
+      ['rider', 'knight', 'paladin'].includes(e.type) && hexDistance(e.q, e.r, c.q, c.r) <= 4);
+    if (cavalry && unlocked.includes('pikeman') && R.unitCost(state, player, 'pikeman') <= stars &&
+      R.canTrain(state, c, 'pikeman', player).ok) return { kind: 'train', city: c, type: 'pikeman' };
     // Bestes Wunschziel, das hier gerade möglich ist (Land- und Schiffsplatz getrennt).
     for (const t of order) {
       if (!unlocked.includes(t)) continue;
@@ -435,10 +444,12 @@ export function botStep(state, player) {
   const techOrder = [
     'organization', 'hunting', 'archery', 'farming', 'riding', 'roads',
     'climbing', 'mining', 'shields', 'forestry', 'mathematics', 'meditation',
-    'philosophy', 'smithery', 'construction', 'freespirit', 'chivalry',
-    'trade', 'spiritualism', 'fishing', 'sailing', 'ramming', 'navigation', 'aquatism', 'diplomacy',
-    'banking', 'steel', 'scholarship', 'planning', 'medicine', 'horseshoes', 'engineering', 'seapower',
-    'harbors', 'espionage', 'ballooning', 'airships'
+    'philosophy', 'smithery', 'construction', 'freespirit', 'chivalry', 'crossbows', 'pikes',
+    'trade', 'mills', 'smelting', 'markets', 'spiritualism', 'fishing', 'sailing', 'ramming', 'navigation', 'aquatism',
+    'scholarship', 'horseshoes', 'engineering', 'cartography', 'fishfarming', 'diplomacy',
+    'banking', 'steel', 'planning', 'medicine', 'tournaments', 'printing', 'seapower', 'harbors', 'espionage',
+    'paladins', 'plate', 'rotation', 'guilds', 'marksmen', 'monastic', 'castles', 'naval', 'shipyards',
+    'ballooning', 'airships'
   ];
   if (R.citiesFor(state, player).some(c => R.coastal(state, c))) {
     techOrder.splice(techOrder.indexOf('roads') + 1, 0, ...techOrder.splice(techOrder.indexOf('fishing'), 2));
