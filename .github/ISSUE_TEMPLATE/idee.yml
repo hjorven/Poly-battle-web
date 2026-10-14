@@ -1,0 +1,44 @@
+name: Idee vorschlagen
+description: Eine neue Funktion oder eine Verbesserung.
+title: "Idee: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Was fehlt dir oder stört dich?
+      description: Beschreibe die Situation im Spiel, nicht gleich die Lösung.
+      placeholder: Bei vielen Städten verliere ich den Überblick, welche noch etwas ausbilden kann.
+    validations:
+      required: true
+  - type: textarea
+    id: vorschlag
+    attributes:
+      label: Dein Vorschlag
+      placeholder: Ein Zeichen über Städten, die in dieser Runde noch nichts ausgebildet haben.
+    validations:
+      required: true
+  - type: dropdown
+    id: bereich
+    attributes:
+      label: Bereich
+      options:
+        - Spielregeln und Einheiten
+        - Städte und Gebäude
+        - KI
+        - Bedienung und Menüs
+        - Grafik und Animation
+        - Online und Bestenliste
+        - Kampagne und Herausforderungen
+        - Sonstiges
+    validations:
+      required: true
+  - type: textarea
+    id: alternativen
+    attributes:
+      label: Andere Lösungen, an die du gedacht hast
+  - type: textarea
+    id: bilder
+    attributes:
+      label: Skizzen oder Beispiele
+      description: Bilder aus anderen Spielen oder eine schnelle Skizze helfen beim Verstehen.

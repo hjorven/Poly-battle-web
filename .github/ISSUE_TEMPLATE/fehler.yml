@@ -1,0 +1,81 @@
+name: Fehler melden
+description: Etwas funktioniert nicht oder sieht falsch aus.
+title: "Fehler: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke fürs Melden! Je genauer, desto schneller lässt sich der Fehler finden.
+  - type: textarea
+    id: was
+    attributes:
+      label: Was ist passiert?
+      description: Beschreibe, was du gesehen hast.
+      placeholder: Nach dem Angriff mit dem Katapult blieb das Spielfeld weiß.
+    validations:
+      required: true
+  - type: textarea
+    id: erwartet
+    attributes:
+      label: Was hast du erwartet?
+      placeholder: Die Einheit sollte Schaden nehmen und das Spiel normal weiterlaufen.
+    validations:
+      required: true
+  - type: textarea
+    id: schritte
+    attributes:
+      label: So lässt es sich auslösen
+      description: Schritt für Schritt, so weit du dich erinnerst.
+      placeholder: |
+        1. Gegen KI starten, Karte klein
+        2. Katapult in Runde 8 ausbilden
+        3. Gegnerische Stadt angreifen
+    validations:
+      required: true
+  - type: dropdown
+    id: modus
+    attributes:
+      label: Spielmodus
+      options:
+        - Gegen KI
+        - Hotseat
+        - Online
+        - Tutorial
+        - Kampagne
+        - Tagesherausforderung
+        - Wochen-Herausforderung
+        - Menü (kein Spiel)
+    validations:
+      required: true
+  - type: dropdown
+    id: geraet
+    attributes:
+      label: Gerät
+      options:
+        - PC oder Laptop
+        - iPad oder Tablet
+        - Handy
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser und Version
+      placeholder: Safari auf iPadOS 18, Chrome 130 unter Windows …
+    validations:
+      required: true
+  - type: textarea
+    id: bilder
+    attributes:
+      label: Screenshots oder Spielstand
+      description: Bilder hier hineinziehen. Fehlermeldungen aus der Browser-Konsole (F12) helfen sehr.
+  - type: checkboxes
+    id: check
+    attributes:
+      label: Vorher geprüft
+      options:
+        - label: Ich habe die Seite neu geladen und es passiert weiterhin.
+          required: true
+        - label: Ich habe in den offenen Issues nach dem Fehler gesucht.
+          required: true
