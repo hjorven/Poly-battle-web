@@ -415,6 +415,16 @@ export const RUIN_STARS = 10;
 // Beute: Sterne für jede besiegte gegnerische Einheit.
 export const BOUNTY = 1;
 
+// Sonderregeln der Wochen-Herausforderung (eine je Kalenderwoche).
+export const WEEKLY_RULES = {
+  clearsky: { name: 'Klarer Himmel', desc: 'Kein Nebel – alle sehen die ganze Karte.' },
+  fortress: { name: 'Festungen', desc: 'Jede Stadt startet mit Stadtmauer.' },
+  riches: { name: 'Goldrausch', desc: 'Alle Stämme starten mit 25 Sternen.' },
+  seafarers: { name: 'Seefahrer', desc: 'Inselkarte, alle kennen Fischerei und Segeln.' },
+  titans: { name: 'Titanen', desc: 'Jede Hauptstadt startet mit einem Riesen.' },
+  blitz: { name: 'Blitz', desc: 'Nur 20 Runden – schnell Punkte sammeln.' }
+};
+
 // --- Leuchttürme --------------------------------------------------------------
 // In jeder Kartenecke steht ein Leuchtturm. Jeder Stamm kann jeden einmal
 // erreichen (Schiff auf oder neben dem Turm): Sterne und Sicht auf die Umgebung,

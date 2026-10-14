@@ -257,7 +257,12 @@ export function hideTutor() {
 
 const fmtDate = key => { const [, m, d] = key.split('-'); return `${d}.${m}.`; };
 
-export function renderProfile(profile, lp, daily, achievements) {
+export function renderProfile(profile, lp, daily, achievements, weekly = null) {
+  if (weekly) {
+    const wb = profile.weekly && profile.weekly.best[weekly.key];
+    const wt = TRIBES[weekly.tribe] ? TRIBES[weekly.tribe].name : weekly.tribe;
+    $('weeklyBtn').innerHTML = `Wochen-Herausforderung ${esc(weekly.key.split('-W')[1])}. Woche: ${esc(weekly.name)}<span class="sub">${esc(weekly.desc)} · ${esc(wt)} · ${weekly.turnLimit} Runden · ${wb != null ? `dein Bestwert: ${wb} Punkte` : 'diese Woche noch nicht gespielt'}</span>`;
+  }
   const winRate = profile.games ? Math.round(100 * profile.wins / profile.games) : 0;
   $('profile-card').innerHTML = `<div class="pc-level">${lp.level}</div>
     <div><span class="pc-title">${esc(lp.title)}</span> <span class="pc-sub">· Stufe ${lp.level} · ${lp.into}/${lp.need} Erfahrung</span></div>
@@ -280,6 +285,7 @@ export function showProfileResult(res, lp, achievements) {
       <span class="${res.levelAfter > res.levelBefore ? 'wp-up' : ''}">${res.levelAfter > res.levelBefore ? `Aufgestiegen: Stufe ${lp.level} – ${esc(lp.title)}!` : `Stufe ${lp.level} · ${lp.into}/${lp.need}`}</span></div>
     <div class="xp-bar"><div style="width:${Math.round(lp.frac * 100)}%"></div></div>
     ${res.achievements.length ? `<div class="wp-ach">${res.achievements.map(id => `<span>Erfolg: ${esc(achievements[id].name)}</span>`).join('')}</div>` : ''}
+    ${res.weekly ? `<div class="wp-daily">Wochen-Herausforderung: ${res.weekly.score} Punkte${res.weekly.improved ? ' – neuer Wochenbestwert!' : ` (Bestwert ${res.weekly.best})`}</div>` : ''}
     ${res.daily ? `<div class="wp-daily">Tagesherausforderung ${fmtDate(res.daily.key)}: ${res.daily.score} Punkte${res.daily.improved ? ' – neuer Bestwert!' : ` (Bestwert ${res.daily.best})`} · Tagesserie ${res.daily.streak}</div>` : ''}`;
 }
 

@@ -1,7 +1,7 @@
 // Spielerprofil über alle Partien: Erfahrung und Stufe, Erfolge, Statistik
 // und die Tagesherausforderung. Liegt nur im Browser (localStorage).
 
-import { TRIBE_POOL, MAP_TYPES, TECHS } from './config.js';
+import { TRIBE_POOL, MAP_TYPES, TECHS, WEEKLY_RULES } from './config.js';
 
 const KEY = 'pb_profile_v1';
 
@@ -14,7 +14,8 @@ export function emptyProfile() {
   return {
     v: 1, xp: 0, games: 0, wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0,
     bestScore: 0, fastestWin: null, tribeWins: {}, achievements: {}, seen: [],
-    daily: { last: null, streak: 0, bestStreak: 0, best: {} }
+    daily: { last: null, streak: 0, bestStreak: 0, best: {} },
+    weekly: { best: {} }
   };
 }
 
@@ -47,7 +48,8 @@ function sanitize(p) {
     daily: {
       last: typeof d.last === 'string' ? d.last : null,
       streak: num(d.streak), bestStreak: num(d.bestStreak), best: obj(d.best)
-    }
+    },
+    weekly: { best: obj(obj(p.weekly).best) }
   };
 }
 
@@ -107,7 +109,8 @@ export const ACHIEVEMENTS = {
   daily: { name: 'Tagesform', desc: 'Schließe eine Tagesherausforderung ab.', check: r => !!r.daily },
   streak3: { name: 'Stammgast', desc: 'Spiele die Tagesherausforderung 3 Tage in Folge.', check: (r, p) => p.daily.streak >= 3 },
   tribes5: { name: 'Vielseitig', desc: 'Gewinne mit 5 verschiedenen Stämmen.', check: (r, p) => Object.keys(p.tribeWins).length >= 5 },
-  online: { name: 'Gemeinsam stark', desc: 'Gewinne ein Online-Spiel.', check: r => r.won && r.mode === 'online' }
+  online: { name: 'Gemeinsam stark', desc: 'Gewinne ein Online-Spiel.', check: r => r.won && r.mode === 'online' },
+  weekly: { name: 'Wochenkämpfer', desc: 'Schließe eine Wochen-Herausforderung ab.', check: r => !!r.weekly }
 };
 
 // --- Tagesherausforderung -----------------------------------------------------
@@ -132,6 +135,30 @@ export function dailyChallenge(key = dateKey()) {
     tribe: TRIBE_POOL[seed % TRIBE_POOL.length],
     mapType: types[(seed >>> 8) % types.length],
     mapSize: 'normal', count: 4, aiLevel: 'normal', turnLimit: 30, stars: 5
+  };
+}
+
+// Kalenderwoche nach ISO 8601, z. B. „2026-W42“.
+export function weekKey(d = new Date()) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y = t.getUTCFullYear();
+  const week = Math.ceil(((t - Date.UTC(y, 0, 1)) / 86400000 + 1) / 7);
+  return `${y}-W${String(week).padStart(2, '0')}`;
+}
+
+// Wochen-Herausforderung: Karte, Stamm und Sonderregel hängen nur von der Woche ab.
+export function weeklyChallenge(key = weekKey()) {
+  const seed = hashStr('poly-battle-week:' + key);
+  const rules = Object.keys(WEEKLY_RULES);
+  const rule = rules[seed % rules.length];
+  const types = Object.keys(MAP_TYPES);
+  return {
+    key, seed, rule, ...WEEKLY_RULES[rule],
+    tribe: TRIBE_POOL[(seed >>> 4) % TRIBE_POOL.length],
+    mapType: rule === 'seafarers' ? 'archipelago' : types[(seed >>> 9) % types.length],
+    mapSize: 'normal', count: 4, aiLevel: 'normal', turnLimit: rule === 'blitz' ? 20 : 30, stars: 5
   };
 }
 
@@ -160,7 +187,8 @@ export function gameFacts(state, me, { won, mode, score }) {
     lighthouses: Object.values(state.lighthouses || {}).filter(list => list.includes(me)).length,
     ruins: (state.ruinsBy && state.ruinsBy[me]) || 0,
     comeback: !!(state.comeback && state.comeback[me]),
-    daily: state.daily || null
+    daily: state.daily || null,
+    weekly: state.weekly || null
   };
 }
 
@@ -201,6 +229,16 @@ export function recordGame(profile, facts) {
     daily = { key: facts.daily, score: facts.score, best: d.best[facts.daily], improved: facts.score > prevBest, streak: d.streak };
   }
 
+  let weekly = null;
+  if (facts.weekly) {
+    const prevBest = profile.weekly.best[facts.weekly] || 0;
+    if (prevBest === 0) gain += 150;
+    profile.weekly.best[facts.weekly] = Math.max(prevBest, facts.score);
+    const keys = Object.keys(profile.weekly.best).sort();
+    for (const k of keys.slice(0, Math.max(0, keys.length - 26))) delete profile.weekly.best[k];
+    weekly = { key: facts.weekly, score: facts.score, best: profile.weekly.best[facts.weekly], improved: facts.score > prevBest };
+  }
+
   const fresh = [];
   for (const [id, a] of Object.entries(ACHIEVEMENTS)) {
     if (profile.achievements[id]) continue;
@@ -213,6 +251,6 @@ export function recordGame(profile, facts) {
   profile.xp += gain;
   return {
     gain, levelBefore: levelOf(before), levelAfter: levelOf(profile.xp),
-    achievements: fresh, daily
+    achievements: fresh, daily, weekly
   };
 }

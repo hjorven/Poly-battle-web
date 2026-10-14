@@ -591,6 +591,27 @@ test('Beschädigte Spielstände und Profile werden abgewiesen bzw. bereinigt', (
   assert.ok(P.levelOf(1e308) > 1 && P.levelOf(NaN) === 1, 'Stufe ohne Endlosschleife');
 });
 
+test('Wochen-Herausforderung: feste Woche, Sonderregeln wirken, Bestwert im Profil', () => {
+  assert.strictEqual(P.weekKey(new Date('2026-10-14T12:00')), '2026-W42');
+  assert.strictEqual(P.weekKey(new Date('2027-01-01T12:00')), '2026-W53');
+  assert.deepStrictEqual(P.weeklyChallenge('2026-W42'), P.weeklyChallenge('2026-W42'));
+  const st = R.createGame(9, 4);
+  R.applyWeeklyRule(st, 'clearsky');
+  assert.ok(R.isVisible(st, 'player_1', MAP_W - 2, MAP_H - 2), 'kein Nebel');
+  const s2 = R.createGame(9, 4);
+  R.applyWeeklyRule(s2, 'titans');
+  assert.strictEqual(s2.units.filter(u => u.type === 'giant').length, 4);
+  const s3 = R.createGame(9, 4);
+  R.applyWeeklyRule(s3, 'fortress');
+  assert.ok(s3.cities.every(c => c.rewards[3] === 'wall'));
+  const prof = P.emptyProfile();
+  const facts = P.gameFacts(st, 'player_1', { won: false, mode: 'bot', score: 900 });
+  const res = P.recordGame(prof, { ...facts, weekly: '2026-W42' });
+  assert.strictEqual(res.weekly.best, 900);
+  assert.ok(res.achievements.includes('weekly'));
+  R.createGame(1, 4);
+});
+
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
   const st = makeState();
   st.explored = { player_1: [], player_2: [] };
