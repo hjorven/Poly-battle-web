@@ -8,7 +8,7 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, loadOptions, unloadOptions, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, loadOptions, unloadOptions, upgradeOption, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS } from './hex.js';
 
@@ -437,6 +437,12 @@ export function showUnitPanel(state, unit, ctx) {
           <span class="cost">${ROAD.cost} Sterne</span></button></div>`;
       }
     }
+    const up = upgradeOption(state, unit);
+    if (up) {
+      extra += `<div class="action-list"><button class="btn action" data-upgrade ${up.ok ? '' : 'disabled'}>
+        <span>Aufrüsten zu ${esc(UNITS[up.to].name)}<span class="sub">${up.ok ? 'Verletzungen bleiben anteilig · verbraucht den Zug' : esc(up.reason)}</span></span>
+        <span class="cost">${up.cost} Sterne</span></button></div>`;
+    }
     // Lastenballon: Fracht aufnehmen oder absetzen.
     const dirTo = (q, r) => DIRS.findIndex(([dq, dr]) => unit.q + dq === q && unit.r + dr === r);
     if (unit.cargo) {
@@ -501,6 +507,8 @@ export function showUnitPanel(state, unit, ctx) {
     <div class="hint">${hint}</div>
   `);
   wirePanel($('panel'));
+  const upBtn = $('panel').querySelector('[data-upgrade]');
+  if (upBtn) upBtn.addEventListener('click', () => handlers.onUpgrade(unit));
   $('panel').querySelectorAll('[data-load]').forEach(btn => btn.addEventListener('click', () => handlers.onLoadCargo(unit, btn.dataset.load)));
   $('panel').querySelectorAll('[data-unload]').forEach(btn => btn.addEventListener('click', () => {
     const [q, r] = btn.dataset.unload.split(',').map(Number);

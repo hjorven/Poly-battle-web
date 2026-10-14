@@ -317,6 +317,12 @@ export const BRIDGE = { tech: 'roads', costPerTile: 5, maxLen: 2 };
 export const ROAD = { tech: 'roads', cost: 3 };
 // Auflösen einer Einheit erstattet diesen Anteil der Kosten.
 export const DISBAND_REFUND = 0.5;
+// Aufrüsten: Einheit → nächste Stufe derselben Gattung (Kosten = Preisunterschied).
+export const UPGRADES = {
+  warrior: 'swordsman', archer: 'catapult', rider: 'knight',
+  boat: 'ship', ship: 'battleship',
+  balloon: 'fireballoon', fireballoon: 'airship'
+};
 
 // Rabatte durch Stammes-Fähigkeiten (Perk-ID → Einheit).
 export const PERK_DISCOUNT = {

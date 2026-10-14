@@ -536,6 +536,20 @@ async function doFound(unit) {
   await afterAction();
 }
 
+async function doUpgrade(unit) {
+  unit = liveUnit(unit);
+  if (!unit) return;
+  const from = UNITS[unit.type].name;
+  const res = R.upgradeUnit(app.state, unit, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  app.busy = true;
+  ui.toast(`${from} aufgerüstet zu ${UNITS[res.to].name}`, 'good');
+  sfx('promote');
+  render.celebrate(unit.q, unit.r, 0xfacc15);
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
 async function doLoadCargo(balloon, unitId) {
   balloon = liveUnit(balloon);
   const unit = R.findUnit(app.state, unitId);
@@ -1080,6 +1094,7 @@ function boot() {
     onFound: doFound,
     onBuildBridge: doBuildBridge,
     onLoadCargo: doLoadCargo,
+    onUpgrade: doUpgrade,
     onUnloadCargo: doUnloadCargo,
     onBuildRoad: doBuildRoad,
     onJump: (q, r) => render.cameraTo(q, r, true),
