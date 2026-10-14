@@ -859,6 +859,13 @@ function provoke(state, human, ai) {
   return { kind: 'provoke', player: ai };
 }
 
+// Zähler je Spieler für die Profil-Statistik (Eroberungen, Ausbildungen).
+function countStat(state, key, player) {
+  if (!player) return;
+  if (!state[key]) state[key] = {};
+  state[key][player] = (state[key][player] || 0) + 1;
+}
+
 // --- Ereignisprotokoll (für den Rückblick zu Beginn des eigenen Zuges) -------
 
 export function logEvent(state, entry) {
@@ -933,6 +940,7 @@ export function attack(state, attacker, defender) {
           const prev = city.owner;
           city.owner = attacker.owner;
           events.push({ kind: 'capture', city, from: prev, to: attacker.owner });
+          countStat(state, 'capturesBy', attacker.owner);
           logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
           checkWinner(state);
         }
@@ -998,6 +1006,7 @@ export function moveUnit(state, unit, q, r) {
     const prev = city.owner;
     city.owner = unit.owner;
     events.push({ kind: 'capture', city, from: prev, to: unit.owner });
+    countStat(state, 'capturesBy', unit.owner);
     const prov = provoke(state, unit.owner, prev);
     if (prov) events.push(prov);
     logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
@@ -1082,6 +1091,7 @@ export function trainUnit(state, city, type, player) {
   state.stars[player] -= unitCost(state, player, type);
   if (hasAbility(type, 'water')) city.trainedShip = true;
   else city.trained = true;
+  countStat(state, 'trainedBy', player);
   state.units.push({
     id: `${player.replace('_', '')}_${Date.now().toString(36)}_${unitSeq++}`,
     owner: player, type, q: sq, r: sr,

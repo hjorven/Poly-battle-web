@@ -786,3 +786,14 @@ button:focus-visible {
 #news li.tone-good { border-left-color: #16a34a; }
 #news li.tone-info { border-left-color: #60a5fa; }
 #news .news-go { font-size: 11px; color: #a16207; font-weight: 700; margin-left: 4px; }
+
+/* Profil-Statistik */
+#stats .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stat-bars { display: flex; align-items: flex-end; gap: 4px; height: 80px; margin: 6px 0; }
+.stat-bars div { flex: 1; max-width: 32px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.stat-bars span { width: 100%; background: #facc15; border-radius: 3px 3px 0 0; min-height: 2px; }
+.stat-bars em { font-style: normal; font-size: 10px; color: #71717a; }
+.recent { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; font-size: 13px; }
+.recent li { border-left: 3px solid #a1a1aa; padding: 3px 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.recent li.won { border-left-color: #16a34a; }
+.recent li span { color: #a1a1aa; font-size: 12px; }

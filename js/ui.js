@@ -271,10 +271,33 @@ export function renderProfile(profile, lp, daily, achievements, weekly = null) {
   const best = profile.daily.best[daily.key];
   const tribe = TRIBES[daily.tribe] ? TRIBES[daily.tribe].name : daily.tribe;
   $('dailyBtn').innerHTML = `Tagesherausforderung ${fmtDate(daily.key)}<span class="sub">${esc(tribe)} · ${esc(MAP_TYPES[daily.mapType].label)} · 30 Runden · ${best != null ? `dein Bestwert: ${best} Punkte` : 'heute noch nicht gespielt'}</span>`;
+  renderStats(profile);
   const ids = Object.keys(achievements);
   const got = ids.filter(id => profile.achievements[id]);
   $('achievements-title').textContent = `Erfolge (${got.length}/${ids.length})`;
   $('achievements').innerHTML = ids.map(id => `<div class="ach ${profile.achievements[id] ? 'got' : ''}"><b>${esc(achievements[id].name)}</b>${esc(achievements[id].desc)}</div>`).join('');
+}
+
+const MODE_NAMES = { bot: 'Gegen KI', online: 'Online', daily: 'Tag', weekly: 'Woche', campaign: 'Kampagne' };
+function renderStats(profile) {
+  const t = profile.totals || {};
+  const tribeName = id => (TRIBES[id] ? TRIBES[id].name : '–');
+  const top = o => { const e = Object.entries(o || {}).sort((a, b) => b[1] - a[1])[0]; return e ? `${tribeName(e[0])} (${e[1]})` : '–'; };
+  const cell = (label, v) => `<div class="stat">${esc(label)}<b>${esc(String(v))}</b></div>`;
+  // Tagesherausforderung: Bestwerte der letzten 14 Tage als Balken.
+  const days = Object.entries((profile.daily && profile.daily.best) || {}).sort().slice(-14);
+  const max = Math.max(1, ...days.map(d => d[1]));
+  const bars = days.length ? `<div class="stat-bars">${days.map(([k, v]) => `<div title="${esc(k)}: ${v} Punkte"><span style="height:${Math.round(v / max * 100)}%"></span><em>${esc(k.slice(8))}</em></div>`).join('')}</div>` : '<div class="hint">Noch keine Tagesherausforderung gespielt.</div>';
+  const recent = (profile.recent || []).slice().reverse().map(r => `<li class="${r.won ? 'won' : ''}"><div><b>${r.won ? 'Sieg' : 'Niederlage'}</b> · ${esc(MODE_NAMES[r.mode] || r.mode || '')} · ${esc(tribeName(r.tribe))} · Runde ${r.round} · ${r.score} Punkte</div><span>${esc((r.date || '').split('-').reverse().join('.'))}</span></li>`).join('');
+  $('stats').innerHTML = `<div class="stat-row">
+      ${cell('Spiele', profile.games)}${cell('Siege', profile.wins)}${cell('Siegquote', profile.games ? Math.round(100 * profile.wins / profile.games) + ' %' : '–')}
+      ${cell('Beste Serie', profile.bestWinStreak)}${cell('Bestwert', profile.bestScore)}${cell('Schnellster Sieg', profile.fastestWin ? 'Runde ' + profile.fastestWin : '–')}
+      ${cell('Besiegte Einheiten', t.kills || 0)}${cell('Eroberte Städte', t.captures || 0)}${cell('Ausgebildet', t.trained || 0)}
+      ${cell('Gespielte Runden', t.rounds || 0)}${cell('Lieblingsstamm', top(profile.tribeGames))}${cell('Meiste Siege', top(profile.tribeWins))}
+    </div>
+    <div class="panel-sub" style="margin-top:10px">Tagesherausforderung (Bestwerte)</div>${bars}
+    <div class="panel-sub" style="margin-top:10px">Letzte Partien</div>
+    ${recent ? `<ul class="recent">${recent}</ul>` : '<div class="hint">Noch keine Partie beendet.</div>'}`;
 }
 
 // Ergebnis für das Profil auf dem Endbildschirm.

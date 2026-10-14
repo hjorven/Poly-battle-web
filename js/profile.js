@@ -13,6 +13,7 @@ function storage(store) {
 export function emptyProfile() {
   return {
     v: 1, xp: 0, games: 0, wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0,
+    totals: { kills: 0, captures: 0, trained: 0, rounds: 0, techs: 0 }, tribeGames: {}, recent: [],
     bestScore: 0, fastestWin: null, tribeWins: {}, achievements: {}, seen: [],
     daily: { last: null, streak: 0, bestStreak: 0, best: {} },
     weekly: { best: {} }
@@ -44,6 +45,9 @@ function sanitize(p) {
     winStreak: num(p.winStreak), bestWinStreak: num(p.bestWinStreak), bestScore: num(p.bestScore, 1e9),
     fastestWin: Number.isFinite(p.fastestWin) && p.fastestWin > 0 ? p.fastestWin : null,
     tribeWins: obj(p.tribeWins), achievements: obj(p.achievements),
+    totals: Object.fromEntries(['kills', 'captures', 'trained', 'rounds', 'techs'].map(k => [k, num(obj(p.totals)[k], 1e9)])),
+    tribeGames: obj(p.tribeGames),
+    recent: Array.isArray(p.recent) ? p.recent.filter(x => x && typeof x === 'object').slice(-10) : [],
     seen: Array.isArray(p.seen) ? p.seen.filter(x => typeof x === 'string').slice(-50) : [],
     daily: {
       last: typeof d.last === 'string' ? d.last : null,
@@ -181,6 +185,8 @@ export function gameFacts(state, me, { won, mode, score }) {
     tribe: state.tribes ? state.tribes[me] : null,
     peakCities: Math.max(cities, (state.peak && state.peak[me]) || 0),
     kills: (state.killsBy && state.killsBy[me]) || 0,
+    captures: (state.capturesBy && state.capturesBy[me]) || 0,
+    trained: (state.trainedBy && state.trainedBy[me]) || 0,
     techs: (state.techs[me] || []).filter(t => t !== 'basic').length,
     techTotal: Object.keys(TECHS).length,
     monuments: ((state.monumentsBuilt && state.monumentsBuilt[me]) || []).length,
@@ -200,6 +206,17 @@ export function recordGame(profile, facts) {
   const mult = facts.vsAi ? (LEVEL_MULT[facts.aiLevel] || 1) : 1.5;
   let gain = Math.round((Math.min(400, facts.score / 20) + (facts.won ? 150 : 30)) * mult);
   profile.games++;
+  const t = profile.totals || (profile.totals = { kills: 0, captures: 0, trained: 0, rounds: 0, techs: 0 });
+  t.kills += facts.kills || 0;
+  t.captures += facts.captures || 0;
+  t.trained += facts.trained || 0;
+  t.rounds += facts.round || 0;
+  t.techs += facts.techs || 0;
+  if (facts.tribe) profile.tribeGames[facts.tribe] = (profile.tribeGames[facts.tribe] || 0) + 1;
+  profile.recent = [...(profile.recent || []), {
+    date: dateKey(), mode: facts.daily ? 'daily' : facts.weekly ? 'weekly' : facts.mode,
+    tribe: facts.tribe, won: !!facts.won, score: facts.score, round: facts.round
+  }].slice(-10);
   if (facts.won) {
     profile.wins++;
     profile.winStreak++;
