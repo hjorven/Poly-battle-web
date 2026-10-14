@@ -826,3 +826,34 @@ button:focus-visible {
 .profile-name { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; grid-column: 1 / -1; font-size: 13px; }
 .profile-name .btn { padding: 3px 8px; font-size: 12px; }
 .menu-section .menu-body .board-list li::before, .menu-section .menu-body .recent li::before { content: none; }
+
+/* Admin-/Kreativ-Panel (nur nach Freischaltung) */
+#adminBtn { position: fixed; right: 12px; bottom: 172px; z-index: 60; background: var(--panel); border: 1px solid var(--border); }
+@media (hover: none) { #adminBtn { min-height: 44px; } }
+@media (max-width: 760px) { #adminBtn { top: 168px; bottom: auto; right: 8px; } }
+#admin-panel {
+  position: fixed; right: 12px; top: 64px; z-index: 60;
+  width: 320px; max-width: calc(100vw - 24px); max-height: calc(100% - 250px); min-height: 200px;
+  overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; user-select: text; -webkit-user-select: text;
+  background: var(--panel); border: 1px solid var(--border); border-top: 3px solid var(--accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14); padding: 10px 12px 12px; font-size: 13px;
+}
+@media (max-width: 760px) { #admin-panel { top: 64px; right: 8px; max-width: calc(100vw - 16px); max-height: calc(100% - 140px); } }
+#admin-panel h4 { margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+#admin-panel .hint { font-size: 12px; color: var(--muted); margin: 4px 0; }
+.adm-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.adm-grow { flex: 1; }
+.adm-flag { font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 5px; }
+.adm-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.adm-tabs .btn { padding: 4px 8px; font-size: 12px; }
+.adm-tabs .btn.active { background: var(--text); color: #fff; border-color: var(--text); }
+.adm-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }
+.adm-row select, .adm-row input { flex: 1; min-width: 0; padding: 5px 6px; border: 1px solid var(--border-strong); border-radius: 6px; font: inherit; background: #fff; }
+.adm-row input[type=number] { max-width: 90px; }
+.adm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 4px 0; }
+.adm-grid .btn { text-align: center; }
+.adm-check { display: flex; gap: 6px; align-items: flex-start; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.adm-tool { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.adm-info { font-size: 12px; margin-top: 6px; color: var(--text); }
+#admin-panel textarea { width: 100%; font: 12px monospace; border: 1px solid var(--border-strong); border-radius: 6px; padding: 6px; resize: vertical; }
+body.adm-picking #gameCanvas { cursor: crosshair; }
