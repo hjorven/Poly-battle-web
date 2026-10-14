@@ -1146,3 +1146,114 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
 .tech-hex .tn-name { font-size: 14px; font-weight: 700; line-height: 1.08; hyphens: auto; -webkit-hyphens: auto; overflow-wrap: anywhere; }
 .tech-hex .tn-cost { font-size: 13px; }
 @media (max-width: 760px) { #tech-overlay .card { padding: 14px; } }
+
+/* ==== Freie Karte: Bedienung in schwebenden Kärtchen an den Rändern ==== */
+#stage { inset: 0; }
+#topbar {
+  position: fixed; inset: 0 0 auto 0; height: auto; z-index: 20;
+  display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px;
+  background: transparent; border: 0; pointer-events: none;
+}
+#topbar > * { pointer-events: auto; }
+.hud-card {
+  display: flex; align-items: center; gap: 4px; min-height: 48px; padding: 4px 8px;
+  background: var(--panel); border: 1px solid var(--border); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+}
+.hud-left { gap: 12px; padding: 4px 14px 4px 12px; flex: none; }
+.hud-left .treasury { padding-right: 12px; }
+.round-box { display: flex; flex-direction: column; line-height: 1.2; }
+#topbar #round-label { all: unset; font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#topbar #status { flex: none; font-size: 12px; color: var(--muted); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+#topbar #player-strip { flex: 0 1 auto; gap: 4px; padding: 4px 6px; }
+#topbar .chip { border-color: transparent; background: transparent; padding: 4px 8px; }
+#topbar .chip.active { border-color: var(--primary); background: var(--primary-soft); }
+#topbar .top-actions { margin-left: auto; gap: 2px; padding: 4px; }
+#menuBtn, #soundBtn { position: static; }
+#topbar #endTurnBtn { margin-left: 4px; }
+@media (max-width: 1100px) { #topbar #status { display: none; } }
+@media (max-width: 900px) {
+  #topbar { flex-wrap: wrap; padding: 8px; gap: 6px; }
+  #topbar #player-strip { order: 5; flex: 1 1 100%; min-height: 40px; }
+  #topbar .top-actions { flex: 1 1 auto; justify-content: flex-end; }
+}
+@media (max-width: 560px) {
+  .hud-left .round-box { display: none; }
+  .hud-left .treasury { padding-right: 0; border-right: 0; }
+  #topbar .top-actions { flex-wrap: wrap; }
+  #soundBtn { display: none; }
+}
+
+/* Alles unter den Kärtchen richtet sich nach ihrer Höhe */
+#toast-area { top: calc(var(--hud-h, 68px) + 4px); }
+#tutor { top: calc(var(--hud-h, 68px) + 8px); }
+@media (max-width: 760px) { #minimap { top: calc(var(--hud-h, 68px) + 6px); } }
+
+/* Hinweise: klein und kurz */
+.toast { font-size: 13px; padding: 6px 12px; max-width: min(460px, calc(100vw - 24px)); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+.toast.quote { font-style: italic; color: var(--muted); border-left: 3px solid var(--border-strong); }
+
+/* Rundenbericht: schmale Liste am rechten Rand */
+#news, #news:not(.hidden) {
+  left: auto; right: 12px; top: calc(var(--hud-h, 68px) + 8px); width: min(300px, calc(100% - 24px));
+  max-height: calc(100% - var(--hud-h, 68px) - 250px); min-height: 0; overflow-y: auto;
+  border-left: 3px solid var(--primary); font-size: 13px; padding: 10px 12px;
+}
+#news .news-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+#news .news-top h3 { margin: 0; font-size: 14px; }
+#news .news-top .btn { padding: 4px 8px; min-height: 0; font-size: 12px; }
+#news h4 { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 700; color: var(--text); }
+#news li button { font-size: 13px; }
+@media (max-width: 760px) { #news, #news:not(.hidden) { left: 8px; right: 8px; width: auto; max-height: 45%; } }
+
+/* Kamera-Knöpfe über der Minikarte, damit unten Platz für die Leisten bleibt */
+#camera-pad { right: 12px; bottom: 172px; }
+@media (max-width: 760px) { #camera-pad { top: calc(var(--hud-h, 68px) + 112px); bottom: auto; right: 8px; } }
+
+/* Werte als Symbol mit Zahl */
+.vstat { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
+.vstat svg { color: var(--muted); flex: none; }
+.tt-stats { display: flex; gap: 8px; }
+.uc-stats { display: flex; gap: 10px; margin: 2px 0 1px; }
+.uc-stats .vstat { font-size: 13px; }
+
+/* Stadt: flache Leiste am unteren Rand in drei Spalten */
+#panel.city-bar {
+  left: 12px; right: 244px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: auto; max-width: none;
+  max-height: 44vh; max-height: 44dvh; display: grid; grid-template-columns: minmax(210px, 250px) minmax(170px, 200px) minmax(0, 1fr);
+  gap: 14px; align-items: start; padding: 12px 14px;
+}
+#panel.city-bar.small { grid-template-columns: minmax(220px, 320px); right: auto; }
+#panel.city-bar .panel-head { margin-bottom: 8px; }
+#panel.city-bar .stat-row { margin-bottom: 6px; }
+#panel.city-bar .stat { padding: 5px 6px; }
+.cp-acts { display: flex; flex-direction: column; gap: 6px; }
+.cp-acts .city-act { min-height: 52px; }
+.cp-acts .city-reward { margin: 0; }
+.cp-train .city-sec { margin: 0 0 6px; }
+.cp-train .train-grid { grid-template-columns: repeat(auto-fill, minmax(126px, 1fr)); }
+.cp-note { color: var(--muted); font-weight: 400; margin-left: 6px; }
+@media (max-width: 900px) {
+  #panel.city-bar { right: 244px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #panel.city-bar .cp-train { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  #panel.city-bar, #panel.city-bar.small { left: 8px; right: 8px; grid-template-columns: minmax(0, 1fr); max-height: 52vh; max-height: 52dvh; }
+}
+/* Nachbesserungen: gleich hohe Kärtchen, kompakte Stadtleiste, Handy zweizeilig */
+.hud-card { min-height: 52px; }
+#topbar .top-actions .btn { min-height: 40px; padding: 6px 11px; }
+#topbar .top-actions #endTurnBtn { padding: 8px 16px; }
+#panel.city-bar .level-row { margin: 2px 0 6px; gap: 4px; }
+#panel.city-bar .level-chip { padding: 2px 6px; font-weight: 600; }
+.unit-in-city { width: 100%; text-align: left; margin-top: 2px; }
+.cp-note { color: var(--muted); font-size: 12px; margin: -2px 0 6px; }
+@media (max-width: 560px) {
+  #topbar .hud-left { order: 1; }
+  #topbar #player-strip { order: 2; flex: 1 1 0; min-width: 0; }
+  #topbar .top-actions { order: 3; flex: 1 1 100%; flex-wrap: nowrap; justify-content: space-between; }
+  #topbar .top-actions .btn { padding: 6px 8px; font-size: 13px; }
+  #soundBtn { display: none; }
+}
+#adminBtn { top: auto; right: 12px; bottom: 268px; }
+@media (max-width: 760px) { #adminBtn { top: calc(var(--hud-h, 68px) + 214px); bottom: auto; right: 8px; } }
+#topbar .chip .stars::after { content: ""; }
