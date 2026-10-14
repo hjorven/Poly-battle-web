@@ -173,7 +173,7 @@ export function initRender(canvas, opts = {}) {
     }
     // Ein Fehler in Nebenschritten (Minikarte, Nebel, Effekte) darf das Zeichnen
     // des Spielfelds nie stoppen – sonst bleibt nur die Oberfläche auf Weiß.
-    for (const step of [() => stepFog(now, dt), () => stepIdleMarkers(now), () => stepLighthouses(dt), () => stepBridges(dt), () => stepMinimap(now)]) {
+    for (const step of [() => stepFog(now, dt), () => stepIdleMarkers(now), () => stepLighthouses(dt), () => stepMasts(dt), () => stepMinimap(now)]) {
       try { step(); } catch (e) { reportOnce(e); }
     }
     controls.update();
@@ -482,17 +482,10 @@ function syncRoad(state, key, t) {
 
 // --- Brücken ----------------------------------------------------------------
 
-// Zugbrücke: Fahrbahn als Klappe mit Drehpunkt am Landende (`hinge` = +1 oder
-// −1 entlang der Achse). Liegt ein Schiff darunter, klappt sie hoch.
-function bridgeNode(axis, hinge = 1) {
+function bridgeNode(axis) {
   const g = new THREE.Group();
   const wood = mat(0x8a5a33), dark = mat(0x5c3d22);
-  const leaf = new THREE.Group();
-  leaf.position.x = hinge * 0.89;
-  g.add(leaf);
-  const part = new THREE.Group();
-  part.position.x = -hinge * 0.89;
-  leaf.add(part);
+  const part = g;
   const deck = new THREE.Mesh(geo('brDeck', () => new THREE.BoxGeometry(1.78, 0.07, 0.44)), wood);
   deck.castShadow = true;
   deck.receiveShadow = true;
@@ -507,14 +500,10 @@ function bridgeNode(axis, hinge = 1) {
       part.add(post);
     }
   }
-  // Ketten vom Landende zur Klappe (nur angedeutet).
-  const chain = new THREE.Mesh(geo('brChain', () => new THREE.BoxGeometry(0.03, 0.45, 0.03)), mat(0x52525b));
-  chain.position.set(hinge * 0.86, 0.22, 0);
-  g.add(chain);
-  g.userData = { leaf, hinge, open: 0, want: 0 };
+
   for (const x of [-0.42, 0.42]) {
-    const pier = new THREE.Mesh(geo('brPier', () => new THREE.CylinderGeometry(0.05, 0.06, 0.4, 6)), dark);
-    pier.position.set(x, -0.2, 0);
+    const pier = new THREE.Mesh(geo('brPier2', () => new THREE.CylinderGeometry(0.05, 0.06, 0.5, 6)), dark);
+    pier.position.set(x, -0.25, 0);
     g.add(pier);
   }
   // Brücke entlang der Achse zwischen den beiden Ufern ausrichten.
@@ -524,34 +513,24 @@ function bridgeNode(axis, hinge = 1) {
   return g;
 }
 
-// Drehpunkt der Klappe: auf der Seite, an der Land (keine weitere Brücke) liegt.
-function bridgeHinge(state, key, axis) {
-  const [q, r] = key.split(',').map(Number);
-  const [dq, dr] = DIRS[axis];
-  const nq = q + dq, nr = r + dr;
-  if (nq < 0 || nr < 0 || nq >= MAP_W || nr >= MAP_H) return -1;
-  const land = TERRAIN[state.terrain[nr * MAP_W + nq]].walkable && !(state.bridges && state.bridges[nq + ',' + nr] != null);
-  return land ? 1 : -1;
-}
 
-// Schiff auf dem Brückenfeld: Klappe öffnen. Animiert in stepBridges.
-function updateBridgeOpen(state) {
-  const ships = new Set(state.units.filter(u => hasAbility(u.type, 'water')).map(u => hk(u.q, u.r)));
-  for (const [key, t] of tiles) if (t.bridgeNode) t.bridgeNode.userData.want = ships.has(key) ? 1 : 0;
-}
-
-function stepBridges(dt) {
-  for (const t of tiles.values()) {
-    const n = t.bridgeNode;
-    if (!n || n.userData.open === n.userData.want) continue;
-    const u = n.userData;
-    u.open += Math.sign(u.want - u.open) * Math.min(Math.abs(u.want - u.open), dt * 1.6);
-    u.leaf.rotation.z = -u.hinge * 1.15 * (u.open * u.open * (3 - 2 * u.open));
+// Schiffe unter Brücken: Masten umlegen (wie bei Flussschiffen üblich), Rumpf
+// liegt etwas tiefer. Animiert in stepMasts.
+function stepMasts(dt) {
+  for (const node of unitNodes.values()) {
+    const m = node.group.userData.masts;
+    if (!m || !m.length) continue;
+    const want = node.underBridge ? 1 : 0;
+    node.mastFold = node.mastFold ?? 0;
+    if (node.mastFold === want) continue;
+    node.mastFold += Math.sign(want - node.mastFold) * Math.min(Math.abs(want - node.mastFold), dt * 2.5);
+    const k = node.mastFold * node.mastFold * (3 - 2 * node.mastFold);
+    for (const h of m) h.rotation.z = 1.45 * k;
   }
 }
 
-function syncBridge(t, axis, hinge = 1) {
-  const want = axis == null ? null : axis + ':' + hinge;
+function syncBridge(t, axis) {
+  const want = axis == null ? null : axis;
   if (!t || (t.bridgeAxis ?? null) === want) return;
   if (t.bridgeNode) {
     t.mesh.remove(t.bridgeNode);
@@ -560,9 +539,10 @@ function syncBridge(t, axis, hinge = 1) {
   }
   t.bridgeAxis = want;
   if (want == null) return;
-  const n = bridgeNode(axis, hinge);
-  // Fahrbahn knapp über Ufer-Höhe (Land 0.5), relativ zur Kachelmitte.
-  n.position.y = 0.53 - TERRAIN[t.terrain].height / 2;
+  const n = bridgeNode(axis);
+  // Fahrbahn etwas über Ufer-Höhe (Land 0.5), damit Schiffe mit umgelegtem
+  // Mast darunter durchpassen; relativ zur Kachelmitte.
+  n.position.y = 0.6 - TERRAIN[t.terrain].height / 2;
   n.visible = t.seen;
   t.mesh.add(n);
   t.decor.push(n);
@@ -1390,10 +1370,11 @@ function hexTop(key) {
 
 // Standhöhe einer Einheit: Landeinheiten (und Luft) stehen auf dem Brückendeck,
 // Schiffe fahren darunter durch.
-const BRIDGE_DECK = 0.56;
+const BRIDGE_DECK = 0.635;
 function unitTop(key, type) {
   const t = tiles.get(key);
   if (t && t.bridgeNode && !hasAbility(type, 'water')) return Math.max(t.top, BRIDGE_DECK);
+  if (t && t.bridgeNode) return hexTop(key) - 0.07;
   return hexTop(key);
 }
 
@@ -1565,9 +1546,16 @@ function unitBody(type, color, passenger = null) {
     bow.scale.set(1, 1, h / wid * 1.4);
     return h + 0.02;
   };
+  // Masten stehen auf einem Gelenk am Fuß: unter Brücken werden sie umgelegt.
+  const masts = [];
   const mast = (x, base, h, sailW, sailH) => {
-    put(g, cyl(0.018, 0.022, h, 5), mat(WOOD_DARK), x, base + h / 2, 0);
-    put(g, box(0.02, sailH, sailW), teamMat(), x + 0.025, base + h - sailH / 2 - 0.04, 0);
+    const hinge = new THREE.Group();
+    hinge.position.set(x, base, 0);
+    g.add(hinge);
+    put(hinge, cyl(0.018, 0.022, h, 5), mat(WOOD_DARK), 0, h / 2, 0);
+    put(hinge, box(0.02, sailH, sailW), teamMat(), 0.025, h - sailH / 2 - 0.04, 0);
+    masts.push(hinge);
+    return hinge;
   };
 
   if (type === 'warrior') {
@@ -1688,8 +1676,12 @@ function unitBody(type, color, passenger = null) {
       put(g, cyl(0.022, 0.022, 0.26, 6), mat(0x333b42), 0.27, top + 0.13, z).rotation.z = -Math.PI / 2;
     }
     put(g, box(0.16, 0.16, 0.14), mat(0x5c6670), -0.16, top + 0.14, 0);
-    put(g, cyl(0.012, 0.012, 0.3, 5), mat(0x333b42), -0.16, top + 0.37, 0);
-    put(g, box(0.12, 0.08, 0.02), teamMat(), -0.1, top + 0.47, 0);
+    const pole = new THREE.Group();
+    pole.position.set(-0.16, top + 0.22, 0);
+    g.add(pole);
+    put(pole, cyl(0.012, 0.012, 0.3, 5), mat(0x333b42), 0, 0.15, 0);
+    put(pole, box(0.12, 0.08, 0.02), teamMat(), 0.06, 0.25, 0);
+    masts.push(pole);
   } else if (type === 'spy') {
     const pp = person({ torso: mat(0x27272a), armR: 2.2 });
     put(pp.p, cone(0.12, 0.2, 7), mat(0x27272a), 0, pp.headY + 0.06, -0.01);
@@ -1713,6 +1705,7 @@ function unitBody(type, color, passenger = null) {
   }
 
   g.userData.teamMats = teamMats;
+  g.userData.masts = masts;
   return g;
 }
 
@@ -1944,7 +1937,8 @@ function placeUnitNode(state, unit) {
   group.add(sprite);
   group.rotation.y = DEFAULT_FACING;
   scene.add(group);
-  const node = { group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, passenger: passengerOf(unit), acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
+  const bt = tiles.get(key);
+  const node = { underBridge: !!(bt && bt.bridgeNode && hasAbility(unit.type, 'water')), group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, passenger: passengerOf(unit), acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
   unitNodes.set(unit.id, node);
   if (unit.acted) {
     for (const m of node.group.userData.teamMats) m.color.multiplyScalar(0.55);
@@ -2056,8 +2050,7 @@ export function syncBoard(state, viewer = null) {
     const imp = state.improvements ? state.improvements[key] : null;
     syncImprovement(t, imp, imp ? tileEnv(state, key, imp) : {});
     syncRuin(t, state.ruins && state.ruins[key]);
-    const axis = state.bridges ? state.bridges[key] : null;
-    syncBridge(t, axis, axis == null ? 1 : bridgeHinge(state, key, axis));
+    syncBridge(t, state.bridges ? state.bridges[key] : null);
     syncRoad(state, key, t);
     const seen = !explored || explored.has(key);
     t.seen = seen;
@@ -2067,7 +2060,6 @@ export function syncBoard(state, viewer = null) {
     if (t.decor) for (const d of t.decor) d.visible = seen;
   }
   syncLighthouses(state, viewer);
-  updateBridgeOpen(state);
   // Städte so zeigen, wie der Betrachter sie kennt (live oder aus dem Gedächtnis).
   const cityViews = new Map();
   for (const c of state.cities) {
@@ -2112,6 +2104,8 @@ export function syncBoard(state, viewer = null) {
     const target = new THREE.Vector3();
     const p = toWorld(u.q, u.r);
     target.set(p.x, unitTop(hk(u.q, u.r), u.type), p.z);
+    const bt = tiles.get(hk(u.q, u.r));
+    node.underBridge = !!(bt && bt.bridgeNode && hasAbility(u.type, 'water'));
     const pos = node.group.position;
     if (pos.distanceToSquared(target) > 0.0004 && !node.moving) {
       node.moving = true;
