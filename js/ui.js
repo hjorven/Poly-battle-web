@@ -59,6 +59,10 @@ export function initUI(h) {
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
   $('winnerEasier').addEventListener('click', () => handlers.onRetry(true));
+  $('winnerMap').addEventListener('click', () => handlers.onReview(true));
+  $('reviewBack').addEventListener('click', () => handlers.onReview(false));
+  $('winnerShare').addEventListener('click', () => handlers.onShare());
+  $('reviewShare').addEventListener('click', () => handlers.onShare());
   $('winnerRetry').addEventListener('click', () => handlers.onRetry(false));
   $('overviewBtn').addEventListener('click', () => handlers.onOpenOverview());
   $('overviewClose').addEventListener('click', () => handlers.onCloseOverview());
@@ -1040,6 +1044,11 @@ const TIPS = [
   'Wähle bei Stufe 3 die Stadtmauer, wenn Gegner in der Nähe sind: Verteidiger bekommen dann 4-fache Verteidigung.',
   'Greif nicht an, wenn die Vorschau mehr Gegenschlag als Schaden zeigt – warte lieber auf Verstärkung.'
 ];
+
+export function setReview(on) {
+  $('review-bar').classList.toggle('hidden', !on);
+  if (on) $('winner-overlay').classList.add('hidden');
+}
 
 export function showDefeat(state, ctx, opts = {}) {
   const me = 'player_1';
