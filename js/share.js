@@ -1,5 +1,5 @@
 // Ergebnisbild zum Teilen: ganze Karte ohne Nebel, Rangliste und Punkteverlauf
-// in einem PNG (1080 × 1350, passt gut in Chats und Stories).
+// in einem PNG (2160 × 2700, Format 4:5 – passt gut in Chats und Stories).
 
 import { TERRAIN, MAP_W, NAMES } from './config.js';
 import { toWorld, forEachHex, hk } from './hex.js';
@@ -101,10 +101,13 @@ function drawChart(ctx, state, box) {
 }
 
 // Zeichnet das Bild; `me` = eigener Stamm (oder null), `headline` z. B. „Sieg!“.
-export function drawShareImage(state, me, headline) {
+export function drawShareImage(state, me, headline, mapImage = null) {
+  // Doppelte Auflösung, damit Städte und Straßen beim Heranzoomen scharf bleiben.
   const canvas = document.createElement('canvas');
-  canvas.width = W; canvas.height = H;
+  canvas.width = W * 2; canvas.height = H * 2;
   const ctx = canvas.getContext('2d');
+  ctx.scale(2, 2);
+  ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#18181b'; ctx.fillRect(0, 0, W, 190);
   ctx.textAlign = 'left';
@@ -116,9 +119,16 @@ export function drawShareImage(state, me, headline) {
   const sub = [me ? nameOf(state, me) : null, `Runde ${state.round}`, state.daily ? `Tagesherausforderung ${state.daily.split('-').reverse().join('.')}` : null].filter(Boolean).join(' · ');
   ctx.fillText(sub, 48, 172);
 
-  ctx.fillStyle = '#1e3a5f';
-  ctx.fillRect(24, 214, W - 48, 600);
-  drawMap(ctx, state, { x: 40, y: 230, w: W - 80, h: 568 });
+  if (mapImage) {
+    // Foto der 3D-Welt (Städte, Straßen, Felder, Gebäude wie im Spiel).
+    const bw = W, bh = 620, s = Math.max(bw / mapImage.width, bh / mapImage.height);
+    const sw = bw / s, sh = bh / s;
+    ctx.drawImage(mapImage, (mapImage.width - sw) / 2, (mapImage.height - sh) / 2, sw, sh, 0, 202, bw, bh);
+  } else {
+    ctx.fillStyle = '#1e3a5f';
+    ctx.fillRect(24, 214, W - 48, 600);
+    drawMap(ctx, state, { x: 40, y: 230, w: W - 80, h: 568 });
+  }
 
   // Rangliste
   const rows = ranking(state).slice(0, 5);
@@ -151,8 +161,8 @@ export function drawShareImage(state, me, headline) {
 }
 
 // Teilen (Handy: Teilen-Menü mit Bild) oder herunterladen (PC).
-export async function shareResult(state, me, headline, text) {
-  const canvas = drawShareImage(state, me, headline);
+export async function shareResult(state, me, headline, text, mapImage = null) {
+  const canvas = drawShareImage(state, me, headline, mapImage);
   const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
   if (!blob) return 'fehler';
   const file = new File([blob], `poly-battle-runde-${state.round}.png`, { type: 'image/png' });
