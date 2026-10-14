@@ -78,7 +78,11 @@ export const ABILITY_INFO = {
   land: { name: 'Land', desc: 'Kann auf Land stehen.' },
   water: { name: 'Wasser', desc: 'Kann sich ausschließlich auf Wasser und Ozean bewegen.' },
   settle: { name: 'Siedeln', desc: 'Gründet auf einem freien Feld eine neue Stadt (mind. 2 Felder von anderen Städten entfernt).' },
-  scout: { name: 'Spähen', desc: 'Greift nicht an, betritt Berge ohne Klettern und sieht von Bergen 1 Feld weiter.' }
+  scout: { name: 'Spähen', desc: 'Greift nicht an, betritt Berge ohne Klettern und sieht von Bergen 1 Feld weiter.' },
+  air: { name: 'Fliegen', desc: 'Fliegt über Wasser, Berge und Wald (je 1 Bewegung) und ignoriert Kontrollzonen. Nahkämpfer erreichen sie nicht. Erobert keine Städte, heilt nur im eigenen Gebiet.' },
+  fragile: { name: 'Zerbrechlich', desc: 'Ein Treffer eines Fernkämpfers (Bogenschütze, Katapult, Schiff, Luftschiff) zerstört sie sofort.' },
+  flak: { name: 'Große Hülle', desc: 'Nimmt von Fernkämpfern doppelten Schaden.' },
+  cargo: { name: 'Transport', desc: 'Nimmt eine benachbarte eigene Landeinheit auf und setzt sie anderswo ab.' }
 };
 
 export function hasAbility(type, name) {
@@ -135,6 +139,22 @@ export const UNITS = {
     name: 'Kriegsschiff', hp: 18, atk: 4, def: 2, move: 3, range: 2, cost: 8, sight: 2,
     tech: 'navigation', abilities: ['dash', 'fortify', 'water']
   },
+  balloon: {
+    name: 'Heißluftballon', hp: 4, atk: 0, def: 1, move: 3, range: 1, cost: 4, sight: 3,
+    tech: 'ballooning', abilities: ['air', 'fragile']
+  },
+  cargoballoon: {
+    name: 'Lastenballon', hp: 6, atk: 0, def: 1, move: 3, range: 1, cost: 6, sight: 2,
+    tech: 'ballooning', abilities: ['air', 'fragile', 'cargo']
+  },
+  fireballoon: {
+    name: 'Brandballon', hp: 6, atk: 3, def: 0, move: 2, range: 1, cost: 8, sight: 2,
+    tech: 'airships', abilities: ['air', 'fragile']
+  },
+  airship: {
+    name: 'Kriegsluftschiff', hp: 12, atk: 3, def: 2, move: 2, range: 2, cost: 12, sight: 3,
+    tech: 'airships', abilities: ['air', 'flak']
+  },
   spy: {
     name: 'Spion', hp: 6, atk: 0, def: 1, move: 2, range: 1, cost: 4, sight: 2,
     tech: null, abilities: ['scout', 'land']
@@ -148,7 +168,7 @@ export const UNITS = {
 export const UNIT_ORDER = [
   'warrior', 'archer', 'rider', 'defender', 'swordsman',
   'catapult', 'mindbender', 'knight', 'giant',
-  'boat', 'ship', 'battleship', 'spy', 'settler'
+  'boat', 'ship', 'battleship', 'balloon', 'cargoballoon', 'fireballoon', 'airship', 'spy', 'settler'
 ];
 
 // Echter Technologiebaum (Basis-Äste; `req` = Voraussetzung, `tier` = Stufe/Kosten).
@@ -190,7 +210,10 @@ export const TECHS = {
   medicine: { name: 'Heilkunst', tier: 4, req: 'spiritualism', desc: 'Einheiten heilen jede Runde 2 Leben mehr' },
   engineering: { name: 'Ingenieurwesen', tier: 4, req: 'mathematics', desc: 'Katapulte kosten 3 Sterne weniger' },
   banking: { name: 'Bankwesen', tier: 4, req: 'trade', desc: '+1 Stern pro Stadt' },
-  horseshoes: { name: 'Hufeisen', tier: 4, req: 'chivalry', desc: 'Reiter +1 Bewegung' }
+  horseshoes: { name: 'Hufeisen', tier: 4, req: 'chivalry', desc: 'Reiter +1 Bewegung' },
+
+  ballooning: { name: 'Ballonfahrt', tier: 5, req: 'engineering', desc: 'Ballonplatz, Heißluftballon (Späher) und Lastenballon' },
+  airships: { name: 'Luftschiffbau', tier: 6, req: 'ballooning', desc: 'Brandballon und Kriegsluftschiff' }
 };
 
 // Stufe-4-Boni: Technologie → Wirkung (in rules.js ausgewertet).
@@ -208,7 +231,9 @@ export const TECH_TIERS = [
   ['organization', 'climbing', 'fishing', 'hunting', 'riding'],
   ['farming', 'shields', 'mining', 'meditation', 'sailing', 'ramming', 'archery', 'forestry', 'roads', 'freespirit'],
   ['construction', 'diplomacy', 'smithery', 'philosophy', 'navigation', 'aquatism', 'spiritualism', 'mathematics', 'trade', 'chivalry'],
-  ['planning', 'espionage', 'steel', 'scholarship', 'seapower', 'harbors', 'medicine', 'engineering', 'banking', 'horseshoes']
+  ['planning', 'espionage', 'steel', 'scholarship', 'seapower', 'harbors', 'medicine', 'engineering', 'banking', 'horseshoes'],
+  ['ballooning'],
+  ['airships']
 ];
 
 // Echte Stämme (reguläre Auswahl) mit Farbe, Start-Technologie und Starteinheit.
@@ -236,7 +261,7 @@ export function tribeColor(tribeId) {
 
 // Kosten: Stufenfaktor × (1 + Städte) + 2 je bereits erforschter Technologie.
 // Späte Stufen sind deutlich teurer, damit nicht jeder den ganzen Baum hat.
-const TIER_FACTOR = [1, 2, 4, 6];
+const TIER_FACTOR = [1, 2, 4, 6, 8, 10];
 export function researchCost(tier, cityCount, hasPhilosophy = false, known = 0) {
   let cost = TIER_FACTOR[tier - 1] * (1 + cityCount) + 2 * known;
   if (hasPhilosophy) cost = Math.ceil(cost * 0.8);
@@ -259,6 +284,8 @@ export const IMPROVEMENTS = {
   mine: { name: 'Mine', tech: 'mining', terrain: ['mountain'], cost: 8, pop: 1 },
   port: { name: 'Hafen', tech: 'sailing', terrain: ['water', 'ocean'], cost: 7, pop: 1 },
   temple: { name: 'Tempel', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 },
+  // Ballonplatz: dort steigen Luft-Einheiten auf (wie Schiffe im Hafen).
+  airfield: { name: 'Ballonplatz', tech: 'ballooning', terrain: ['field'], cost: 8, pop: 1 },
   // Monumente: kostenlos, einmal je Stamm, nach einem Erfolg (siehe MONUMENTS).
   m_wisdom: { name: 'Turm der Weisheit', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
   m_valor: { name: 'Tor der Tapferkeit', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },

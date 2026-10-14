@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H, MONUMENTS } from './config.js';
+import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H, MONUMENTS, hasAbility } from './config.js';
 import { playerColor, isVisible, visibleKeys, cityView, lighthouseKeys, lighthouseFound, roadAt, onRoadNet } from './rules.js';
 import { toWorld, forEachHex, hk, DIRS } from './hex.js';
 
@@ -927,7 +927,31 @@ function improvementNode(type, env = {}) {
 
 function buildingNode(type) {
   const g = new THREE.Group();
-  if (type === 'sawmill') {
+  if (type === 'airfield') {
+    // Ballonplatz: runde Startfläche aus Steinplatten, Ankermast mit Windfahne, Hütte.
+    const pad = new THREE.Mesh(geo('afPad', () => new THREE.CylinderGeometry(0.34, 0.36, 0.03, 16)), mat(0xc8c2b4));
+    pad.position.y = 0.015;
+    pad.receiveShadow = true;
+    g.add(pad);
+    const ring = new THREE.Mesh(geo('afRing', () => new THREE.TorusGeometry(0.27, 0.015, 4, 24)), mat(0x8a8f98));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.035;
+    g.add(ring);
+    const pole = new THREE.Mesh(geo('afPole', () => new THREE.CylinderGeometry(0.018, 0.024, 0.5, 6)), mat(0x6b4a2b));
+    pole.position.set(0.3, 0.25, -0.12);
+    g.add(pole);
+    const flag = new THREE.Mesh(geo('afFlag', () => new THREE.ConeGeometry(0.04, 0.16, 4)), mat(0xf59e0b));
+    flag.rotation.z = -Math.PI / 2;
+    flag.position.set(0.38, 0.46, -0.12);
+    g.add(flag);
+    const hut = new THREE.Mesh(geo('afHut', () => new THREE.BoxGeometry(0.14, 0.1, 0.12)), mat(0x8a5a33));
+    hut.position.set(-0.3, 0.05, 0.14);
+    g.add(hut);
+    const roof = new THREE.Mesh(geo('afRoof', () => new THREE.ConeGeometry(0.11, 0.07, 4)), mat(0x9c6b3a));
+    roof.rotation.y = Math.PI / 4;
+    roof.position.set(-0.3, 0.135, 0.14);
+    g.add(roof);
+  } else if (type === 'sawmill') {
     const base = new THREE.Mesh(geo('swBase', () => new THREE.BoxGeometry(0.3, 0.1, 0.22)), mat(0x6b4a2b));
     base.position.y = 0.05;
     g.add(base);
@@ -1410,6 +1434,8 @@ function unitBody(type, color) {
     put(pp.p, cyl(0.045, 0.045, 0.2, 6), mat(0xd8cfb8), -0.15, 0.44, 0).rotation.x = Math.PI / 2;
     put(pp.right, box(0.02, 0.6, 0.02), mat(WOOD_DARK), 0, 0.12, 0);
     put(pp.right, box(0.12, 0.08, 0.015), teamMat(), 0.07, 0.38, 0);
+  } else if (hasAbility(type, 'air')) {
+    airBody(type, g, put, teamMat);
   } else {
     // Rückfallmodell, damit eine Einheit ohne eigenes Modell nie unsichtbar ist.
     person();
@@ -1565,6 +1591,76 @@ function placeCityNode(state, city) {
   cityNodes.set(key, { group, owner: city.owner, pop: city.pop, sig: cityKey(city) });
 }
 
+// Luft-Einheiten: schweben über dem Feld, Schatten am Boden. Weidenkorb oder
+// Holzgondel an Seilen, Hülle in Stammesfarbe (Brandballon dunkel mit Band).
+const AIR_Y = 0.62;
+function airBody(type, g, put, teamMat) {
+  const shadow = new THREE.Mesh(geo('airShadow', () => new THREE.CircleGeometry(0.26, 16).rotateX(-Math.PI / 2)),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }));
+  shadow.position.y = 0.015;
+  shadow.castShadow = false;
+  g.add(shadow);
+  const wicker = mat(0xa0743f), rope = mat(0x5c4a32);
+  const ropes = (x0, z0, y0, x1, z1, y1) => {
+    const len = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+    const r = put(g, box(0.008, len, 0.008), rope, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    r.lookAt(new THREE.Vector3(x1, y1, z1).add(g.position));
+    r.rotateX(Math.PI / 2);
+  };
+  if (type === 'airship') {
+    // Längliche Hülle aus vernähten Häuten, Rippen, Leitwerk, Gondel mit Armbrüsten.
+    const env = put(g, geo('asEnv', () => new THREE.SphereGeometry(0.25, 14, 10)), teamMat(), 0, AIR_Y + 0.55, 0);
+    env.scale.set(2.2, 0.9, 0.9);
+    for (const x of [-0.3, -0.1, 0.1, 0.3]) {
+      const rib = put(g, geo('asRib', () => new THREE.TorusGeometry(0.21, 0.012, 4, 14)), mat(0x6b4a2b), x, AIR_Y + 0.55, 0);
+      rib.rotation.y = Math.PI / 2;
+      rib.scale.setScalar(1 - Math.abs(x) * 0.9);
+    }
+    put(g, box(0.14, 0.14, 0.02), mat(0x6b4a2b), -0.56, AIR_Y + 0.6, 0);
+    put(g, box(0.14, 0.02, 0.16), mat(0x6b4a2b), -0.54, AIR_Y + 0.55, 0);
+    put(g, box(0.44, 0.08, 0.14), mat(WOOD), 0, AIR_Y + 0.12, 0);
+    put(g, box(0.44, 0.03, 0.16), mat(WOOD_DARK), 0, AIR_Y + 0.17, 0);
+    for (const z of [-0.09, 0.09]) {
+      put(g, box(0.16, 0.025, 0.025), mat(WOOD_DARK), 0.16, AIR_Y + 0.19, z);
+      put(g, box(0.02, 0.025, 0.12), mat(STEEL), 0.22, AIR_Y + 0.19, z);
+    }
+    for (const x of [-0.18, 0.18]) for (const z of [-0.06, 0.06]) ropes(x, z, AIR_Y + 0.17, x * 1.2, z * 2, AIR_Y + 0.4);
+    return;
+  }
+  const big = type === 'cargoballoon';
+  const fire = type === 'fireballoon';
+  const R = big ? 0.3 : 0.26;
+  const envMat = fire ? mat(0x3f3f46) : teamMat();
+  const env = put(g, geo('blEnv' + R, () => new THREE.SphereGeometry(R, 14, 12)), envMat, 0, AIR_Y + 0.5, 0);
+  env.scale.set(1, 1.15, 1);
+  // Unterer Hals der Hülle.
+  put(g, cone(R * 0.55, 0.16, 10), envMat, 0, AIR_Y + 0.5 - R * 1.1, 0).rotation.x = Math.PI;
+  if (fire) {
+    const band = put(g, geo('blBand', () => new THREE.TorusGeometry(0.265, 0.03, 6, 18)), teamMat(), 0, AIR_Y + 0.5, 0);
+    band.rotation.x = Math.PI / 2;
+  } else {
+    // Nähte (Bahnen) als dunkle Ringe.
+    for (const a of [0, Math.PI / 3, (2 * Math.PI) / 3]) {
+      const seam = put(g, geo('blSeam' + R, () => new THREE.TorusGeometry(R * 1.01, 0.006, 3, 20)), mat(0x27272a), 0, AIR_Y + 0.5, 0);
+      seam.rotation.y = a;
+      seam.scale.y = 1.15;
+    }
+  }
+  const bw = big ? 0.2 : 0.15;
+  put(g, box(bw, 0.11, bw), wicker, 0, AIR_Y + 0.06, 0);
+  for (const x of [-bw / 2, bw / 2]) for (const z of [-bw / 2, bw / 2]) ropes(x, z, AIR_Y + 0.11, x * 1.6, z * 1.6, AIR_Y + 0.5 - R * 0.8);
+  // Brennerflamme.
+  const flame = put(g, cone(0.035, 0.09, 6), new THREE.MeshBasicMaterial({ color: 0xffa53d }), 0, AIR_Y + 0.27, 0);
+  flame.castShadow = false;
+  if (big) put(g, box(0.12, 0.08, 0.1), mat(WOOD_DARK), 0, AIR_Y + 0.15, 0); // Frachtkiste
+  if (fire) {
+    for (const [x, z] of [[0.1, 0.06], [-0.1, -0.06], [0.06, -0.1]]) {
+      put(g, ico(0.035), mat(0xb45309), x, AIR_Y - 0.02, z);
+      ropes(x, z, AIR_Y + 0.01, x * 0.7, z * 0.7, AIR_Y + 0.06);
+    }
+  }
+}
+
 function placeUnitNode(state, unit) {
   const color = ownerColor(unit.owner);
   const group = unitBody(unit.type, color);
@@ -1573,7 +1669,7 @@ function placeUnitNode(state, unit) {
   group.position.set(p.x, hexTop(key), p.z);
   const sprite = makeHpSprite();
   drawHp(sprite, unit.hp, !!unit.vet, color);
-  sprite.position.y = 0.95;
+  sprite.position.y = hasAbility(unit.type, 'air') ? 1.6 : 0.95;
   group.add(sprite);
   group.rotation.y = DEFAULT_FACING;
   scene.add(group);

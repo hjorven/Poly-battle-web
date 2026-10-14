@@ -389,6 +389,71 @@ test('Hafen: eine Landeinheit und zusätzlich ein Schiff pro Runde', () => {
   assert.ok(R.canTrain(st, city, 'ship', 'player_1').ok, 'nächste Runde wieder');
 });
 
+test('Luftwaffe: fliegen, Nahkampf erreicht sie nicht, Fernkampf zerstört Ballone, keine Eroberung', () => {
+  const st = makeState();
+  st.terrain[5 * MAP_W + 6] = 'water';
+  st.terrain[5 * MAP_W + 7] = 'mountain';
+  st.cities = [{ q: 2, r: 2, owner: 'player_1', pop: 1 }, { q: 8, r: 5, owner: 'player_2', pop: 1 }];
+  const b = unit('b', 'player_1', 'balloon', 5, 5);
+  st.units = [b];
+  const reach = R.reachableMap(st, b);
+  assert.strictEqual(reach.get('6,5'), 1, 'über Wasser');
+  assert.strictEqual(reach.get('7,5'), 2, 'über Berge ohne Klettern');
+  assert.ok(!reach.has('8,5'), 'nicht in fremde Städte');
+  // Nahkämpfer erreicht den Ballon nicht, Bogenschütze zerstört ihn mit einem Treffer.
+  const w = unit('w', 'player_2', 'warrior', 4, 5);
+  const a = unit('a', 'player_2', 'archer', 3, 5);
+  st.units.push(w, a);
+  assert.ok(!R.attackTargets(st, w).includes(b), 'Krieger kann nicht nach oben');
+  assert.ok(R.attackTargets(st, a).includes(b));
+  assert.strictEqual(R.battleResults(st, a, b).damage, b.hp, 'zerbrechlich');
+  // Kriegsluftschiff: doppelter Schaden durch Fernkampf, kein Gegenschlag von Nahkämpfern.
+  const ship = unit('s', 'player_1', 'airship', 5, 4);
+  const plain = R.battleResults(st, a, { ...ship, type: 'swordsman', hp: 12 });
+  assert.ok(R.battleResults(st, a, ship).damage >= 2, 'nimmt Schaden');
+  assert.strictEqual(R.battleResults(st, ship, w).retaliation, 0, 'Krieger schlägt nicht zurück');
+  // Brandballon greift Bodenziele an, wird von Fernkämpfern beim Gegenschlag zerstört.
+  const fb = unit('f', 'player_1', 'fireballoon', 3, 4);
+  assert.strictEqual(R.battleResults(st, fb, a).retaliation, fb.hp);
+  // Keine Eroberung aus der Luft: auch neutrale Dörfer sind tabu, ein Sieg rückt nicht nach.
+  st.cities[1].owner = null;
+  st.units = [unit('b2', 'player_1', 'balloon', 7, 5)];
+  assert.ok(!R.moveUnit(st, st.units[0], 8, 5).ok, 'Ballon betritt kein Dorf');
+  const fb2 = unit('f2', 'player_1', 'fireballoon', 7, 4);
+  const victim = unit('v', 'player_2', 'warrior', 7, 5, { hp: 1 });
+  st.units = [fb2, victim];
+  st.cities[1].owner = 'player_2';
+  assert.ok(R.attack(st, fb2, victim).killed);
+  assert.deepStrictEqual([fb2.q, fb2.r], [7, 4], 'rückt nicht nach');
+  assert.ok(plain.damage < R.battleResults(st, a, ship).damage, 'doppelter Schaden gegen große Hülle');
+});
+
+test('Ballonplatz und Lastenballon: aufsteigen, aufnehmen, absetzen', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1 };
+  st.cities = [city];
+  st.techs.player_1.push('hunting', 'forestry', 'mathematics', 'engineering', 'ballooning');
+  st.stars.player_1 = 50;
+  assert.strictEqual(R.canTrain(st, city, 'balloon', 'player_1').reason, 'Ballonplatz nötig');
+  assert.ok(R.improve(st, city, 'airfield', 6, 5, 'player_1').ok);
+  assert.ok(R.trainUnit(st, city, 'cargoballoon', 'player_1').ok);
+  const cb = st.units.find(u => u.type === 'cargoballoon');
+  assert.deepStrictEqual([cb.q, cb.r], [6, 5], 'steigt am Ballonplatz auf');
+  assert.ok(!R.canTrain(st, city, 'warrior', 'player_1').ok, 'teilt den Landbauplatz');
+  const w = unit('w', 'player_1', 'warrior', 7, 5);
+  st.units.push(w);
+  assert.ok(R.loadCargo(st, cb, w).ok);
+  assert.ok(!st.units.includes(w) && cb.cargo.type === 'warrior');
+  st.terrain[5 * MAP_W + 7] = 'water';
+  cb.q = 8; cb.r = 4; cb.mp = 0;
+  const opts = R.unloadOptions(st, cb);
+  assert.ok(opts.length && opts.every(([q, r]) => R.terrainAt(st, q, r) !== 'water'), 'nur auf Land');
+  const res = R.unloadCargo(st, cb, opts[0][0], opts[0][1]);
+  assert.ok(res.ok && !cb.cargo && cb.acted);
+  assert.strictEqual(res.unit.type, 'warrior');
+  assert.ok(st.units.includes(res.unit));
+});
+
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
   const st = makeState();
   st.explored = { player_1: [], player_2: [] };
