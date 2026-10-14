@@ -353,7 +353,7 @@ function persist() {
 
 function showMenu() {
   const profile = P.loadProfile();
-  ui.renderProfile(profile, P.levelProgress(profile.xp), P.dailyChallenge(), P.ACHIEVEMENTS);
+  ui.renderProfile(profile, P.levelProgress(profile.xp), P.dailyChallenge(), P.ACHIEVEMENTS, P.weeklyChallenge());
   ui.setContinue(saveInfo());
   ui.showMenu();
 }
@@ -996,6 +996,20 @@ function startDaily() {
   ui.toast('Tagesherausforderung: Heute spielen alle dieselbe Karte mit demselben Stamm. Nach 30 Runden zählt die Punktzahl.', 'good');
 }
 
+function startWeekly() {
+  const ch = P.weeklyChallenge();
+  startLocal('bot', {
+    count: ch.count, tribe: ch.tribe, mapSize: ch.mapSize, mapType: ch.mapType,
+    aiLevel: ch.aiLevel, turnLimit: ch.turnLimit, stars: ch.stars, seed: ch.seed
+  });
+  R.applyWeeklyRule(app.state, ch.rule);
+  app.state.weekly = ch.key;
+  render.syncBoard(app.state, viewer());
+  persist();
+  refresh();
+  ui.toast(`Wochen-Herausforderung „${ch.name}“: ${ch.desc} Nach ${ch.turnLimit} Runden zählt die Punktzahl.`, 'good');
+}
+
 function startTutorial() {
   startLocal('bot', {
     count: 2, tribe: 'imperius', mapSize: 'small', mapType: 'continents', aiLevel: 'easy', turnLimit: null
@@ -1292,7 +1306,7 @@ function boot() {
       if (easier) ui.toast(`Neues Spiel: ${AI_LEVELS[aiLevel].label}, ${count - 1} ${count === 2 ? 'Gegner' : 'Gegner'}`, 'good');
     },
     onContinue: continueGame,
-    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : mode === 'daily' ? startDaily() : startLocal(mode),
+    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : mode === 'daily' ? startDaily() : mode === 'weekly' ? startWeekly() : startLocal(mode),
     onTutor,
     onCopyLink: copyLink
   });

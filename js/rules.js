@@ -518,6 +518,7 @@ export function unitSight(state, u) {
 
 export function visibleKeys(state, player) {
   const keys = new Set();
+  if (state.noFog) { forEachHex((q, r) => keys.add(hk(q, r))); return keys; }
   const addArea = (q, r, rad) => {
     forEachHex((nq, nr) => {
       if (hexDistance(q, r, nq, nr) <= rad) keys.add(hk(nq, nr));
@@ -601,7 +602,7 @@ export function isExplored(state, player, q, r) {
 // Aktuell sichtbar (nicht nur einmal entdeckt): innerhalb der Sichtweite
 // einer eigenen Einheit oder Stadt.
 export function isVisible(state, player, q, r) {
-  if (!player || !state.explored || !state.explored[player]) return true;
+  if (!player || !state.explored || !state.explored[player] || state.noFog) return true;
   for (const u of state.units) {
     if (u.owner !== player) continue;
     if (hexDistance(u.q, u.r, q, r) <= unitSight(state, u)) return true;
@@ -2011,6 +2012,31 @@ export function monumentReady(state, player, type) {
 
 export function readyMonuments(state, player) {
   return Object.keys(MONUMENTS).filter(t => monumentReady(state, player, t));
+}
+
+// --- Sonderregeln (Wochen-Herausforderung) -----------------------------------
+
+export function applyWeeklyRule(state, rule) {
+  state.weeklyRule = rule;
+  if (rule === 'clearsky') {
+    state.noFog = true;
+    const all = [];
+    forEachHex((q, r) => all.push(hk(q, r)));
+    for (const p of state.players) state.explored[p] = all.slice();
+  } else if (rule === 'fortress') {
+    for (const c of state.cities) c.rewards = { ...(c.rewards || {}), 3: 'wall' };
+  } else if (rule === 'riches') {
+    for (const p of state.players) state.stars[p] = Math.max(state.stars[p], 25);
+  } else if (rule === 'seafarers') {
+    for (const p of state.players) for (const t of ['fishing', 'sailing']) if (!state.techs[p].includes(t)) state.techs[p].push(t);
+  } else if (rule === 'titans') {
+    for (const c of state.cities.filter(c => c.isCapital && c.owner)) {
+      const spot = freeLandNear(state, c.q, c.r, 'giant', c.owner);
+      if (spot) spawnUnitAt(state, c.owner, 'giant', spot[0], spot[1]);
+    }
+  } else if (rule === 'blitz') {
+    state.turnLimit = 20;
+  }
 }
 
 // --- Leuchttürme ---------------------------------------------------------------
