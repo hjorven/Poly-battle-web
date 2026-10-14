@@ -313,21 +313,22 @@ export function renderProfile(profile, lp, daily, achievements, weekly = null) {
   if (weekly) {
     const wb = profile.weekly && profile.weekly.best[weekly.key];
     const wt = TRIBES[weekly.tribe] ? TRIBES[weekly.tribe].name : weekly.tribe;
-    $('weeklyBtn').innerHTML = `Wochen-Herausforderung ${esc(weekly.key.split('-W')[1])}. Woche: ${esc(weekly.name)}<span class="sub">${esc(weekly.desc)} · ${esc(wt)} · ${weekly.turnLimit} Runden · ${wb != null ? `dein Bestwert: ${wb} Punkte` : 'diese Woche noch nicht gespielt'}</span>`;
+    $('weeklyBtn').innerHTML = `Woche ${esc(weekly.key.split('-W')[1])}: ${esc(weekly.name)}<span class="sub">${esc(weekly.desc)} ${esc(wt)}, ${weekly.turnLimit} Runden${wb != null ? `, Bestwert ${wb}` : ''}</span>`;
+    $('weeklyBtn').title = 'Wochen-Herausforderung: jede Woche eine feste Karte mit Sonderregel';
   }
   const winRate = profile.games ? Math.round(100 * profile.wins / profile.games) : 0;
   $('profile-card').innerHTML = `<div class="pc-level">${lp.level}</div>
-    <div><span class="pc-title">${esc(lp.title)}</span> <span class="pc-sub">· Stufe ${lp.level} · ${lp.into}/${lp.need} Erfahrung</span></div>
+    <div><span class="pc-title">${profile.name ? esc(profile.name) : esc(lp.title)}</span> <span class="pc-sub">${profile.name ? esc(lp.title) + ', ' : ''}Stufe ${lp.level}, ${lp.into} von ${lp.need} Erfahrung</span></div>
     <div class="pc-sub">${profile.games} ${profile.games === 1 ? 'Spiel' : 'Spiele'} · ${profile.wins} ${profile.wins === 1 ? 'Sieg' : 'Siege'}${profile.games ? ` (${winRate} %)` : ''}${profile.winStreak > 1 ? ` · ${profile.winStreak} Siege in Folge` : ''}${profile.daily.streak ? ` · Tagesserie ${profile.daily.streak}` : ''}</div>
     <div class="xp-bar"><div style="width:${Math.round(lp.frac * 100)}%"></div></div>
-    <div class="profile-name">${profile.name ? `Name: <b>${esc(profile.name)}</b>` : 'Noch kein Name für die Bestenliste'}
-      <button class="btn ghost" data-pname>${profile.name ? 'Ändern' : 'Namen wählen'}</button>
+    <div class="profile-name">
+      <button class="btn ghost" data-pname title="${profile.name ? 'Namen ändern' : 'Mit Namen erscheinst du in der Bestenliste'}">${profile.name ? 'Namen ändern' : 'Namen wählen'}</button>
       <button class="btn ghost" data-pcode>Profil-Code</button></div>`;
   $('profile-card').querySelector('[data-pname]').addEventListener('click', () => handlers.onChooseName());
   $('profile-card').querySelector('[data-pcode]').addEventListener('click', () => handlers.onProfileCode());
   const best = profile.daily.best[daily.key];
   const tribe = TRIBES[daily.tribe] ? TRIBES[daily.tribe].name : daily.tribe;
-  $('dailyBtn').innerHTML = `Tagesherausforderung ${fmtDate(daily.key)}<span class="sub">${esc(tribe)} · ${esc(MAP_TYPES[daily.mapType].label)} · 30 Runden · ${best != null ? `dein Bestwert: ${best} Punkte` : 'heute noch nicht gespielt'}</span>`;
+  $('dailyBtn').innerHTML = `Heute, ${fmtDate(daily.key)}<span class="sub">Tagesherausforderung: ${esc(tribe)}, ${esc(MAP_TYPES[daily.mapType].label)}, 30 Runden${best != null ? `, Bestwert ${best}` : ''}</span>`;
   renderStats(profile);
   const ids = Object.keys(achievements);
   const got = ids.filter(id => profile.achievements[id]);
