@@ -1372,7 +1372,7 @@ function layoutTechs(portrait) {
   if (!portrait) {
     const rowY = [TREE_PAD + HEX_H / 2];
     rowY.push(rowY[0] + HEX_H * 0.75 + 6);
-    for (let k = 2; k < 6; k++) rowY.push(rowY[k - 1] + HEX_H + 12);
+    for (let k = 2; k < 6; k++) rowY.push(rowY[k - 1] + HEX_H + 6);
     const colX = c => TREE_PAD + (c + 0.5) * COL_W;
     let depth = 1;
     // Ab Stufe 2 läuft jeder Ast in seiner Spalte nach unten (auch Stufe 5/6).
@@ -1464,8 +1464,21 @@ export function openTech(state, ctx, keepView = false) {
   const portrait = W < 560;
   const { pos, w: TREE_W, h: TREE_H } = layoutTechs(portrait);
   // Hochformat: auf Breite skalieren, oben beginnen, nach unten verschieben.
+  // Nie kleiner als lesbar (Namen mindestens 12 px). Passt der Baum dann nicht
+  // ganz hinein, zeigt die Startansicht, was du jetzt erforschen kannst.
+  const MIN_SCALE = 12 / 14;
   const fit = portrait ? Math.min(1.1, W / TREE_W) : Math.min(1.2, W / TREE_W, H / TREE_H);
-  techNav.home = { scale: fit, tx: (W - TREE_W * fit) / 2, ty: portrait ? 0 : (H - TREE_H * fit) / 2 };
+  const scale = Math.max(MIN_SCALE, fit);
+  let tx = (W - TREE_W * scale) / 2, ty = portrait ? 0 : (H - TREE_H * scale) / 2;
+  if (scale > fit) {
+    const front = Object.keys(TECHS).filter(id => ['ready', 'poor'].includes(techStatus(state, id, ctx.actAs)));
+    const fx = front.length ? front.reduce((n, id) => n + pos[id].x, 0) / front.length : TREE_W / 2;
+    const fy = front.length ? front.reduce((n, id) => n + pos[id].y, 0) / front.length : 0;
+    const clamp = (v, size, view) => size * scale <= view ? (view - size * scale) / 2 : Math.min(0, Math.max(view - size * scale, v));
+    tx = clamp(W / 2 - fx * scale, TREE_W, W);
+    ty = clamp(H * 0.4 - fy * scale, TREE_H, H);
+  }
+  techNav.home = { scale, tx, ty };
   // Beim erneuten Öffnen (z. B. nach dem Erforschen) Ansicht und Auswahl
   // behalten, beim ersten Öffnen auf die Gesamtansicht setzen.
   if (!keepView) { resetTechNav(); selectedTech = null; }
@@ -1500,7 +1513,9 @@ export function openTech(state, ctx, keepView = false) {
     btn.style.top = p.y + 'px';
     btn.style.setProperty('--branch', BRANCH_COLOR[branchOf(id)]);
     btn.dataset.tech = id;
-    btn.innerHTML = `<span class="tn-in"><span class="tn-name">${t.name}</span><span class="tn-cost">${status === 'done' ? CHECK_ICON : techCost(state, id, ctx.actAs) + ' Sterne'}</span></span>`;
+    const cost = techCost(state, id, ctx.actAs);
+    btn.innerHTML = `<span class="tn-in"><span class="tn-name" lang="de">${t.name}</span><span class="tn-cost">${status === 'done' ? CHECK_ICON : cost}</span></span>`;
+    btn.setAttribute('aria-label', `${t.name}, ${status === 'done' ? 'erforscht' : status === 'locked' ? 'gesperrt, ' + cost + ' Sterne' : cost + ' Sterne'}`);
     nodes.appendChild(btn);
   }
   renderTechDetail(state, ctx);

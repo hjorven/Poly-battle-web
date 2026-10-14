@@ -485,8 +485,8 @@ button:focus-visible {
 .tech-hex.done .tn-cost { color: #fff; }
 .tech-hex.poor .tn-cost { color: #b91c1c; }
 .tech-hex.locked { background: var(--border-strong); }
-.tech-hex.locked .tn-in { background: var(--hover); color: var(--faint, #a1a1aa); }
-.tech-hex.locked .tn-cost { color: var(--faint, #a1a1aa); }
+.tech-hex.locked .tn-in { background: var(--hover); color: var(--muted); }
+.tech-hex.locked .tn-cost { color: var(--muted); }
 .tech-hex.selected { background: var(--primary); padding: 5px; transform: translate(-50%, -50%) scale(1.08); }
 
 #tech-detail {
@@ -1136,3 +1136,13 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
 .b3-tag:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .b3-hint { position: absolute; left: 8px; bottom: 6px; font-size: 11px; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); pointer-events: none; }
 @media (hover: none) { .b3-tag.blank { width: 22px; height: 22px; } .b3-tag { padding: 5px 8px; } }
+
+/* Forschung: Fenster füllt die Höhe, Baum nimmt den Platz, Schrift lesbar */
+#tech-overlay .card { height: calc(100dvh - 40px); max-height: 900px; overflow: hidden; }
+#tech-list { flex: 1; min-height: 0; }
+#tech-tree { flex: 1; height: auto; min-height: 240px; }
+#tech-detail { flex: none; min-height: 0; }
+.tech-hex .tn-in { padding: 0 5px; gap: 2px; }
+.tech-hex .tn-name { font-size: 14px; font-weight: 700; line-height: 1.08; hyphens: auto; -webkit-hyphens: auto; overflow-wrap: anywhere; }
+.tech-hex .tn-cost { font-size: 13px; }
+@media (max-width: 760px) { #tech-overlay .card { padding: 14px; } }
