@@ -41,7 +41,7 @@ const fmt = n => String(n).replace('.', ',');
   md += '## Fähigkeiten\n\n' + row(['Fähigkeit', 'Wirkung']) + '\n' + row(['---', '---']) + '\n';
   for (const [, a] of Object.entries(ABILITY_INFO)) md += row([`**${a.name}**`, a.desc]) + '\n';
   md += '\n## Aufrüsten\n\nSteht eine Einheit zu Zugbeginn im eigenen Gebiet, kann sie gegen den Preisunterschied aufgerüstet werden (Technologie nötig, verbraucht den Zug):\n\n';
-  for (const [from, to] of Object.entries(UPGRADES)) md += `- ${UNITS[from].name} → ${UNITS[to].name}\n`;
+  for (const [from, to] of Object.entries(UPGRADES)) md += `- ${UNITS[from].name} wird zu ${UNITS[to].name}\n`;
   write('Einheiten', md);
 }
 

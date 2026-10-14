@@ -2134,5 +2134,45 @@ test('Admin: Profilwerte setzen bleibt gültig', () => {
   assert.strictEqual(K.campaignStars(clean), K.MISSIONS.length * 3);
 });
 
+// --- Bau-Vorschau ------------------------------------------------------------------
+
+test('Bau-Vorschau: Farm neben Windmühle zeigt Gewinn und Nachbarn, Stand bleibt unverändert', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1, trained: false, isCapital: true };
+  st.cities = [city];
+  st.improvements[hk(6, 5)] = 'mill';
+  const snap = JSON.stringify(st);
+  const pv = R.improvePreview(st, city, 'farm', 6, 4);
+  assert.strictEqual(JSON.stringify(st), snap, 'Spielstand unverändert');
+  assert.strictEqual(pv.here, 1, 'Farm bringt selbst 1');
+  assert.strictEqual(pv.gain, 2, 'Farm +1 und Windmühle +1');
+  assert.deepStrictEqual(pv.changed, [{ q: 6, r: 5, delta: 1 }]);
+  assert.strictEqual(pv.after - pv.before, pv.gain);
+});
+
+test('Feld-Ertrag: Rohstoff, Gebäude, Stadtfeld', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1, trained: false };
+  st.cities = [city];
+  st.resources[hk(4, 5)] = 'fruit';
+  st.improvements[hk(6, 5)] = 'temple';
+  assert.strictEqual(R.tileYield(st, city, 4, 5), 1);
+  assert.strictEqual(R.tileYield(st, city, 6, 5), IMPROVEMENTS.temple.pop);
+  assert.strictEqual(R.tileYield(st, city, 5, 5), 0);
+  assert.strictEqual(R.tileYield(st, city, 5, 6), 0);
+  const sum = R.cityTiles(st, city).reduce((n, [q, r]) => n + R.tileYield(st, city, q, r), 0);
+  assert.strictEqual(R.cityIncome(st, city), city.pop + sum, 'Summe der Felder plus Bevölkerung = Stadteinkommen');
+});
+
+test('Bau-Vorschau: Monument zählt die Bevölkerung mit', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1, trained: false };
+  st.cities = [city];
+  const pv = R.improvePreview(st, city, 'm_wisdom', 6, 5);
+  assert.strictEqual(pv.gain, 3);
+  assert.ok(!st.improvements[hk(6, 5)]);
+});
+
+
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
 if (failed) process.exit(1);
