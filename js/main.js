@@ -1129,7 +1129,11 @@ function boot() {
       const text = me
         ? (won ? `Ich habe Poly Battle als ${needName(st, me)} in Runde ${st.round} gewonnen` : `Ich habe als ${needName(st, me)} ${st.round} Runden in Poly Battle durchgehalten`) + ` – ${pts} Punkte${st.daily ? ` in der Tagesherausforderung ${st.daily.split('-').reverse().join('.')}` : ''}. Schaffst du mehr?`
         : `${needName(st, st.winner)} hat Poly Battle in Runde ${st.round} gewonnen.`;
-      const res = await shareResult(st, me, headline, text);
+      let photo = null;
+      try { photo = render.snapshotMap(st, 2160, 1240); } catch (e) { photo = null; }
+      // Danach wieder die normale Sicht (mit Nebel, außer in der Kartenansicht).
+      render.syncBoard(st, viewer());
+      const res = await shareResult(st, me, headline, text, photo);
       if (res === 'geladen') ui.toast('Bild gespeichert, Text in die Zwischenablage kopiert', 'good');
       else if (res === 'fehler') ui.toast('Bild konnte nicht erstellt werden', 'warn');
     },

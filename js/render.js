@@ -1863,6 +1863,54 @@ export function project(q, r) {
   };
 }
 
+// Foto der ganzen Welt von schräg oben (ohne Nebel, ohne Markierungen) für das
+// Ergebnisbild. Gibt eine 2D-Canvas zurück oder null ohne WebGL.
+export function snapshotMap(state, w = 1720, h = 1000) {
+  if (!initialized) return null;
+  syncBoard(state, null);
+  // Nebel sofort (nicht animiert) entfernen.
+  if (fog) { for (const c of fog.cells) c.level = c.t.seen ? 0 : 1; paintFog(); }
+  const b = mapBounds();
+  const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
+  const tilt = 1.15; // ~66° über dem Horizont: steil, damit die Karte das Bild füllt
+  cam.position.set(cx, Math.sin(tilt) * 120, cz + Math.cos(tilt) * 120);
+  cam.lookAt(cx, 0, cz);
+  cam.updateMatrixWorld();
+  // Kartenecken (mit etwas Höhe für Berge und Städte) in Kamerakoordinaten.
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const x of [b.minX - 1, b.maxX + 1]) for (const z of [b.minZ - 1, b.maxZ + 1]) for (const y of [0, 1.2]) {
+    const v = new THREE.Vector3(x, y, z).applyMatrix4(cam.matrixWorldInverse);
+    x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+  }
+  // Auf das Bildformat erweitern.
+  let fw = x1 - x0, fh = y1 - y0;
+  if (fw / fh < w / h) { const d = fh * w / h - fw; x0 -= d / 2; x1 += d / 2; } else { const d = fw * h / w - fh; y0 -= d / 2; y1 += d / 2; }
+  Object.assign(cam, { left: x0, right: x1, top: y1, bottom: y0 });
+  cam.updateProjectionMatrix();
+
+  const hidden = [highlightGroup, idleGroup];
+  for (const node of unitNodes.values()) hidden.push(node.sprite);
+  const was = hidden.map(o => o.visible);
+  hidden.forEach(o => { o.visible = false; });
+  const oldFog = scene.fog, oldRatio = renderer.getPixelRatio();
+  const oldSize = renderer.getSize(new THREE.Vector2());
+  scene.fog = null;
+  renderer.setPixelRatio(1);
+  renderer.setSize(w, h, false);
+  renderer.render(scene, cam);
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  // Gleich nach dem Rendern kopieren, solange der Zeichenpuffer noch gilt.
+  out.getContext('2d').drawImage(renderer.domElement, 0, 0, w, h);
+  scene.fog = oldFog;
+  renderer.setPixelRatio(oldRatio);
+  renderer.setSize(oldSize.x, oldSize.y, false);
+  hidden.forEach((o, i) => { o.visible = was[i]; });
+  renderer.render(scene, camera);
+  return out;
+}
+
 // Nur für Tests/Entwicklung: Kamera direkt setzen (Konsole: __pb.cam(...)).
 export function debugCamera(x = 15, y = 3.2, z = 17.5, tx = 15, tz = 12) {
   if (!initialized) return;
