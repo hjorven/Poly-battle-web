@@ -300,6 +300,26 @@ function renderStats(profile) {
     ${recent ? `<ul class="recent">${recent}</ul>` : '<div class="hint">Noch keine Partie beendet.</div>'}`;
 }
 
+// Kampagne im Menü: Missionen mit Sternen, gesperrte mit Hinweis.
+export function renderCampaign(profile, missions, unlocked, total) {
+  $('campaign-title').textContent = `Kampagne (${total}/${missions.length * 3} Sterne)`;
+  $('campaign').innerHTML = `<div class="mission-list">${missions.map((m, i) => {
+    const stars = (profile.campaign && profile.campaign[m.id]) || 0;
+    const ok = unlocked(profile, i);
+    return `<button class="btn action" data-mission="${m.id}" ${ok ? '' : 'disabled'}>
+      <span>${i + 1}. ${esc(m.title)}<span class="sub">${ok ? esc(m.goal) + ' – ' + esc(m.story) : 'Gesperrt: erst Mission ' + i + ' schaffen'}</span></span>
+      <span class="m-stars">${stars ? stars + ' von 3 Sternen' : ''}</span></button>`;
+  }).join('')}</div>`;
+  $('campaign').querySelectorAll('[data-mission]').forEach(b => b.addEventListener('click', () => handlers.onMode('mission:' + b.dataset.mission)));
+}
+
+export function showMission(text, frac) {
+  const bar = $('mission-bar');
+  if (!text) { bar.classList.add('hidden'); return; }
+  bar.innerHTML = `${text}<div class="mb-bar"><div style="width:${Math.round(Math.min(1, frac) * 100)}%"></div></div>`;
+  bar.classList.remove('hidden');
+}
+
 // Kosmetik-Auswahl: freigeschaltete Teile wählbar, gesperrte mit Hinweis.
 export function renderLooks(profile, cosmetics, unlocked, hint, current) {
   $('looks').innerHTML = Object.entries(cosmetics).map(([cat, c]) => `<div class="setting-row">
@@ -322,6 +342,7 @@ export function showProfileResult(res, lp, achievements) {
       <span class="${res.levelAfter > res.levelBefore ? 'wp-up' : ''}">${res.levelAfter > res.levelBefore ? `Aufgestiegen: Stufe ${lp.level} – ${esc(lp.title)}!` : `Stufe ${lp.level} · ${lp.into}/${lp.need}`}</span></div>
     <div class="xp-bar"><div style="width:${Math.round(lp.frac * 100)}%"></div></div>
     ${res.achievements.length ? `<div class="wp-ach">${res.achievements.map(id => `<span>Erfolg: ${esc(achievements[id].name)}</span>`).join('')}</div>` : ''}
+    ${res.mission ? `<div class="wp-daily">Mission: ${res.mission.stars} von 3 Sternen${res.mission.improved ? ' – neuer Bestwert!' : ''}</div>` : ''}
     ${res.weekly ? `<div class="wp-daily">Wochen-Herausforderung: ${res.weekly.score} Punkte${res.weekly.improved ? ' – neuer Wochenbestwert!' : ` (Bestwert ${res.weekly.best})`}</div>` : ''}
     ${res.daily ? `<div class="wp-daily">Tagesherausforderung ${fmtDate(res.daily.key)}: ${res.daily.score} Punkte${res.daily.improved ? ' – neuer Bestwert!' : ` (Bestwert ${res.daily.best})`} · Tagesserie ${res.daily.streak}</div>` : ''}`;
 }
@@ -1098,7 +1119,8 @@ export function hideMenu() {
 export function showWinner(state, ctx) {
   const winner = state.winner;
   $('winner-title').textContent = (tribeName(state, winner) || NAMES[winner]) + ' gewinnt!';
-  let text = state.endReason === 'score' ? 'Höchste Punktzahl nach ' + state.turnLimit + ' Runden.' : 'Alle anderen Städte wurden erobert.';
+  let text = state.endReason === 'score' ? 'Höchste Punktzahl nach ' + state.turnLimit + ' Runden.'
+    : state.endReason === 'mission' ? `Mission geschafft – ${state.missionStars} von 3 Sternen.` : 'Alle anderen Städte wurden erobert.';
   if (ctx.mode === 'bot') text = (winner === 'player_1' ? 'Du hast gewonnen. ' : 'Die KI hat gewonnen. ') + text;
   else if (ctx.mode === 'online') text = (winner === ctx.myRole ? 'Du hast gewonnen. ' : 'Dein Gegner hat gewonnen. ') + text;
   $('winner-text').textContent = text + ` · Runde ${state.round}`;

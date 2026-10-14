@@ -17,7 +17,8 @@ export function emptyProfile() {
     bestScore: 0, fastestWin: null, tribeWins: {}, achievements: {}, seen: [],
     daily: { last: null, streak: 0, bestStreak: 0, best: {} },
     weekly: { best: {} },
-    look: {}
+    look: {},
+    campaign: {}
   };
 }
 
@@ -55,7 +56,8 @@ function sanitize(p) {
       streak: num(d.streak), bestStreak: num(d.bestStreak), best: obj(d.best)
     },
     weekly: { best: obj(obj(p.weekly).best) },
-    look: Object.fromEntries(Object.entries(obj(p.look)).filter(([k, v]) => typeof v === 'string' && COSMETICS[k] && COSMETICS[k].items[v]))
+    look: Object.fromEntries(Object.entries(obj(p.look)).filter(([k, v]) => typeof v === 'string' && COSMETICS[k] && COSMETICS[k].items[v])),
+    campaign: Object.fromEntries(Object.entries(obj(p.campaign)).map(([k, v]) => [k, Math.min(3, num(v))]))
   };
 }
 
@@ -256,7 +258,9 @@ export function gameFacts(state, me, { won, mode, score }) {
     ruins: (state.ruinsBy && state.ruinsBy[me]) || 0,
     comeback: !!(state.comeback && state.comeback[me]),
     daily: state.daily || null,
-    weekly: state.weekly || null
+    weekly: state.weekly || null,
+    mission: state.mission || null,
+    missionStars: state.missionStars || 0
   };
 }
 
@@ -308,6 +312,14 @@ export function recordGame(profile, facts) {
     daily = { key: facts.daily, score: facts.score, best: d.best[facts.daily], improved: facts.score > prevBest, streak: d.streak };
   }
 
+  let mission = null;
+  if (facts.mission) {
+    if (!profile.campaign) profile.campaign = {};
+    const before = profile.campaign[facts.mission] || 0;
+    profile.campaign[facts.mission] = Math.max(before, facts.missionStars || 0);
+    gain += Math.max(0, (facts.missionStars || 0) - before) * 60;
+    mission = { id: facts.mission, stars: facts.missionStars || 0, best: profile.campaign[facts.mission], improved: (facts.missionStars || 0) > before };
+  }
   let weekly = null;
   if (facts.weekly) {
     const prevBest = profile.weekly.best[facts.weekly] || 0;
@@ -330,6 +342,6 @@ export function recordGame(profile, facts) {
   profile.xp += gain;
   return {
     gain, levelBefore: levelOf(before), levelAfter: levelOf(profile.xp),
-    achievements: fresh, daily, weekly
+    achievements: fresh, daily, weekly, mission
   };
 }
