@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node test/logic.test.js",
     "serve": "python3 -m http.server 8080",
-    "wiki": "node scripts/gen-wiki.mjs"
+    "wiki": "node scripts/gen-wiki.mjs",
+    "admin-passwort": "node scripts/set-admin-password.mjs"
   }
 }
