@@ -57,52 +57,42 @@
   </main>
 
   <div id="menu-overlay" class="overlay hidden">
-    <div class="card">
-      <h1>Poly Battle</h1>
-      <p class="tagline">Rundenbasierte Eroberung im Stil von Battle of Polytopia</p>
-      <div id="profile-card"></div>
-      <div class="menu-buttons">
-        <button id="continueBtn" class="btn primary big hidden">Weiterspielen</button>
-        <button class="btn big daily-btn" data-mode="daily" id="dailyBtn">Tagesherausforderung</button>
-        <button class="btn big daily-btn" data-mode="weekly" id="weeklyBtn">Wochen-Herausforderung</button>
-        <button class="btn primary big" data-mode="bot">Gegen KI (1 Spieler)</button>
-        <button class="btn big" data-mode="hotseat">Hotseat (ein Gerät)</button>
-        <button class="btn big" data-mode="online">Online (Link teilen)</button>
-        <button class="btn big ghost" data-mode="tutorial">Tutorial (erstes Spiel)</button>
-        <button id="copyLinkBtn" class="btn big hidden">Link zum Spiel kopieren</button>
+    <div class="card menu-card">
+      <div class="menu-top">
+        <div class="menu-brand">
+          <h1>Poly Battle</h1>
+          <p class="tagline">Rundenbasierte Eroberung im Stil von Battle of Polytopia</p>
+        </div>
+        <div id="profile-card"></div>
       </div>
-      <details class="menu-section" id="board-box">
-        <summary>Bestenliste</summary>
-        <div class="menu-body">
-          <div class="seg board-tabs"><button class="chip-btn active" data-board="daily">Heute</button><button class="chip-btn" data-board="weekly">Diese Woche</button></div>
-          <div id="board"></div>
-        </div>
-      </details>
-      <details class="menu-section" id="campaign-box">
-        <summary id="campaign-title">Kampagne</summary>
-        <div class="menu-body" id="campaign"></div>
-      </details>
-      <details class="menu-section" id="achievements-box">
-        <summary id="achievements-title">Erfolge</summary>
-        <div class="menu-body"><div id="achievements" class="ach-grid"></div></div>
-      </details>
-      <details class="menu-section" id="looks-box">
-        <summary>Aussehen</summary>
-        <div class="menu-body" id="looks"></div>
-      </details>
-      <details class="menu-section" id="stats-box">
-        <summary>Statistik</summary>
-        <div class="menu-body" id="stats"></div>
-      </details>
-      <details class="menu-section" open id="tribe-box">
-        <summary>Dein Stamm (Gegen KI und Online)</summary>
-        <div class="menu-body">
-          <div id="tribe-pick" class="tribe-pick"></div>
-        </div>
-      </details>
-      <details class="menu-section" id="settings-box">
-        <summary>Spieleinstellungen</summary>
-        <div class="menu-body">
+      <div class="menu-tabs" role="tablist" aria-label="Menü">
+        <button class="menu-tab" role="tab" data-mtab="play" id="mtab-play" aria-controls="mpane-play">Spielen</button>
+        <button class="menu-tab" role="tab" data-mtab="campaign" id="mtab-campaign" aria-controls="mpane-campaign">Kampagne</button>
+        <button class="menu-tab" role="tab" data-mtab="board" id="mtab-board" aria-controls="mpane-board">Bestenliste</button>
+        <button class="menu-tab" role="tab" data-mtab="profile" id="mtab-profile" aria-controls="mpane-profile">Profil</button>
+        <button class="menu-tab" role="tab" data-mtab="help" id="mtab-help" aria-controls="mpane-help">Anleitung</button>
+      </div>
+
+      <section class="menu-pane" role="tabpanel" id="mpane-play" aria-labelledby="mtab-play">
+        <div class="play-grid">
+          <div class="play-modes">
+            <button id="continueBtn" class="btn primary big mode-wide hidden">Weiterspielen</button>
+            <button id="copyLinkBtn" class="btn big mode-wide hidden">Link zum Spiel kopieren</button>
+            <div class="mode-grid">
+              <button class="btn primary big mode" data-mode="bot">Gegen KI<span class="sub">Allein gegen 1 bis 5 Stämme</span></button>
+              <button class="btn big mode daily-btn" data-mode="daily" id="dailyBtn">Tagesherausforderung</button>
+              <button class="btn big mode daily-btn" data-mode="weekly" id="weeklyBtn">Wochen-Herausforderung</button>
+              <button class="btn big mode" data-mode="hotseat">Hotseat<span class="sub">Mehrere Spieler an einem Gerät</span></button>
+              <button class="btn big mode" data-mode="online">Online<span class="sub">Link teilen und gegeneinander spielen</span></button>
+              <button class="btn big mode ghost" data-mode="tutorial">Tutorial<span class="sub">Das erste Spiel mit Anleitung</span></button>
+            </div>
+          </div>
+          <div class="play-setup">
+            <h3 class="menu-h">Dein Stamm <span class="menu-h-sub">gegen KI und online</span></h3>
+            <div id="tribe-pick" class="tribe-pick"></div>
+            <div id="tribe-info" class="tribe-info" aria-live="polite"></div>
+            <h3 class="menu-h settings-h">Spieleinstellungen</h3>
+            <div id="settings-box" class="settings-box">
           <div class="setting-row">
             <span class="setting-label">Modus</span>
             <div class="seg">
@@ -170,12 +160,38 @@
               <button data-stars="reich" class="chip-btn">Reich (10)</button>
             </div>
           </div>
+            </div>
+          </div>
         </div>
-      </details>
-      <details class="menu-section">
-        <summary>So wird gespielt</summary>
-        <div class="menu-body">
-          <ul>
+      </section>
+
+      <section class="menu-pane hidden" role="tabpanel" id="mpane-campaign" aria-labelledby="mtab-campaign">
+        <h3 class="menu-h" id="campaign-title">Kampagne</h3>
+        <div id="campaign"></div>
+      </section>
+
+      <section class="menu-pane hidden" role="tabpanel" id="mpane-board" aria-labelledby="mtab-board">
+        <div class="seg board-tabs"><button class="chip-btn active" data-board="daily">Heute</button><button class="chip-btn" data-board="weekly">Diese Woche</button></div>
+        <div id="board"></div>
+      </section>
+
+      <section class="menu-pane hidden" role="tabpanel" id="mpane-profile" aria-labelledby="mtab-profile">
+        <div class="profile-grid">
+          <div>
+            <h3 class="menu-h" id="achievements-title">Erfolge</h3>
+            <div id="achievements" class="ach-grid"></div>
+          </div>
+          <div>
+            <h3 class="menu-h">Aussehen</h3>
+            <div id="looks"></div>
+            <h3 class="menu-h">Statistik</h3>
+            <div id="stats"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="menu-pane hidden help-pane" role="tabpanel" id="mpane-help" aria-labelledby="mtab-help">
+        <ul>
           <li><b>1–5 Stämme</b> starten auf einer großen prozedural erzeugten Welt (Klein, Normal oder Groß: Feld, Wald, Berg, Wasser, Ozean, Eis). Jeder Stamm beginnt mit eigener Technologie und Einheit – nach den echten Polytopia-Werten.</li>
           <li><b>Städte</b> liefern Einkommen aus Bevölkerung, Ressourcen und Gebäuden im Stadtgebiet. Kaufe Bevölkerung, bilde Einheiten aus und baue Farmen, Sägewerke, Minen, Häfen und Tempel.</li>
           <li><b>Kampf</b> nach der echten Formel: Schaden hängt von Angriff, Leben und Verteidigungsbonus ab; ohne passende Tech kein Wald-/Berg-Bonus. Die <b>Kampfprognose</b> zeigt Schaden und Vergeltung vor dem Angriff.</li>
@@ -206,9 +222,8 @@
           <li><b>Leuchttürme</b> stehen in den vier Kartenecken und ragen aus dem Nebel. Fahre mit einem Schiff auf oder neben einen Turm: +3 Sterne und Sicht auf die Umgebung. Jeder Stamm kann jeden Turm einmal erreichen; wer alle vier findet, bekommt 5 Sterne extra.</li>
           <li><b>Sieg:</b> Im Modus Eroberung erbeutest du alle Städte der Gegner. Im Modus Perfektion gewinnt nach 30 Runden die höchste Punktzahl (Städte, Bevölkerung, Technologien, Einheiten, Erkundung, Gebäude, Ruinen, Leuchttürme, Monumente).</li>
         </ul>
-        </div>
-      </details>
-      <p class="footnote">Karte verschieben: Ziehen · Zoomen: Rad/zwei Finger · Drehen/Neigen: rechte Maustaste, Zwei-Finger-Drehung, Knöpfe oder Q/E/R/F · Auswählen: Antippen · Tech-Baum: Doppeltipp setzt die Ansicht zurück</p>
+        <p class="footnote">Karte verschieben: Ziehen · Zoomen: Rad/zwei Finger · Drehen/Neigen: rechte Maustaste, Zwei-Finger-Drehung, Knöpfe oder Q/E/R/F · Auswählen: Antippen · Tech-Baum: Doppeltipp setzt die Ansicht zurück</p>
+      </section>
     </div>
   </div>
 
@@ -248,6 +263,24 @@
         <button id="confirmNo" class="btn big">Abbrechen</button>
         <button id="confirmYes" class="btn primary big">Ja</button>
       </div>
+    </div>
+  </div>
+
+  <div id="build-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="build-title">
+    <div class="card build-card">
+      <div class="card-head">
+        <h2 id="build-title">Stadt ausbauen</h2>
+        <span id="build-stars" class="stars"></span>
+        <button id="buildClose" class="btn ghost small">Schließen</button>
+      </div>
+      <div class="build-wrap">
+        <div class="build-map-box">
+          <div id="build-map" class="build-map"></div>
+          <div class="build-legend"><span class="lg can"></span>Hier kannst du jetzt bauen <span class="lg sel"></span>Gewählt</div>
+        </div>
+        <div id="build-detail" class="build-detail" aria-live="polite"></div>
+      </div>
+      <p class="build-keys">Feld antippen, dann Gebäude wählen · Tastatur: Pfeiltasten wechseln das Feld, Ziffern bauen, Esc schließt</p>
     </div>
   </div>
 
