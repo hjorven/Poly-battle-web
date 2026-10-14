@@ -5,6 +5,7 @@ import * as net from './net.js';
 import { botStep, applyStep } from './ai.js';
 import { sfx, isMuted, setMuted } from './sound.js';
 import { saveGame, loadGame, saveInfo, clearSave } from './save.js';
+import * as P from './profile.js';
 import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS } from './config.js';
 
 const app = {
@@ -228,12 +229,34 @@ function checkWinnerUI() {
     const me = app.mode === 'online' ? app.myRole : 'player_1';
     sfx(app.state.winner && (app.mode === 'hotseat' || app.state.winner === me) ? 'win' : 'lose');
   }
-  if (app.state.winner) { clearSave(); ui.showWinner(app.state, ctx()); }
+  if (app.state.winner) { clearSave(); ui.showWinner(app.state, ctx()); recordProfile(); }
   else if (humanDefeated()) {
     clearSave();
     const easier = app.state.aiLevel !== 'easy' || app.state.players.length > 2;
     ui.showDefeat(app.state, ctx(), { easier, retry: true });
+    recordProfile();
   }
+}
+
+// Beendete Partie einmal ins Profil eintragen (Solo gegen KI und online).
+function recordProfile() {
+  const st = app.state;
+  const me = app.mode === 'online' ? app.myRole : app.mode === 'bot' ? 'player_1' : null;
+  if (!me) { ui.showProfileResult(null); return; }
+  if (app.recordedGen !== app.gen) {
+    app.recordedGen = app.gen;
+    const score = st.finalScores && st.finalScores[me] != null ? st.finalScores[me] : R.score(st, me);
+    const profile = P.loadProfile();
+    // Online-Partien bleiben nach dem Ende abrufbar: jede nur einmal zählen.
+    const gid = app.online ? 'online:' + app.gameId : null;
+    if (gid && (profile.seen || []).includes(gid)) { app.lastResult = null; ui.showProfileResult(null); return; }
+    app.lastResult = P.recordGame(profile, P.gameFacts(st, me, { won: st.winner === me, mode: app.mode, score }));
+    if (gid) profile.seen = [...(profile.seen || []), gid].slice(-50);
+    P.saveProfile(profile);
+    if (app.lastResult.achievements.length || app.lastResult.levelAfter > app.lastResult.levelBefore) sfx('promote');
+  }
+  if (app.lastResult) ui.showProfileResult(app.lastResult, P.levelProgress(P.loadProfile().xp), P.ACHIEVEMENTS);
+  else ui.showProfileResult(null);
 }
 
 // Lokale Partien nach jeder Aktion sichern (Neuladen / Tab schließen).
@@ -244,6 +267,8 @@ function persist() {
 }
 
 function showMenu() {
+  const profile = P.loadProfile();
+  ui.renderProfile(profile, P.levelProgress(profile.xp), P.dailyChallenge(), P.ACHIEVEMENTS);
   ui.setContinue(saveInfo());
   ui.showMenu();
 }
@@ -799,6 +824,17 @@ function onTutor(action) {
   tutorTick();
 }
 
+function startDaily() {
+  const ch = P.dailyChallenge();
+  startLocal('bot', {
+    count: ch.count, tribe: ch.tribe, mapSize: ch.mapSize, mapType: ch.mapType,
+    aiLevel: ch.aiLevel, turnLimit: ch.turnLimit, stars: ch.stars, seed: ch.seed
+  });
+  app.state.daily = ch.key;
+  persist();
+  ui.toast('Tagesherausforderung: Heute spielen alle dieselbe Karte mit demselben Stamm. Nach 30 Runden zählt die Punktzahl.', 'good');
+}
+
 function startTutorial() {
   startLocal('bot', {
     count: 2, tribe: 'imperius', mapSize: 'small', mapType: 'continents', aiLevel: 'easy', turnLimit: null
@@ -828,7 +864,7 @@ function startLocal(mode, override = null) {
         ai: Array.from({ length: count - 1 }, (_, k) => 'player_' + (k + 2)), ...map
       }
     : { turnLimit: settings.turnLimit, ...map };
-  app.state = R.createGame(Math.floor(Math.random() * 2 ** 31), count, opts);
+  app.state = R.createGame(override && override.seed != null ? override.seed : Math.floor(Math.random() * 2 ** 31), count, opts);
   enterLocal();
   persist();
 }
@@ -1053,7 +1089,7 @@ function boot() {
       if (easier) ui.toast(`Neues Spiel: ${AI_LEVELS[aiLevel].label}, ${count - 1} ${count === 2 ? 'Gegner' : 'Gegner'}`, 'good');
     },
     onContinue: continueGame,
-    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : startLocal(mode),
+    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : mode === 'daily' ? startDaily() : startLocal(mode),
     onTutor,
     onCopyLink: copyLink
   });
