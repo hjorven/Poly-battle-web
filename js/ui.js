@@ -8,10 +8,9 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, incomeFor, personaOf, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS, toWorld } from './hex.js';
-import { crest, icon } from './heraldry.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
@@ -59,11 +58,6 @@ export function initUI(h) {
     handlers.onHotkey(action);
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
-  // Spielfeld beginnt direkt unter der (auf schmalen Geräten zweizeiligen) Leiste.
-  const syncTop = () => document.documentElement.style.setProperty('--topbar-h', $('topbar').offsetHeight + 'px');
-  syncTop();
-  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncTop).observe($('topbar'));
-  else window.addEventListener('resize', syncTop);
   $('buildClose').addEventListener('click', closeBuild);
   $('build-overlay').addEventListener('click', e => { if (e.target === $('build-overlay')) closeBuild(); });
   document.addEventListener('keydown', e => { if (build.open && !e.target.closest('input, textarea, select')) buildKey(e); });
@@ -244,116 +238,37 @@ export function toast(text, cls = '') {
   setTimeout(() => el.remove(), 2700);
 }
 
-// --- Obere Leiste: Schatzkammer, Runde, Wappen der Stämme ---------------------------
-
-const playerName = (state, p) => tribeName(state, p) || NAMES[p];
-const crestOf = (state, p, size, cls = '') => crest(state.tribes && state.tribes[p], playerColor(state, p), size, state.players.indexOf(p), cls);
-let stripState = null;
-let stripCtx = null;
-
-function crestChip(player, state, ctx) {
+function chip(player, state, ctx) {
+  const s = state.stars[player];
   const cities = state.cities.filter(c => c.owner === player).length;
-  const dead = cities === 0;
+  const units = state.units.filter(u => u.owner === player).length;
   const active = state.turn === player && !state.winner;
-  const me = player === ctx.viewer;
-  const label = `${playerName(state, player)}${me ? ' (du)' : ''}${dead ? ', besiegt' : `, ${state.stars[player]} Sterne, ${cities} ${cities === 1 ? 'Stadt' : 'Städte'}`}${active ? ', am Zug' : ''}`;
-  return `<button class="crest-btn${active ? ' active' : ''}${dead ? ' dead' : ''}${me ? ' me' : ''}" data-p="${player}" role="listitem" aria-label="${esc(label)}" title="${esc(label)}">
-    ${crestOf(state, player, 30)}
-  </button>`;
+  const me = ctx.mode !== 'online' || ctx.myRole === player;
+  const name = tribeName(state, player) || NAMES[player];
+  if (cities === 0) {
+    const e = state.eliminated && state.eliminated[player];
+    const by = e && e.by ? ` von ${tribeName(state, e.by) || NAMES[e.by]}` : '';
+    return `<div class="chip dead" title="Besiegt${by}${e ? ` in Runde ${e.round}` : ''}">
+      <span class="dot" style="background:${hex(playerColor(state, player))}"></span>
+      <span class="dead-name">${name}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
+      <span class="dead-tag">besiegt${e ? ` · Runde ${e.round}` : ''}</span>
+    </div>`;
+  }
+  return `<div class="chip ${active ? 'active' : ''}">
+    <span class="dot" style="background:${hex(playerColor(state, player))}"></span>
+    <span>${name}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
+    <span class="stars">${s} Sterne</span>
+    ${state.turnLimit ? `<span class="pts">${score(state, player)} P</span>` : ''}
+    <span class="meta">${cities} ${cities === 1 ? 'Stadt' : 'Städte'} · ${units} ${units === 1 ? 'Einheit' : 'Einheiten'}</span>
+  </div>`;
 }
 
 export function updateStrip(state, ctx) {
-  stripState = state; stripCtx = ctx;
   const players = state.players && state.players.length ? state.players : ['player_1', 'player_2'];
-  // Eigener Stamm zuerst, besiegte ans Ende.
-  const alive = p => state.cities.some(c => c.owner === p);
-  const order = [...players.filter(p => p === ctx.viewer), ...players.filter(p => p !== ctx.viewer && alive(p)), ...players.filter(p => p !== ctx.viewer && !alive(p))];
-  $('player-strip').innerHTML = order.map(p => crestChip(p, state, ctx)).join('');
-  $('player-strip').querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); toggleCrestPop(b.dataset.p, b); }));
-  $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' von ' + state.turnLimit : '');
-  // Schatzkammer: Sterne des Spielers, der hier handelt, und das Einkommen der nächsten Runde.
-  const p = ctx.actAs && state.players.includes(ctx.actAs) ? ctx.actAs : ctx.viewer;
-  const tr = $('treasury');
-  if (p && state.stars[p] != null) {
-    tr.innerHTML = `${icon('coin', 22, 'coin')}<span class="tr-num">${state.stars[p]}</span><span class="tr-inc">+${incomeFor(state, p)}<span class="tr-lbl"> nächste Runde</span></span>`;
-    tr.setAttribute('aria-label', `${state.stars[p]} Sterne, nächste Runde ${incomeFor(state, p)} dazu`);
-  } else tr.innerHTML = '';
-  const pop = $('crest-pop');
-  if (pop && !pop.classList.contains('hidden') && pop.dataset.p) fillCrestPop(pop.dataset.p);
-}
-
-// Infokarte zu einem Wappen (Antippen); schließt bei Klick daneben oder Esc.
-function toggleCrestPop(player, btn) {
-  let pop = $('crest-pop');
-  if (!pop) {
-    pop = document.createElement('div');
-    pop.id = 'crest-pop';
-    pop.className = 'crest-pop hud hidden';
-    pop.setAttribute('role', 'dialog');
-    document.body.appendChild(pop);
-    document.addEventListener('click', e => { if (!pop.contains(e.target)) pop.classList.add('hidden'); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') pop.classList.add('hidden'); });
-  }
-  if (!pop.classList.contains('hidden') && pop.dataset.p === player) { pop.classList.add('hidden'); return; }
-  pop.dataset.p = player;
-  fillCrestPop(player);
-  pop.classList.remove('hidden');
-  const r = btn.getBoundingClientRect();
-  const w = pop.offsetWidth;
-  pop.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
-  pop.style.top = (r.bottom + 8) + 'px';
-}
-
-function fillCrestPop(player) {
-  const state = stripState, ctx = stripCtx, pop = $('crest-pop');
-  if (!state || !state.players.includes(player)) return;
-  const cities = state.cities.filter(c => c.owner === player).length;
-  const units = state.units.filter(u => u.owner === player).length;
-  const me = player === ctx.viewer;
-  const persona = state.persona && state.persona[player] && PERSONAS[personaOf(state, player)];
-  const t = tribeOf(state, player);
-  let relation = '';
-  if (!me && ctx.viewer && state.players.includes(ctx.viewer)) {
-    relation = !hasMet(state, ctx.viewer, player) ? 'Noch nicht begegnet' : atPeace(state, ctx.viewer, player) ? 'Frieden mit dir' : 'Kein Frieden mit dir';
-  }
-  const e = state.eliminated && state.eliminated[player];
-  pop.innerHTML = `
-    <div class="cp-head">${crestOf(state, player, 40)}<div><b>${esc(playerName(state, player))}${me ? ' (du)' : ''}</b>
-      <span>${persona ? esc(persona.name) : t && t.perk ? esc(t.perk.name) : ''}${state.ai && state.ai.includes(player) ? ', KI' : ''}</span></div></div>
-    ${cities ? `<div class="cp-stats">
-      <span>${icon('coin', 14, 'coin')} ${state.stars[player]} Sterne</span>
-      <span>${cities} ${cities === 1 ? 'Stadt' : 'Städte'}</span>
-      <span>${units} ${units === 1 ? 'Einheit' : 'Einheiten'}</span>
-      <span>${score(state, player)} Punkte</span>
-    </div>` : `<div class="cp-rel">Besiegt${e ? ` in Runde ${e.round}${e.by ? ' von ' + esc(playerName(state, e.by)) : ''}` : ''}</div>`}
-    ${t && t.perk ? `<div class="cp-perk">${esc(t.perk.name)}: ${esc(t.perk.desc)}</div>` : ''}
-    ${relation && cities ? `<div class="cp-rel">${relation}</div>` : ''}`;
-}
-
-// KI-Botschaft als Sprechblase unter dem Wappen des Stammes.
-let speakTimer = null;
-export function speak(player, text, who) {
-  const btn = $('player-strip').querySelector(`[data-p="${player}"]`);
-  if (!btn) { toast(`„${text}“ – ${who}`, 'quote'); return; }
-  let b = $('speech');
-  if (!b) {
-    b = document.createElement('div');
-    b.id = 'speech';
-    b.className = 'speech hud hidden';
-    b.setAttribute('role', 'status');
-    b.addEventListener('click', () => b.classList.add('hidden'));
-    document.body.appendChild(b);
-  }
-  b.innerHTML = `<q>${esc(text)}</q><span>${esc(who)}</span>`;
-  b.classList.remove('hidden');
-  const r = btn.getBoundingClientRect();
-  const w = b.offsetWidth;
-  const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
-  b.style.left = left + 'px';
-  b.style.top = (r.bottom + 10) + 'px';
-  b.style.setProperty('--tip', Math.max(14, Math.min(w - 14, r.left + r.width / 2 - left)) + 'px');
-  clearTimeout(speakTimer);
-  speakTimer = setTimeout(() => b.classList.add('hidden'), 6500);
+  // Besiegte Stämme ans Ende.
+  const order = [...players.filter(p => state.cities.some(c => c.owner === p)), ...players.filter(p => !state.cities.some(c => c.owner === p))];
+  $('player-strip').innerHTML = order.map(p => chip(p, state, ctx)).join('');
+  $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' / ' + state.turnLimit : '');
 }
 
 // Lautsprecher als kleine Vektorgrafik (keine Emojis); durchgestrichen = stumm.
@@ -540,7 +455,7 @@ export function showNews(report) {
     return `<li class="tone-${l.tone || 'info'}"><button data-news="${i}" ${l.q == null ? 'tabindex="-1"' : ''}>${esc(l.text)}${l.q != null ? ' <span class="news-go">zeigen</span>' : ''}</button></li>`;
   }).join('')}</ul></div>`).join('');
   box.innerHTML = `<h3>Rundenbericht</h3><div class="news-head">${esc(report.head)}</div>${html}
-    <button class="btn small" data-news-close>Schließen</button>`;
+    <button class="btn small" data-news-close>OK</button>`;
   box.querySelectorAll('[data-news]').forEach(b => b.addEventListener('click', () => {
     const l = flat[Number(b.dataset.news)];
     if (l.q != null) handlers.onJump(l.q, l.r);
@@ -558,20 +473,10 @@ export function setEndTurn(enabled) {
 }
 
 // Zeigt an, wie viele eigene Einheiten in diesem Zug noch etwas tun können.
-// Zugende-Assistent: „Weiter“ springt zur nächsten offenen Aufgabe und nennt sie.
-export function setTasks(tasks) {
+export function setIdle(count) {
   const btn = $('idleBtn');
-  btn.classList.toggle('hidden', !tasks.length);
-  if (!tasks.length) return;
-  const units = tasks.filter(t => t.kind === 'unit').length;
-  const cities = tasks.filter(t => t.kind === 'train').length;
-  const other = tasks.length - units - cities;
-  const parts = [];
-  if (units) parts.push(`${units} ${units === 1 ? 'Einheit' : 'Einheiten'}`);
-  if (cities) parts.push(`${cities} ${cities === 1 ? 'Stadt' : 'Städte'}`);
-  if (other) parts.push(`${other} ${other === 1 ? 'Hinweis' : 'Hinweise'}`);
-  btn.innerHTML = `<span class="nb-main">${icon('next', 12)}Weiter</span><span class="nb-sub">${parts.join(', ')} offen</span>`;
-  btn.setAttribute('aria-label', `Weiter zur nächsten Aufgabe: ${parts.join(', ')} offen`);
+  btn.classList.toggle('hidden', !count);
+  btn.innerHTML = `<span class="idle-dot"></span>${count}<span class="lbl"> bereit</span>`;
 }
 
 // „2 Krieger, 1 Reiter“
@@ -613,76 +518,20 @@ function wirePanel(p) {
 }
 
 // Kleine Leiste für die gewählte Einheit (statt des großen Info-Menüs).
-// Aktionsleiste der gewählten Einheit: Werte als Symbole, häufige Aktionen
-// direkt antippbar; alles Weitere (Auflösen, Kampfprognose …) unter „Details“.
 export function showUnitChip(state, unit, ctx) {
-  const bar = $('unit-chip');
+  const chip = $('unit-chip');
   const def = UNITS[unit.carry || unit.type];
   const mine = unit.owner === ctx.actAs;
-  const live = mine && ctx.myTurn;
-  const cap = hpCap(unit);
-  const opts = live ? unitOptions(state, unit) : [];
-  const status = ctx.hint ? `<b class="uc-hint">${esc(ctx.hint)}</b>`
-    : !mine ? esc(playerName(state, unit.owner))
-    : !ctx.myTurn ? 'Nicht am Zug'
-    : opts.length ? 'Kann noch ' + esc(opts.join(', ')) : 'Hat in diesem Zug gehandelt';
-  const stat = (ic, val, label) => `<span class="uc-stat" title="${label}" aria-label="${label} ${val}">${icon(ic, 15)}${val}</span>`;
-  const acts = live ? quickActions(state, unit, ctx) : [];
-  bar.innerHTML = `
-    <div class="uc-top">
-      ${crestOf(state, unit.owner, 30)}
-      <div class="uc-main">
-        <b class="uc-name">${def.name}${unit.carry ? ' (eingeschifft)' : ''}${unit.vet ? `<span class="uc-vet">Veteran</span>` : ''}</b>
-        <div class="uc-hp ${unit.hp / cap <= 0.35 ? 'low' : ''}" aria-hidden="true"><div style="width:${Math.max(0, unit.hp / cap * 100)}%"></div></div>
-      </div>
-      <div class="uc-stats">
-        ${stat('heart', `${unit.hp}/${cap}`, 'Leben')}
-        ${stat('sword', attackOf(state, unit), 'Angriff')}
-        ${stat('shield', defenseOf(state, unit), 'Verteidigung')}
-        ${stat('boot', `${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}`, 'Bewegung')}
-        ${def.range > 1 ? stat('bow', def.range, 'Reichweite') : ''}
-      </div>
-    </div>
-    <div class="uc-status">${status}</div>
-    <div class="uc-acts">
-      ${acts.map((a, i) => `<button class="btn uc-act${a.reason ? ' off' : ''}" data-act="${i}" ${a.reason ? 'aria-disabled="true"' : ''} title="${esc(a.reason || a.title || a.label)}">${esc(a.label)}${a.cost != null ? `<span class="uc-cost">${a.cost}</span>` : ''}</button>`).join('')}
-      <button class="btn ghost uc-act uc-details" data-details>Details</button>
-    </div>`;
-  bar.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
-  // Gesperrte Aktionen nennen beim Antippen ihren Grund (auf Touch gibt es kein Darüberfahren).
-  bar.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
-    const a = acts[Number(b.dataset.act)];
-    if (a.reason) toast(`${a.label}: ${a.reason}`, 'warn');
-    else a.run();
-  }));
-  bar.classList.remove('hidden');
-}
-
-// Häufige Aktionen für die Leiste (dieselben Regeln wie im Detail-Menü).
-function quickActions(state, unit, ctx) {
-  const out = [];
-  if (unit.type === 'settler') {
-    const f = canFound(state, unit, ctx.actAs);
-    out.push({ label: 'Stadt gründen', reason: f.ok ? '' : f.reason, run: () => handlers.onFound(unit) });
-  }
-  const city = cityAt(state, unit.q, unit.r);
-  if (city && city.owner === ctx.actAs) out.push({ label: 'Stadtmenü', title: 'Zum Menü der Stadt auf diesem Feld', run: () => handlers.onSelectCity(unit.q, unit.r) });
-  const up = upgradeOption(state, unit);
-  if (up) out.push({ label: `Aufrüsten zu ${UNITS[up.to].name}`, cost: up.cost, reason: up.ok ? '' : up.reason, run: () => handlers.onUpgrade(unit) });
-  for (const o of bridgeOptions(state, unit)) {
-    const chk = canBuildBridge(state, unit, o.dir, ctx.actAs);
-    out.push({ label: `Brücke nach ${DIR_NAMES[o.dir]}`, cost: o.cost, reason: chk.ok ? '' : chk.reason, run: () => handlers.onBuildBridge(unit, o.dir) });
-  }
-  if (!unit.carry && !UNITS[unit.type].abilities.includes('water') && state.techs[ctx.actAs].includes(ROAD.tech) && !roadAt(state, unit.q, unit.r)) {
-    const chk = canBuildRoad(state, ctx.actAs, unit.q, unit.r, true);
-    const spent = unit.mp <= 0 && unit.hasMoved;
-    if (chk.reason !== 'Städte sind schon angebunden') out.push({ label: 'Weg bauen', cost: ROAD.cost, reason: spent ? 'Keine Bewegung mehr' : chk.ok ? '' : chk.reason, run: () => handlers.onBuildRoad(unit.q, unit.r, unit) });
-  }
-  const dirTo = (q, r) => DIRS.findIndex(([dq, dr]) => unit.q + dq === q && unit.r + dr === r);
-  for (const [q, r] of unit.cargo ? unloadOptions(state, unit) : []) out.push({ label: `Absetzen nach ${DIR_NAMES[dirTo(q, r)]}`, run: () => handlers.onUnloadCargo(unit, q, r) });
-  for (const u of loadOptions(state, unit)) out.push({ label: `${UNITS[u.type].name} aufnehmen`, run: () => handlers.onLoadCargo(unit, u.id) });
-  for (const [q, r] of destroyableBridges(state, unit)) out.push({ label: 'Brücke einreißen', run: () => handlers.onDestroyBridge(unit, q, r) });
-  return out;
+  const opts = mine && ctx.myTurn ? unitOptions(state, unit) : [];
+  const status = !mine ? (tribeName(state, unit.owner) || NAMES[unit.owner])
+    : opts.length ? 'kann noch: ' + opts.join(', ') : 'erledigt';
+  chip.innerHTML = `
+    <span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>
+    <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ' + STAR_ICON : ''}</b>
+      <span class="uc-sub">${ctx.hint ? `<b class="uc-hint">${esc(ctx.hint)}</b>` : `Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}`}</span></span>
+    <button class="btn ghost small" data-details>Details</button>`;
+  chip.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
+  chip.classList.remove('hidden');
 }
 
 export function hideUnitChip() {
@@ -749,7 +598,7 @@ export function showUnitPanel(state, unit, ctx) {
       const spent = unit.mp <= 0 && unit.hasMoved;
       if (!(chk.reason === 'Städte sind schon angebunden')) {
         extra += `<div class="action-list"><button class="btn action" data-road ${chk.ok && !spent ? '' : 'disabled'}>
-          <span>Weg bauen<span class="sub">${spent ? 'Keine Bewegung mehr' : chk.ok ? 'Auf diesem Feld · verbraucht die restliche Bewegung' : chk.reason}</span></span>
+          <span>Straße bauen<span class="sub">${spent ? 'Keine Bewegung mehr' : chk.ok ? 'Auf diesem Feld · verbraucht die restliche Bewegung' : chk.reason}</span></span>
           <span class="cost">${ROAD.cost} Sterne</span></button></div>`;
       }
     }
@@ -795,7 +644,7 @@ export function showUnitPanel(state, unit, ctx) {
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ` <span class="vet-badge">${STAR_ICON} Veteran</span>` : ''}</div>
+        <div class="panel-title">${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ' <span class="vet-badge">${STAR_ICON} Veteran</span>' : ''}</div>
         <div class="panel-sub" style="color:${hex(playerColor(state, unit.owner))}">${owner}${mine ? ' (deine Einheit)' : ''}</div>
       </div>
       <div class="panel-head-right">
