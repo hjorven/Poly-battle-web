@@ -7,7 +7,7 @@ import { sfx, isMuted, setMuted } from './sound.js';
 import { saveGame, loadGame, saveInfo, clearSave, validState } from './save.js';
 import * as P from './profile.js';
 import { shareResult } from './share.js';
-import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS } from './config.js';
+import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS, PERSONAS } from './config.js';
 
 const app = {
   mode: null,
@@ -85,6 +85,7 @@ function refresh() {
   ui.setIdle(idle.length);
   render.setIdleMarkers(idle);
   warnThreats();
+  greetNewFaces();
   announceEliminations();
   announceMonuments();
   showNews();
@@ -181,6 +182,31 @@ function showNews() {
   persist();
 }
 
+// KI-Botschaft je Persönlichkeit, z. B. beim ersten Treffen oder bei Krieg.
+function quote(ai, kind) {
+  const st = app.state;
+  const persona = PERSONAS[R.personaOf(st, ai)];
+  if (!persona || !persona.lines[kind]) return;
+  const lines = persona.lines[kind];
+  const line = lines[(st.round + ai.length + kind.length) % lines.length];
+  ui.toast(`„${line}“ – ${needName(st, ai)} (${persona.name})`, 'quote');
+}
+
+// Erste Begegnung mit einer KI: Begrüßung in ihrem Ton.
+function greetNewFaces() {
+  const st = app.state, me = viewer();
+  if (!st || !me || !st.persona) return;
+  if (!app.metSeen || app.metSeen.gen !== app.gen) {
+    app.metSeen = { gen: app.gen, set: new Set(st.players.filter(p => R.hasMet(st, me, p))) };
+    return;
+  }
+  for (const p of st.players) {
+    if (p === me || app.metSeen.set.has(p) || !R.hasMet(st, me, p)) continue;
+    app.metSeen.set.add(p);
+    quote(p, 'meet');
+  }
+}
+
 // Neu besiegte Stämme einmal melden.
 function announceEliminations() {
   const st = app.state;
@@ -196,6 +222,7 @@ function announceEliminations() {
     if (app.elimSeen.set.has(p)) continue;
     app.elimSeen.set.add(p);
     if (p === me) continue;
+    if (e.by === me) quote(p, 'doom');
     const by = e.by === me ? 'dir' : e.by ? needName(st, e.by) : null;
     ui.toast(`${needName(st, p)} wurde besiegt${by ? ` – von ${by}` : ''}!`, e.by === me ? 'good' : '');
     if (e.by === me) sfx('win');
@@ -380,6 +407,7 @@ function announce(events) {
   for (const ev of events) {
     if (ev.kind === 'capture') {
       ui.toast(ev.to ? `Stadt erobert! (${needName(app.state, ev.to)})` : 'Stadt neutralisiert', 'good');
+      if (ev.from && R.isBot(app.state, ev.from) && ev.to === viewer()) quote(ev.from, 'loseCity');
       sfx('capture');
       if (ev.city) render.celebrate(ev.city.q, ev.city.r, R.playerColor(app.state, ev.to), true);
     } else if (ev.kind === 'bounty') {
@@ -436,9 +464,9 @@ function doOfferPeace(to) {
   const res = R.offerPeace(app.state, actAs(), to);
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
   const name = needName(app.state, to);
-  if (res.accepted) { ui.toast(`Frieden mit ${name} geschlossen`, 'good'); sfx('peace'); }
+  if (res.accepted) { ui.toast(`Frieden mit ${name} geschlossen`, 'good'); quote(to, 'peaceYes'); sfx('peace'); }
   else if (res.pending) ui.toast(`Friedensangebot an ${name} gesendet`, 'good');
-  else { ui.toast(`${name} lehnt ab (neuer Versuch in 3 Runden)`, 'warn'); sfx('error'); }
+  else { ui.toast(`${name} lehnt ab (neuer Versuch in 3 Runden)`, 'warn'); quote(to, 'peaceNo'); sfx('error'); }
   ui.showOverview(app.state, ctx());
   afterAction();
 }
@@ -758,6 +786,7 @@ async function playBotStep(step, player) {
     await render.syncBoard(app.state, viewer());
     if ((res.events || []).some(e => e.kind === 'capture' && e.from === human)) {
       ui.toast(`${needName(app.state, player)} hat eine deiner Städte erobert!`, 'warn');
+      quote(player, 'winCity');
     }
     return true;
   }
@@ -765,7 +794,7 @@ async function playBotStep(step, player) {
     ui.toast(`${needName(app.state, player)} hat eine deiner Städte erobert!`, 'warn');
   }
   if (step.kind === 'war' && res.ok) {
-    if (step.target === human) { ui.toast(`${needName(app.state, player)} bricht den Frieden und erklärt dir den Krieg!`, 'warn'); sfx('war'); }
+    if (step.target === human) { ui.toast(`${needName(app.state, player)} bricht den Frieden und erklärt dir den Krieg!`, 'warn'); quote(player, 'war'); sfx('war'); }
   }
   if (step.kind !== 'research' && step.kind !== 'war') await render.syncBoard(app.state, viewer());
   return step.kind !== 'research';

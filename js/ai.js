@@ -18,6 +18,7 @@ function attackScore(state, attacker, defender) {
   score += UNIT_VALUE[defender.type];
   score += Math.max(0, 12 - defender.hp) * 0.6;
   if (attacker.hp <= 2) score -= 6;
+  if (R.personaOf(state, attacker.owner) === 'conqueror') score += 3;
   return score;
 }
 
@@ -29,11 +30,15 @@ function targetCities(state, player) {
 // Frieden brechen, wenn er die KI blockiert (keine anderen Ziele mehr) oder
 // sie nach längerem Frieden klar überlegen ist.
 function warStep(state, player) {
+  const persona = R.personaOf(state, player);
+  // Eroberer brechen Frieden früher, Händler nur, wenn sonst nichts geht.
+  const ratio = persona === 'conqueror' ? 1.25 : persona === 'merchant' ? Infinity : 1.6;
+  const wait = persona === 'conqueror' ? 4 : 8;
   for (const other of R.players(state)) {
     if (!R.atPeace(state, player, other)) continue;
     const since = state.peace[[player, other].sort().join('|')];
     const noTargets = !targetCities(state, player).length;
-    const strong = R.score(state, player) >= 1.6 * R.score(state, other) && state.round - since >= 8;
+    const strong = R.score(state, player) >= ratio * R.score(state, other) && state.round - since >= wait;
     if (noTargets || strong) return { kind: 'war', target: other };
   }
   return null;
@@ -377,6 +382,12 @@ export function botStep(state, player) {
   const balloonTrain = balloonTrainStep(state, player);
   if (balloonTrain) return balloonTrain;
 
+  // Händler und Baumeister investieren jede zweite Runde zuerst in Gebäude.
+  const persona = R.personaOf(state, player);
+  if ((persona === 'builder' || persona === 'merchant') && state.round % 2 === 0) {
+    const early = bestBuilding(state, player);
+    if (early) return early;
+  }
   for (const c of R.citiesFor(state, player)) {
     const unlocked = R.unlockedUnits(state, player);
     const stars = state.stars[player];
@@ -400,7 +411,8 @@ export function botStep(state, player) {
     }
     // Küstenstädte bauen auch Schiffe, solange die KI keine hat.
     const naval = ['battleship', 'ship', 'boat'].find(t => unlocked.includes(t) && R.unitCost(state, player, t) <= stars - 2);
-    if (naval && !state.units.some(u => u.owner === player && UNITS[u.type].abilities.includes('water') && !u.carry) &&
+    const fleet = state.units.filter(u => u.owner === player && UNITS[u.type].abilities.includes('water') && !u.carry).length;
+    if (naval && fleet < (persona === 'seafarer' ? 3 : 1) &&
       R.canTrain(state, c, naval, player).ok) return { kind: 'train', city: c, type: naval };
   }
 
@@ -453,6 +465,13 @@ export function botStep(state, player) {
   ];
   if (R.citiesFor(state, player).some(c => R.coastal(state, c))) {
     techOrder.splice(techOrder.indexOf('roads') + 1, 0, ...techOrder.splice(techOrder.indexOf('fishing'), 2));
+  }
+  // Persönlichkeit: Lieblingstechniken nach vorn.
+  const favs = { conqueror: ['archery', 'riding', 'smithery', 'chivalry', 'crossbows'], merchant: ['roads', 'trade', 'markets', 'farming'],
+    seafarer: ['fishing', 'sailing', 'navigation', 'ramming'], builder: ['farming', 'construction', 'mills', 'mining', 'meditation'] }[persona] || [];
+  for (const t of favs.slice().reverse()) {
+    const i = techOrder.indexOf(t);
+    if (i > 0) techOrder.unshift(...techOrder.splice(i, 1));
   }
   for (const t of techOrder) {
     if (easy && TECHS[t].tier > 2) continue;

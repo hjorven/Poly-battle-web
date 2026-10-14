@@ -415,6 +415,58 @@ export const RUIN_STARS = 10;
 // Beute: Sterne für jede besiegte gegnerische Einheit.
 export const BOUNTY = 1;
 
+// KI-Persönlichkeiten: Verhalten (siehe ai.js) und kurze Botschaften.
+export const PERSONAS = {
+  conqueror: {
+    name: 'Eroberer', peace: 1.0,
+    lines: {
+      meet: ['Eure Mauern sehen zerbrechlich aus.', 'Beugt euch – oder brennt.', 'Noch ein Stamm, der bald mir gehört.'],
+      war: ['Genug geredet. Zu den Waffen!', 'Euer Land wird meines sein.'],
+      winCity: ['Diese Stadt gehört jetzt mir.', 'Eine Fahne weniger für euch.'],
+      loseCity: ['Das werdet ihr bereuen!', 'Ein Rückschlag – mehr nicht.'],
+      peaceYes: ['Fürs Erste. Aber vergesst nicht, wer stärker ist.'],
+      peaceNo: ['Frieden? Mit euch? Niemals.', 'Kniet nieder, dann reden wir.'],
+      doom: ['Mein Banner fällt … doch mein Name bleibt.']
+    }
+  },
+  merchant: {
+    name: 'Händler', peace: 1.6,
+    lines: {
+      meet: ['Willkommen, Fremder! Handel nützt uns beiden.', 'Schöne Straßen habt ihr. Noch.'],
+      war: ['Das Geschäft verlangt es. Nichts Persönliches.'],
+      winCity: ['Eine gute Investition.', 'Diese Stadt rechnet sich.'],
+      loseCity: ['Das wird teuer für euch.', 'Ein schlechtes Geschäft!'],
+      peaceYes: ['Ein Handschlag ist besser als ein Schwert.', 'Abgemacht – auf gute Geschäfte!'],
+      peaceNo: ['Euer Angebot ist nichts wert.'],
+      doom: ['Alles verloren … die Bücher schließen sich.']
+    }
+  },
+  seafarer: {
+    name: 'Seefahrer', peace: 1.25,
+    lines: {
+      meet: ['Ahoi! Das Meer gehört allen – meistens mir.', 'Seht ihr unsere Segel am Horizont?'],
+      war: ['Hisst die Segel – Angriff!', 'Das Meer wird rot.'],
+      winCity: ['Ein neuer Hafen für meine Flotte.'],
+      loseCity: ['Die Gezeiten wenden sich wieder.', 'Wir kommen mit der Flut zurück!'],
+      peaceYes: ['Ruhige See zwischen uns.'],
+      peaceNo: ['Wir segeln lieber gegen den Wind.'],
+      doom: ['Die letzte Flagge sinkt in die Wellen.']
+    }
+  },
+  builder: {
+    name: 'Baumeister', peace: 1.4,
+    lines: {
+      meet: ['Seht unsere Türme! Kommt uns nicht zu nahe.', 'Wir bauen für die Ewigkeit.'],
+      war: ['Unsere Mauern schützen uns – eure nicht.'],
+      winCity: ['Diese Stadt bauen wir schöner wieder auf.'],
+      loseCity: ['Stein um Stein holen wir sie zurück.', 'Unsere Mauern … gefallen!'],
+      peaceYes: ['Frieden lässt uns weiterbauen.'],
+      peaceNo: ['Erst, wenn unsere Mauern fertig sind.'],
+      doom: ['Unsere Werke überdauern uns.']
+    }
+  }
+};
+
 // Sonderregeln der Wochen-Herausforderung (eine je Kalenderwoche).
 export const WEEKLY_RULES = {
   clearsky: { name: 'Klarer Himmel', desc: 'Kein Nebel – alle sehen die ganze Karte.' },

@@ -4,7 +4,7 @@ import {
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
-  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY, UPGRADES
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY, UPGRADES, PERSONAS
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -125,7 +125,12 @@ export function canOfferPeace(state, from, to) {
 // nicht kurz vor dem Sieg über ihn steht.
 export function aiAcceptsPeace(state, ai, from) {
   const mine = score(state, ai), theirs = score(state, from);
-  return mine <= theirs * 1.25;
+  const persona = PERSONAS[personaOf(state, ai)];
+  return mine <= theirs * (persona ? persona.peace : 1.25);
+}
+
+export function personaOf(state, player) {
+  return (state.persona && state.persona[player]) || null;
 }
 
 function makePeace(state, a, b) {
@@ -1695,6 +1700,11 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   for (const p of state.players) {
     const tr = TRIBES[tribes[p]];
     const lvl = state.ai.includes(p) ? AI_LEVELS[state.aiLevel] : null;
+    if (state.ai.includes(p)) {
+      if (!state.persona) state.persona = {};
+      const list = Object.keys(PERSONAS);
+      state.persona[p] = list[Math.floor(rand() * list.length)];
+    }
     state.stars[p] = starStart + (tr ? tr.bonusStars : 0) + (lvl ? lvl.startBonus : 0);
     state.techs[p] = tr ? ['basic', ...tr.startTechs] : ['basic'];
     state.explored[p] = [];
