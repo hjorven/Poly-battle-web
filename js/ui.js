@@ -188,18 +188,29 @@ function chip(player, state, ctx) {
   const active = state.turn === player && !state.winner;
   const me = ctx.mode !== 'online' || ctx.myRole === player;
   const name = tribeName(state, player) || NAMES[player];
-  return `<div class="chip ${active ? 'active' : ''} ${cities === 0 ? 'dead' : ''}">
+  if (cities === 0) {
+    const e = state.eliminated && state.eliminated[player];
+    const by = e && e.by ? ` von ${tribeName(state, e.by) || NAMES[e.by]}` : '';
+    return `<div class="chip dead" title="Besiegt${by}${e ? ` in Runde ${e.round}` : ''}">
+      <span class="dot" style="background:${hex(playerColor(state, player))}"></span>
+      <span class="dead-name">${name}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
+      <span class="dead-tag">besiegt${e ? ` · Runde ${e.round}` : ''}</span>
+    </div>`;
+  }
+  return `<div class="chip ${active ? 'active' : ''}">
     <span class="dot" style="background:${hex(playerColor(state, player))}"></span>
     <span>${name}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
     <span class="stars">${s} Sterne</span>
     ${state.turnLimit ? `<span class="pts">${score(state, player)} P</span>` : ''}
-    <span class="meta">${cities} Städte · ${units} Einheiten</span>
+    <span class="meta">${cities} ${cities === 1 ? 'Stadt' : 'Städte'} · ${units} ${units === 1 ? 'Einheit' : 'Einheiten'}</span>
   </div>`;
 }
 
 export function updateStrip(state, ctx) {
   const players = state.players && state.players.length ? state.players : ['player_1', 'player_2'];
-  $('player-strip').innerHTML = players.map(p => chip(p, state, ctx)).join('');
+  // Besiegte Stämme ans Ende.
+  const order = [...players.filter(p => state.cities.some(c => c.owner === p)), ...players.filter(p => !state.cities.some(c => c.owner === p))];
+  $('player-strip').innerHTML = order.map(p => chip(p, state, ctx)).join('');
   $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' / ' + state.turnLimit : '');
 }
 

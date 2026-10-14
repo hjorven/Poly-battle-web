@@ -84,6 +84,7 @@ function refresh() {
   ui.setIdle(idle.length);
   render.setIdleMarkers(idle);
   warnThreats();
+  announceEliminations();
   announceMonuments();
   showNews();
   turnStartFeedback();
@@ -129,6 +130,27 @@ function showNews() {
   for (const e of news.filter(e => e.kind === 'hit')) lines.push({ text: `${name(e.by)} hat ${your(e.unit)} angegriffen (−${e.dmg} Leben)`, q: e.q, r: e.r });
   ui.showNews(lines);
   persist();
+}
+
+// Neu besiegte Stämme einmal melden.
+function announceEliminations() {
+  const st = app.state;
+  if (!st) return;
+  if (!app.elimSeen || app.elimSeen.gen !== app.gen) {
+    // Beim Laden eines Spiels bereits bekannte Niederlagen nicht erneut melden.
+    app.elimSeen = { gen: app.gen, set: new Set(Object.keys(st.eliminated || {})) };
+    return;
+  }
+  if (!st.eliminated) return;
+  const me = viewer();
+  for (const [p, e] of Object.entries(st.eliminated)) {
+    if (app.elimSeen.set.has(p)) continue;
+    app.elimSeen.set.add(p);
+    if (p === me) continue;
+    const by = e.by === me ? 'dir' : e.by ? needName(st, e.by) : null;
+    ui.toast(`${needName(st, p)} wurde besiegt${by ? ` – von ${by}` : ''}!`, e.by === me ? 'good' : '');
+    if (e.by === me) sfx('win');
+  }
 }
 
 // Neu freigeschaltete Monumente einmal ankündigen.
