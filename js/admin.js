@@ -6,14 +6,29 @@ import * as R from './rules.js';
 import { UNITS, TECHS, IMPROVEMENTS, TERRAIN, RESOURCES, hasAbility } from './config.js';
 import { hk, forEachHex, inBounds } from './hex.js';
 
-// SHA-256 von "pb-admin:<Code>". Der Code selbst steht nirgends im Quelltext.
-export const ADMIN_HASH = '679cf1e2beaae12da9f6de8eb1e5ae87dc5cb3dd8288927ea817a048e533d291';
+// Passwort-Prüfung ohne Klartext im Quelltext:
+//   Schlüssel  = SHA-256("pb-admin:" + Passwort)   – wird im Browser gemerkt
+//   ADMIN_CHECK = SHA-256(Schlüssel)                – steht hier im Code
+// Aus dem Prüfwert lässt sich der Schlüssel nicht zurückrechnen, die
+// Freischaltung also nicht aus dem Quelltext abschreiben. Neues Passwort:
+//   npm run admin-passwort -- "dein Passwort"
+export const ADMIN_CHECK = 'bb5f3a11c3a31872ff6e9eab6f22e98bf68cbf7282592f0539deff43fcdb2d5a';
 
-export async function checkCode(code) {
-  const data = new TextEncoder().encode('pb-admin:' + String(code || '').trim());
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-  return hex === ADMIN_HASH;
+export async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export const keyFor = password => sha256Hex('pb-admin:' + String(password || '').trim());
+
+export async function checkKey(key, check = ADMIN_CHECK) {
+  return typeof key === 'string' && /^[0-9a-f]{64}$/.test(key) && (await sha256Hex(key)) === check;
+}
+
+// Passwort prüfen; bei Erfolg den Schlüssel zum Merken zurückgeben, sonst null.
+export async function checkCode(password, check = ADMIN_CHECK) {
+  const key = await keyFor(password);
+  return (await checkKey(key, check)) ? key : null;
 }
 
 export const markAdmin = st => { st.admin = true; };

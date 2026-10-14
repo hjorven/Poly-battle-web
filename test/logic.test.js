@@ -1980,9 +1980,17 @@ const freeHex = (st, wantWet) => {
   return hit;
 };
 
-test('Admin: falscher Code wird abgelehnt, Hash hat 64 Zeichen', async () => {
-  assert.strictEqual(A.ADMIN_HASH.length, 64);
-  assert.strictEqual(await A.checkCode('falsch'), false);
+test('Admin: Passwort, Schlüssel und Prüfwert', async () => {
+  assert.strictEqual(A.ADMIN_CHECK.length, 64);
+  assert.strictEqual(await A.checkCode('falsch'), null);
+  // Eigener Prüfwert: richtiges Passwort liefert den Schlüssel, der Prüfwert selbst schaltet nicht frei.
+  const key = await A.keyFor('Mein Passwort 1');
+  const check = await A.sha256Hex(key);
+  assert.strictEqual(await A.checkCode('Mein Passwort 1', check), key);
+  assert.strictEqual(await A.checkCode('mein passwort 1', check), null);
+  assert.strictEqual(await A.checkKey(key, check), true);
+  assert.strictEqual(await A.checkKey(check, check), false, 'abgeschriebener Prüfwert reicht nicht');
+  assert.strictEqual(await A.checkKey('kaputt', check), false);
 });
 
 test('Admin: Sterne, Technik mit Voraussetzungen, Markierung', () => {

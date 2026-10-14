@@ -1,5 +1,6 @@
-// Oberfläche des Admin-/Kreativ-Panels. Nur nach Eingabe des Admin-Codes
-// sichtbar; in Online-Partien gesperrt. Die eigentlichen Änderungen stehen in
+// Oberfläche des Admin-/Kreativ-Panels. Nur nach Eingabe des Admin-Passworts
+// sichtbar; online nur im eigenen Zug nutzbar (der Server nimmt nur den Zug
+// des Spielers an, der dran ist). Die eigentlichen Änderungen stehen in
 // admin.js, main.js reicht über `api` die nötigen Zugriffe herein.
 
 import * as A from './admin.js';
@@ -7,7 +8,7 @@ import * as P from './profile.js';
 import * as K from './campaign.js';
 import { UNITS, UNIT_ORDER, TECHS, IMPROVEMENTS, TERRAIN, RESOURCES } from './config.js';
 
-const KEY = 'pb_admin_v1';
+const KEY = 'pb_admin_v2';
 const BACKUP = 'pb_profile_admin_backup';
 
 let api = null;
@@ -18,12 +19,23 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = () => { try { return globalThis.localStorage || null; } catch (e) { return null; } };
 
+let unlocked = false;
+
 export function isUnlocked() {
-  const s = store();
-  try { return !!s && s.getItem(KEY) === A.ADMIN_HASH; } catch (e) { return false; }
+  return unlocked;
+}
+
+// Gemerkten Schlüssel prüfen (asynchron; ein abgeschriebener Prüfwert reicht nicht).
+async function restore() {
+  let key = null;
+  try { key = store().getItem(KEY); store().removeItem('pb_admin_v1'); } catch (e) { key = null; }
+  unlocked = await A.checkKey(key);
+  if (!unlocked && key) { try { store().removeItem(KEY); } catch (e) { /* ignore */ } }
+  $('adminBtn').classList.toggle('hidden', !unlocked);
 }
 
 function lock() {
+  unlocked = false;
   try { store().removeItem(KEY); } catch (e) { /* ignore */ }
   setTool(null);
   $('admin-panel').classList.add('hidden');
@@ -54,15 +66,17 @@ export function initAdmin(handlers) {
   document.addEventListener('keydown', e => {
     if (e.ctrlKey && e.shiftKey && (e.key === 'A' || e.key === 'a')) { e.preventDefault(); open(); }
   });
-  if (isUnlocked()) btn.classList.remove('hidden');
+  restore();
 }
 
 // Freischalten (Code-Abfrage) oder direkt öffnen.
 export function open() {
   if (isUnlocked()) { show(); return; }
   api.askCode(async code => {
-    if (!(await A.checkCode(code))) return 'Falscher Code.';
-    try { store().setItem(KEY, A.ADMIN_HASH); } catch (e) { return 'Speichern im Browser nicht möglich.'; }
+    const key = await A.checkCode(code);
+    if (!key) return 'Falsches Passwort.';
+    unlocked = true;
+    try { store().setItem(KEY, key); } catch (e) { /* nur für diese Sitzung freigeschaltet */ }
     $('adminBtn').classList.remove('hidden');
     show();
     return null;
@@ -95,9 +109,11 @@ export function activeTool() {
 function blocked() {
   const app = api.app();
   if (!app.state) return 'Starte zuerst ein Spiel.';
-  if (app.online || app.mode === 'online') return 'In Online-Partien ist das Panel gesperrt.';
+  if (online() && !api.myTurn()) return 'Online geht das Panel nur in deinem Zug – der Server nimmt nur Änderungen des Spielers an, der dran ist.';
   return null;
 }
+
+const online = () => { const app = api.app(); return !!(app.online || app.mode === 'online'); };
 
 function setTool(t) {
   tool = t;
@@ -179,14 +195,15 @@ function gameTab(st) {
     <h4>Züge</h4>
     <div class="adm-grid">
       <button class="btn small" data-a="refresh">Einheiten und Städte erfrischen</button>
-      <button class="btn small" data-a="pause">${app.adminPauseAi ? 'KI wieder handeln lassen' : 'KI pausieren'}</button>
+      <button class="btn small" data-a="pause"${online() ? ' disabled title="Online nicht möglich"' : ''}>${app.adminPauseAi ? 'KI wieder handeln lassen' : 'KI pausieren'}</button>
     </div>
     <div class="adm-row">
       Runden vorspulen
       <select data-set="rounds">${opts([[1, '1'], [5, '5'], [10, '10'], [25, '25']].map(([a, b]) => [String(a), b]), String(cur.rounds))}</select>
-      <button class="btn small" data-a="skip">Mit KI</button>
-      <button class="btn small" data-a="skip-still">Ohne KI</button>
+      <button class="btn small" data-a="skip"${online() ? ' disabled' : ''}>Mit KI</button>
+      <button class="btn small" data-a="skip-still"${online() ? ' disabled' : ''}>Ohne KI</button>
     </div>
+    ${online() ? '<p class="hint">Online-Partie: Änderungen gehen sofort an den Server und sind für alle sichtbar. Vorspulen, KI-Pause und Laden sind hier aus.</p>' : ''}
     <p class="hint">Runde ${st.round}${st.turnLimit ? ' von ' + st.turnLimit : ''}. Schonfrist der KI: ${st.provoked && Object.keys(st.provoked).length ? 'teils aufgehoben' : 'aktiv'}.</p>
     <div class="adm-grid">
       <button class="btn small" data-a="provoke">Schonfrist aufheben</button>
@@ -253,8 +270,8 @@ function saveTab() {
     <h4>Laden</h4>
     <textarea id="adm-import" rows="4" placeholder="Spielstand (JSON) hier einfügen"></textarea>
     <div class="adm-grid">
-      <button class="btn small" data-a="import">Laden</button>
-      <button class="btn small" data-a="file">Datei wählen</button>
+      <button class="btn small" data-a="import"${online() ? ' disabled' : ''}>Laden</button>
+      <button class="btn small" data-a="file"${online() ? ' disabled' : ''}>Datei wählen</button>
     </div>
     <p class="hint">Geladene Stände gelten als Testpartie.</p>`;
 }
