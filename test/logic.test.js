@@ -359,6 +359,17 @@ test('Profil: Stufen, Erfolge, Serie, Speichern', () => {
   assert.deepStrictEqual(P.loadProfile({ getItem: () => '{kaputt', setItem() {} }), P.emptyProfile());
 });
 
+test('Besiegte Stämme: Runde und Sieger werden vermerkt', () => {
+  const st = makeState();
+  st.round = 7;
+  st.turn = 'player_1';
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }, { q: 6, r: 5, owner: 'player_2', pop: 1 }, { q: 9, r: 9, owner: 'player_3', pop: 1 }];
+  st.units = [unit('w', 'player_1', 'warrior', 7, 5)];
+  assert.ok(R.moveUnit(st, st.units[0], 6, 5).ok);
+  assert.deepStrictEqual(st.eliminated.player_2, { round: 7, by: 'player_1' });
+  assert.ok(!st.eliminated.player_3);
+});
+
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
   const st = makeState();
   st.explored = { player_1: [], player_2: [] };

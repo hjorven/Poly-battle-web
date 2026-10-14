@@ -927,6 +927,11 @@ export function checkWinner(state) {
   }
   const dead = new Set(list.filter(p => !alive(state, p)));
   if (dead.size) state.units = state.units.filter(u => !dead.has(u.owner));
+  // Wann und von wem ein Stamm besiegt wurde (für Leiste und Meldung).
+  if (!state.eliminated) state.eliminated = {};
+  for (const p of dead) {
+    if (!state.eliminated[p]) state.eliminated[p] = { round: state.round, by: state.turn !== p ? state.turn : null };
+  }
 }
 
 export function unlockedUnits(state, player) {
