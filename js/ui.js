@@ -8,7 +8,7 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
@@ -566,7 +566,8 @@ export function showCityPanel(state, city, ctx) {
       <span>Bevölkerung +1<span class="sub">Mehr Sterne pro Runde, neue Stufe mit Belohnung (max ${MAX_POP})</span></span>
       <span class="cost">${popCost(city, state)} Sterne</span>
     </button></div>`;
-    if (city.trained) actions += `<div class="hint">Diese Stadt hat bereits diese Runde ausgebildet.</div>`;
+    if (city.trained) actions += `<div class="hint">Diese Stadt hat diese Runde schon eine Landeinheit ausgebildet${cityPorts(state, city).length && !city.trainedShip ? ' – ein Schiff geht noch' : ''}.</div>`;
+    else if (city.trainedShip) actions += `<div class="hint">Schiff gebaut – eine Landeinheit geht diese Runde noch.</div>`;
     if (occupied) actions += `<div class="hint">Einheit in der Stadt – zum Ausbilden zuerst wegziehen.</div>`;
     actions += buildRows(state, city, ctx);
   }

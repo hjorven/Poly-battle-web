@@ -370,6 +370,25 @@ test('Besiegte Stämme: Runde und Sieger werden vermerkt', () => {
   assert.ok(!st.eliminated.player_3);
 });
 
+test('Hafen: eine Landeinheit und zusätzlich ein Schiff pro Runde', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1 };
+  st.cities = [city];
+  st.terrain[5 * MAP_W + 6] = 'water';
+  st.terrain[4 * MAP_W + 6] = 'water';
+  st.improvements = { '6,5': 'port', '6,4': 'port' };
+  st.techs.player_1.push('fishing', 'sailing');
+  st.stars.player_1 = 50;
+  assert.ok(R.trainUnit(st, city, 'warrior', 'player_1').ok);
+  assert.ok(!R.canTrain(st, city, 'warrior', 'player_1').ok, 'zweite Landeinheit nicht');
+  st.units = st.units.filter(u => u.type !== 'warrior');
+  assert.ok(!R.canTrain(st, city, 'warrior', 'player_1').ok, 'auch bei freier Stadt nicht');
+  assert.ok(R.trainUnit(st, city, 'boat', 'player_1').ok, 'Schiff zusätzlich');
+  assert.strictEqual(R.canTrain(st, city, 'ship', 'player_1').reason, 'Schon ein Schiff gebaut', 'trotz zweitem freien Hafen nur eins');
+  R.startTurn(st);
+  assert.ok(R.canTrain(st, city, 'ship', 'player_1').ok, 'nächste Runde wieder');
+});
+
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
   const st = makeState();
   st.explored = { player_1: [], player_2: [] };
@@ -798,7 +817,7 @@ test('Marine: nur auf Wasser, Hafen nötig', () => {
   assert.ok(R.trainUnit(st, city, 'boat', 'player_1').ok);
   const built = st.units.find(u => u.type === 'boat');
   assert.deepStrictEqual([built.q, built.r], [6, 5], 'Boot liegt im Hafen');
-  city.trained = false;
+  city.trainedShip = false;
   assert.strictEqual(R.canTrain(st, city, 'boat', 'player_1').reason, 'Hafen besetzt');
 });
 
