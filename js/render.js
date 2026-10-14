@@ -435,14 +435,54 @@ function roadThroughDecor(t, sig) {
       if (!best || gap > best.gap) best = { vx, vz, gap };
     }
   }
+  // Bäume auf dem Weg rücken an den Rand zwischen die Straßenarme (der Wald
+  // bleibt Wald); nur wenn dort kein Platz ist, verschwinden sie.
+  const moved = new Map();
+  if (sig) {
+    const spots = [];
+    for (let k = 0; k < 12; k++) {
+      const ang = k * Math.PI / 6 + 0.26, vx = Math.cos(ang), vz = Math.sin(ang);
+      for (const rad of [0.5, 0.36]) {
+        const x = vx * rad, z = vz * rad;
+        if (!onRoadPath(x, z, env, 0.26)) spots.push([x, z]);
+      }
+    }
+    const taken = [];
+    const keyOf = d => d.userData.tree.join(',');
+    for (const d of t.decor) {
+      if (!d.userData.tree || moved.has(keyOf(d))) continue;
+      const [x, z] = d.userData.tree;
+      if (!onRoadPath(x, z, env, 0.24)) { moved.set(keyOf(d), [x, z, 1]); taken.push([x, z]); continue; }
+    }
+    for (const d of t.decor) {
+      if (!d.userData.tree || moved.has(keyOf(d))) continue;
+      // Nächster freier Platz mit Abstand zu anderen Bäumen.
+      const [x, z] = d.userData.tree;
+      let best = null;
+      for (const sp of spots) {
+        if (taken.some(([a, b]) => Math.hypot(a - sp[0], b - sp[1]) < 0.2)) continue;
+        const dist = Math.hypot(sp[0] - x, sp[1] - z);
+        if (!best || dist < best.dist) best = { sp, dist };
+      }
+      if (best) { taken.push(best.sp); moved.set(keyOf(d), [best.sp[0], best.sp[1], 0.8]); }
+      else moved.set(keyOf(d), null);
+    }
+  }
   for (const d of t.decor) {
     if (d.userData.tree) {
       const [x, z] = d.userData.tree;
       const s = d.userData.size || 1;
-      const blocked = sig && onRoadPath(x, z, env, 0.24);
+      const spot = sig ? moved.get(d.userData.tree.join(',')) : [x, z, 1];
+      const blocked = !spot;
+      const f = blocked ? 0 : spot[2];
+      if (d.userData.baseY == null) d.userData.baseY = d.position.y;
+      if (!blocked) {
+        const top = TERRAIN.forest.height / 2;
+        d.position.set(spot[0], top + (d.userData.baseY - top) * f, spot[1]);
+      }
       d.scale.setScalar(blocked ? 0.0001 : 1);
-      if (!blocked && d.userData.size) d.scale.setScalar(s);
-      if (!blocked && !d.userData.size) d.scale.set(1, d.userData.trunkScale || d.scale.y || 1, 1);
+      if (!blocked && d.userData.size) d.scale.setScalar(s * f);
+      if (!blocked && !d.userData.size) d.scale.set(f, (d.userData.trunkScale || d.scale.y || 1) * f, f);
     } else if (d.userData.peak || d.userData.snow) {
       if (d.userData.base == null) d.userData.base = d.position.y;
       const sc = sig ? 0.6 : 1;
