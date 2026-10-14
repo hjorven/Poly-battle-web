@@ -200,7 +200,7 @@ export const TECHS = {
   ramming: { name: 'Rammen', tier: 2, req: 'fishing', desc: 'Zweig: Aquatismus' },
   archery: { name: 'Bogenschießen', tier: 2, req: 'hunting', desc: 'Bogenschützen; Wald-Verteidigung' },
   forestry: { name: 'Forstwirtschaft', tier: 2, req: 'hunting', desc: 'Sägewerke bauen (+1 Einkommen)' },
-  roads: { name: 'Wege', tier: 2, req: 'riding', desc: 'Straßen (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1' },
+  roads: { name: 'Wege', tier: 2, req: 'riding', desc: 'Wege (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1' },
   freespirit: { name: 'Freier Geist', tier: 2, req: 'riding', desc: 'Zweig: Ritterlichkeit' },
 
   // Je Ast: Stufe 2 → 3 → 4 → 5 → 6. Neue Inhalte stehen auch früh (Stufe 3/4),
