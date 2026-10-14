@@ -429,6 +429,7 @@ export function onRoadNet(state, q, r) {
 // über das Stadtmenü (dann auch außerhalb des eigenen Gebiets erlaubt).
 export function canBuildRoad(state, player, q, r, byUnit = false) {
   if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (!isCoord(q, r)) return { ok: false, reason: 'Ungültiges Feld' };
   if (!hasTech(state, player, ROAD.tech)) return { ok: false, reason: `Technologie fehlt: ${TECHS[ROAD.tech].name}` };
   if (!inBounds(q, r)) return { ok: false, reason: 'Außerhalb der Karte' };
   const t = TERRAIN[terrainAt(state, q, r)];
@@ -736,7 +737,7 @@ function occupancy(state) {
 
 export function reachableMap(state, unit) {
   const out = new Map();
-  if (unit.mp <= 0) return out;
+  if (!unit || !UNITS[unit.type] || !(unit.mp > 0)) return out;
   if (unit.acted && !(hasAbility(unit.type, 'escape') || hasAbility(unit.type, 'persist'))) return out;
   // Intern in halben Schritten rechnen (Straße zu Straße = 1 halber Schritt).
   const budget = Math.round(unit.mp * 2);
@@ -797,7 +798,7 @@ export function canEverAttack(type) {
 }
 
 export function attackTargets(state, unit) {
-  if (!canEverAttack(unit.type)) return [];
+  if (!unit || !UNITS[unit.type] || !canEverAttack(unit.type)) return [];
   if (!canAttackNow(state, unit)) return [];
   const range = UNITS[unit.type].range;
   return state.units.filter(u =>
@@ -849,19 +850,25 @@ export function logEvent(state, entry) {
   if (state.log.length > 80) state.log.shift();
 }
 
-// Was anderen seit dem letzten Abruf mit `player` passiert ist; markiert als gelesen.
-export function takeNews(state, player) {
+// Alles, was andere seit dem letzten Abruf von `player` getan haben (gegen ihn
+// und untereinander); markiert als gelesen.
+export function takeReport(state, player) {
   if (!state.logSeen) state.logSeen = {};
   const seen = state.logSeen[player] || 0;
   state.logSeen[player] = state.logSeq || 0;
-  return (state.log || []).filter(e => e.seq > seen && e.victim === player && e.by !== player);
+  return (state.log || []).filter(e => e.seq > seen && e.by !== player);
+}
+
+// Nur was `player` selbst betroffen hat.
+export function takeNews(state, player) {
+  return takeReport(state, player).filter(e => e.victim === player);
 }
 
 export function attack(state, attacker, defender) {
   const events = [];
   // Regelprüfung auch hier, damit KI, Online-Gegner oder Konsole keine
   // ungültigen Angriffe ausführen können.
-  if (!attackTargets(state, attacker).includes(defender)) return { events, killed: false, ok: false };
+  if (!attacker || !defender || !attackTargets(state, attacker).includes(defender)) return { events, killed: false, ok: false };
   const dist = hexDistance(attacker.q, attacker.r, defender.q, defender.r);
 
   if (hasAbility(attacker.type, 'convert')) {
@@ -943,7 +950,10 @@ function addKill(u) {
   return { kind: 'promote', unit: u.id, type: u.carry || u.type };
 }
 
+const isCoord = (q, r) => Number.isInteger(q) && Number.isInteger(r);
+
 export function moveUnit(state, unit, q, r) {
+  if (!isCoord(q, r)) return { ok: false };
   const reach = reachableMap(state, unit);
   const k = hk(q, r);
   if (!reach.has(k)) return { ok: false };
@@ -996,7 +1006,10 @@ export function checkWinner(state) {
   // Wann und von wem ein Stamm besiegt wurde (für Leiste und Meldung).
   if (!state.eliminated) state.eliminated = {};
   for (const p of dead) {
-    if (!state.eliminated[p]) state.eliminated[p] = { round: state.round, by: state.turn !== p ? state.turn : null };
+    if (!state.eliminated[p]) {
+      state.eliminated[p] = { round: state.round, by: state.turn !== p ? state.turn : null };
+      logEvent(state, { kind: 'eliminated', victim: p });
+    }
   }
 }
 
@@ -1089,6 +1102,7 @@ export function buyPop(state, city, player) {
 
 export function canImprove(state, city, type, q, r) {
   const def = IMPROVEMENTS[type];
+  if (!city || !isCoord(q, r)) return { ok: false, reason: 'Ungültiges Feld' };
   if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
   if (!def) return { ok: false, reason: 'Unbekanntes Gebäude' };
   if (!inTerritory(city, q, r)) return { ok: false, reason: 'Nicht im Stadtgebiet' };
@@ -1243,7 +1257,7 @@ export function disbandUnit(state, unit, player) {
 const isLandType = t => !hasAbility(t, 'water') && !isAir(t);
 
 export function loadOptions(state, balloon) {
-  if (!hasAbility(balloon.type, 'cargo') || balloon.cargo || balloon.acted) return [];
+  if (!balloon || !UNITS[balloon.type] || !hasAbility(balloon.type, 'cargo') || balloon.cargo || balloon.acted) return [];
   return state.units.filter(u => u.owner === balloon.owner && u !== balloon && isLandType(u.type) &&
     !u.acted && hexDistance(u.q, u.r, balloon.q, balloon.r) === 1);
 }
@@ -1256,7 +1270,7 @@ export function loadCargo(state, balloon, unit) {
 }
 
 export function unloadOptions(state, balloon) {
-  if (!balloon.cargo || balloon.acted) return [];
+  if (!balloon || !balloon.cargo || balloon.acted) return [];
   const cargo = { ...balloon.cargo, owner: balloon.owner };
   return neighbors(balloon.q, balloon.r).filter(([q, r]) => {
     if (unitAt(state, q, r)) return false;
@@ -1285,6 +1299,7 @@ export function unloadCargo(state, balloon, q, r) {
 // Stufe. Verletzungen bleiben anteilig, Veteranen bleiben Veteranen.
 
 export function upgradeOption(state, unit) {
+  if (!unit) return null;
   const to = UPGRADES[unit.type];
   if (!to || unit.carry || unit.cargo) return null;
   const cost = Math.max(1, unitCost(state, unit.owner, to) - unitCost(state, unit.owner, unit.type));
@@ -1621,6 +1636,9 @@ function generateResources(state, rand, centers) {
 }
 
 let startSeq = 0;
+// Startplätze (q, r) je Kartengröße und Spielerzahl, siehe createGame.
+const START_TABLE = {small:{"2":[[14,8],[3,3]],"3":[[3,8],[12,8],[10,3]],"4":[[4,3],[13,3],[14,8],[5,8]],"5":[[14,3],[8,3],[6,8],[12,8],[3,6]]},normal:{"2":[[3,3],[22,14]],"3":[[5,14],[16,14],[16,3]],"4":[[10,3],[21,5],[4,12],[15,14]],"5":[[18,6],[5,7],[14,14],[6,14],[13,3]]},large:{"2":[[3,3],[30,18]],"3":[[21,3],[6,18],[21,18]],"4":[[7,16],[18,18],[15,3],[26,5]],"5":[[8,9],[16,16],[17,3],[22,7],[7,18]]}};
+
 export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   const o = opts && typeof opts === 'object' ? opts : { tribe: opts };
   const tribe = o.tribe;
@@ -1654,9 +1672,13 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
     state.explored[p] = [];
   }
 
-  // Starts mit Abstand zum Rand, damit rund um die Hauptstadt Platz ist.
+  // Faire Startplätze je Kartengröße und Spielerzahl (vorab berechnet: gleiche
+  // Abstände zu den Nachbarn, ähnliches Hinterland, genug Platz). Vorher saßen
+  // Spieler 2 und 4 in den stumpfen Ecken nah an allen anderen und verloren
+  // deutlich öfter (Ø Platz 2,9 gegenüber 1,9 für Spieler 1).
+  const table = START_TABLE[mapSize] && START_TABLE[mapSize][count];
   const corner = [[3, 3], [MAP_W - 4, 3], [MAP_W - 4, MAP_H - 4], [3, MAP_H - 4]];
-  const starts = count === 2 ? [corner[3], corner[1]]
+  const starts = table ? table.map(p => p.slice()) : count === 2 ? [corner[3], corner[1]]
     : count === 3 ? [corner[0], corner[1], corner[3]]
     : count === 4 ? corner
     : [corner[0], corner[1], corner[2], corner[3], [Math.floor(MAP_W / 2), Math.floor(MAP_H / 2)]];
@@ -1666,11 +1688,17 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
     });
   };
   for (const [q, r] of starts) clearAround(q, r, 2);
-  for (let i = 0; i < starts.length; i++) {
-    const a = starts[i], b = starts[(i + 1) % starts.length];
-    carveLine(state, a[0], a[1], b[0], b[1]);
+  // Landwege im Kreis um die Kartenmitte (nicht kreuz und quer) plus eine Diagonale.
+  const cx = (MAP_W - 1) / 2 + (MAP_H - 1) / 4, cz = (MAP_H - 1) / 2;
+  const ring = starts.slice().sort((a, b) =>
+    Math.atan2(a[1] - cz, a[0] + a[1] / 2 - cx) - Math.atan2(b[1] - cz, b[0] + b[1] / 2 - cx));
+  // Auf Inselkarten nur schmale Landbrücken, damit es Inseln bleiben.
+  const wide = mapType !== 'archipelago';
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    carveLine(state, a[0], a[1], b[0], b[1], wide);
   }
-  carveLine(state, starts[0][0], starts[0][1], starts[2 % starts.length][0], starts[2 % starts.length][1]);
+  carveLine(state, ring[0][0], ring[0][1], ring[2 % ring.length][0], ring[2 % ring.length][1], wide);
 
   const channel = connectWater(state, starts);
   placeBridges(state, rand, channel, starts[0][0], starts[0][1]);

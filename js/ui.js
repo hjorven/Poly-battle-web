@@ -48,7 +48,7 @@ export function initUI(h) {
     const cmd = map[e.key.toLowerCase()];
     if (cmd) { handlers.onCamera(cmd); return; }
     const keys = {
-      ' ': 'next', Enter: 'end', t: 'tech', o: 'overview', i: 'details', h: 'home', m: 'sound',
+      ' ': 'next', Enter: 'end', t: 'tech', o: 'overview', i: 'details', h: 'home', m: 'sound', b: 'report',
       Escape: 'deselect', ArrowLeft: 'panL', ArrowRight: 'panR', ArrowUp: 'panU', ArrowDown: 'panD',
       '+': 'zoomIn', '=': 'zoomIn', '-': 'zoomOut'
     };
@@ -284,15 +284,17 @@ export function showProfileResult(res, lp, achievements) {
 }
 
 // Rückblick: Liste {text, q?, r?}; antippen springt zum Ort.
-export function showNews(lines) {
+export function showNews(report) {
   const box = $('news');
-  const shown = lines.slice(0, 7);
-  box.innerHTML = `<h3>Seit deinem letzten Zug</h3><ul>${shown.map((l, i) =>
-    `<li><button data-news="${i}" ${l.q == null ? 'tabindex="-1"' : ''}>${esc(l.text)}</button></li>`).join('')}</ul>
-    ${lines.length > shown.length ? `<div class="news-more">und ${lines.length - shown.length} weitere</div>` : ''}
+  const flat = [];
+  const html = report.sections.map(sec => `<div class="news-sec"><h4>${esc(sec.title)}</h4><ul>${sec.lines.map(l => {
+    const i = flat.push(l) - 1;
+    return `<li class="tone-${l.tone || 'info'}"><button data-news="${i}" ${l.q == null ? 'tabindex="-1"' : ''}>${esc(l.text)}${l.q != null ? ' <span class="news-go">zeigen</span>' : ''}</button></li>`;
+  }).join('')}</ul></div>`).join('');
+  box.innerHTML = `<h3>Rundenbericht</h3><div class="news-head">${esc(report.head)}</div>${html}
     <button class="btn small" data-news-close>OK</button>`;
   box.querySelectorAll('[data-news]').forEach(b => b.addEventListener('click', () => {
-    const l = shown[Number(b.dataset.news)];
+    const l = flat[Number(b.dataset.news)];
     if (l.q != null) handlers.onJump(l.q, l.r);
   }));
   box.querySelector('[data-news-close]').addEventListener('click', hideNews);
@@ -363,7 +365,7 @@ export function showUnitChip(state, unit, ctx) {
   chip.innerHTML = `
     <span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>
     <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ' + STAR_ICON : ''}</b>
-      <span class="uc-sub">Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}</span></span>
+      <span class="uc-sub">${ctx.hint ? `<b class="uc-hint">${esc(ctx.hint)}</b>` : `Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}`}</span></span>
     <button class="btn ghost small" data-details>Details</button>`;
   chip.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
   chip.classList.remove('hidden');
@@ -1213,6 +1215,13 @@ export function showOverview(state, ctx) {
       <div class="stat">Punkte<b>${score(state, actAs)}</b></div>
     </div>`;
   menu.appendChild(stat);
+  if (ctx.hasReport) {
+    const rep = document.createElement('div');
+    rep.className = 'action-list';
+    rep.innerHTML = '<button class="btn action"><span>Letzten Rundenbericht zeigen<span class="sub">Taste B</span></span></button>';
+    rep.querySelector('button').addEventListener('click', () => handlers.onShowReport());
+    menu.appendChild(rep);
+  }
 
   // Monumente: Erfolg, Status (offen / bereit / errichtet).
   const unlocked = (state.monumentsUnlocked && state.monumentsUnlocked[actAs]) || [];
