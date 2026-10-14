@@ -6,6 +6,7 @@ import { botStep, applyStep } from './ai.js';
 import { sfx, isMuted, setMuted } from './sound.js';
 import { saveGame, loadGame, saveInfo, clearSave } from './save.js';
 import * as P from './profile.js';
+import { shareResult } from './share.js';
 import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS } from './config.js';
 
 const app = {
@@ -244,7 +245,7 @@ function humanDefeated() {
 }
 
 function checkWinnerUI() {
-  if (!app.state) return;
+  if (!app.state || app.reviewing) return;
   const over = app.state.winner || humanDefeated();
   if (over && app.endSound !== app.gen) {
     app.endSound = app.gen;
@@ -444,6 +445,8 @@ async function doChooseReward(city, id) {
 
 function viewer() {
   if (!app.state) return null;
+  // Nach Spielende: ganze Karte ohne Nebel.
+  if (app.reviewing) return null;
   if (app.mode === 'hotseat') return app.state.turn;
   if (app.mode === 'bot') return 'player_1';
   if (app.mode === 'online') return app.myRole || null;
@@ -866,7 +869,13 @@ function startTutorial() {
   refresh();
 }
 
+function endReview() {
+  app.reviewing = false;
+  ui.setReview(false);
+}
+
 function startLocal(mode, override = null) {
+  endReview();
   app.gen++;
   app.mode = mode;
   app.online = false;
@@ -941,6 +950,7 @@ function continueGame() {
 }
 
 async function startOnline() {
+  endReview();
   app.gen++;
   app.mode = 'online';
   app.online = true;
@@ -1098,7 +1108,31 @@ function boot() {
       refresh();
     },
     onMenu: () => showMenu(),
-    onRestart: () => { ui.hideWinner(); showMenu(); },
+    onRestart: () => { endReview(); ui.hideWinner(); showMenu(); },
+    onReview: on => {
+      if (!app.state) return;
+      app.reviewing = on;
+      app.sel = null;
+      ui.setReview(on);
+      ui.hidePanel();
+      render.syncBoard(app.state, viewer());
+      if (on) render.resetCamera();
+      refresh();
+    },
+    onShare: async () => {
+      const st = app.state;
+      if (!st) return;
+      const me = app.mode === 'online' ? app.myRole : app.mode === 'bot' ? 'player_1' : null;
+      const won = st.winner && st.winner === me;
+      const headline = me ? (won ? 'Sieg!' : 'Besiegt') : `${needName(st, st.winner)} gewinnt`;
+      const pts = me ? (st.finalScores && st.finalScores[me] != null ? st.finalScores[me] : R.score(st, me)) : null;
+      const text = me
+        ? (won ? `Ich habe Poly Battle als ${needName(st, me)} in Runde ${st.round} gewonnen` : `Ich habe als ${needName(st, me)} ${st.round} Runden in Poly Battle durchgehalten`) + ` – ${pts} Punkte${st.daily ? ` in der Tagesherausforderung ${st.daily.split('-').reverse().join('.')}` : ''}. Schaffst du mehr?`
+        : `${needName(st, st.winner)} hat Poly Battle in Runde ${st.round} gewonnen.`;
+      const res = await shareResult(st, me, headline, text);
+      if (res === 'geladen') ui.toast('Bild gespeichert, Text in die Zwischenablage kopiert', 'good');
+      else if (res === 'fehler') ui.toast('Bild konnte nicht erstellt werden', 'warn');
+    },
     onRetry: easier => {
       const st = app.state;
       ui.hideWinner();

@@ -762,3 +762,13 @@ button:focus-visible {
 .wp-ach { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .wp-ach span { background: #18181b; color: #facc15; border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; }
 .wp-daily { margin-top: 8px; font-size: 14px; }
+
+/* Karte nach Spielende ansehen */
+#review-bar {
+  position: absolute; left: 50%; transform: translateX(-50%); top: 64px; z-index: 31;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center;
+  background: #18181b; color: #fafafa; border-radius: 10px; padding: 8px 10px 8px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); font-size: 14px; max-width: calc(100% - 24px);
+}
+#review-bar .btn { background: #27272a; color: #fafafa; border-color: #3f3f46; }
+#review-bar .btn.primary { background: #facc15; color: #18181b; border-color: #facc15; }

@@ -677,7 +677,7 @@ function paintMinimap() {
   }
   for (const u of state.units) {
     if (explored && u.owner !== viewer && !isVisible(state, viewer, u.q, u.r)) continue;
-    dot(u.q, u.r, rad * 1.3, u.owner === viewer ? '#ffffff' : '#ef4444');
+    dot(u.q, u.r, rad * 1.3, !viewer ? cssColor(ownerColor(u.owner)) : u.owner === viewer ? '#ffffff' : '#ef4444');
   }
   // Kameraausschnitt als Rahmen um das Blickziel.
   const t = controls.target;
