@@ -13,7 +13,7 @@ function storage(store) {
 export function emptyProfile() {
   return {
     v: 1, xp: 0, games: 0, wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0,
-    bestScore: 0, fastestWin: null, tribeWins: {}, achievements: {},
+    bestScore: 0, fastestWin: null, tribeWins: {}, achievements: {}, seen: [],
     daily: { last: null, streak: 0, bestStreak: 0, best: {} }
   };
 }
@@ -24,11 +24,31 @@ export function loadProfile(store) {
   try {
     const p = JSON.parse(s.getItem(KEY) || 'null');
     if (!p || p.v !== 1) return emptyProfile();
-    const base = emptyProfile();
-    return { ...base, ...p, daily: { ...base.daily, ...(p.daily || {}) } };
+    return sanitize(p);
   } catch (e) {
     return emptyProfile();
   }
+}
+
+// Werte prüfen und begrenzen: beschädigte oder manipulierte Profile dürfen das
+// Spiel nie lahmlegen (z. B. riesige Erfahrung, falsche Typen).
+const num = (v, max = 1e7) => (Number.isFinite(v) && v >= 0 ? Math.min(Math.floor(v), max) : 0);
+const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+function sanitize(p) {
+  const base = emptyProfile();
+  const d = obj(p.daily);
+  return {
+    ...base,
+    xp: num(p.xp), games: num(p.games), wins: num(p.wins), losses: num(p.losses),
+    winStreak: num(p.winStreak), bestWinStreak: num(p.bestWinStreak), bestScore: num(p.bestScore, 1e9),
+    fastestWin: Number.isFinite(p.fastestWin) && p.fastestWin > 0 ? p.fastestWin : null,
+    tribeWins: obj(p.tribeWins), achievements: obj(p.achievements),
+    seen: Array.isArray(p.seen) ? p.seen.filter(x => typeof x === 'string').slice(-50) : [],
+    daily: {
+      last: typeof d.last === 'string' ? d.last : null,
+      streak: num(d.streak), bestStreak: num(d.bestStreak), best: obj(d.best)
+    }
+  };
 }
 
 export function saveProfile(profile, store) {
@@ -44,9 +64,12 @@ export function xpFor(level) {
   return 100 * level * (level - 1);
 }
 
+// Direkt berechnet (keine Schleife): größtes n mit 100·n·(n−1) ≤ xp.
 export function levelOf(xp) {
-  let n = 1;
-  while (xp >= xpFor(n + 1)) n++;
+  const x = Number.isFinite(xp) && xp > 0 ? Math.min(xp, 1e12) : 0;
+  let n = Math.max(1, Math.floor((1 + Math.sqrt(1 + x / 25)) / 2));
+  while (n > 1 && xpFor(n) > x) n--;
+  while (xpFor(n + 1) <= x) n++;
   return n;
 }
 

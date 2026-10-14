@@ -772,3 +772,17 @@ button:focus-visible {
 }
 #review-bar .btn { background: #27272a; color: #fafafa; border-color: #3f3f46; }
 #review-bar .btn.primary { background: #facc15; color: #18181b; border-color: #facc15; }
+
+/* Vorgemerktes Ziel: Hinweis in der Einheitenleiste */
+.uc-hint { color: #a16207; font-weight: 700; }
+
+/* Rundenbericht */
+#news { border-left-color: #18181b; max-height: calc(100% - 140px); overflow-y: auto; }
+#news .news-head { font-size: 12px; color: #52525b; margin: -2px 0 8px; }
+#news h4 { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #71717a; }
+#news li { border-left: 3px solid #a1a1aa; padding-left: 6px; }
+#news li.tone-bad { border-left-color: #dc2626; }
+#news li.tone-warn { border-left-color: #f59e0b; }
+#news li.tone-good { border-left-color: #16a34a; }
+#news li.tone-info { border-left-color: #60a5fa; }
+#news .news-go { font-size: 11px; color: #a16207; font-weight: 700; margin-left: 4px; }
