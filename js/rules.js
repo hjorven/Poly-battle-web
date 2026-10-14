@@ -322,6 +322,43 @@ export function cityIncome(state, city) {
   return s;
 }
 
+// Ertrag eines einzelnen Feldes für seine Stadt (Rohstoff oder Gebäude).
+export function tileYield(state, city, q, r) {
+  if (!city || cityAt(state, q, r)) return 0;
+  const res = resourceAt(state, q, r);
+  if (res) return 1 + (res === 'fish' && city.owner ? techBonus(state, city.owner, 'fishBonus') : 0);
+  const imp = improvementAt(state, q, r);
+  if (!imp || !IMPROVEMENTS[imp]) return 0;
+  let s = improvementIncome(state, city.owner, imp, q, r);
+  if (imp === 'farm' && city.owner && perkOf(state, city.owner) === 'harvest') s += 1;
+  return s;
+}
+
+// Was brächte ein Gebäude auf (q, r)? Rechnet probeweise auf dem Spielstand und
+// stellt ihn danach wieder her. Liefert das Einkommen vorher/nachher und die
+// Nachbarfelder, deren Ertrag sich ändert (z. B. Windmühle neben neuer Farm).
+export function improvePreview(state, city, type, q, r) {
+  const owner = city.owner;
+  const k = hk(q, r);
+  if (!state.improvements) state.improvements = {};
+  const spots = [[q, r], ...neighbors(q, r)];
+  const yieldAt = () => spots.map(([nq, nr]) => tileYield(state, tileCity(state, nq, nr), nq, nr));
+  const before = incomeFor(state, owner);
+  const y0 = yieldAt();
+  const had = Object.prototype.hasOwnProperty.call(state.improvements, k) ? state.improvements[k] : undefined;
+  let after, y1;
+  try {
+    state.improvements[k] = type;
+    after = incomeFor(state, owner) + (IMPROVEMENTS[type] && IMPROVEMENTS[type].monument ? MONUMENT_POP : 0);
+    y1 = yieldAt();
+  } finally {
+    if (had === undefined) delete state.improvements[k]; else state.improvements[k] = had;
+  }
+  const changed = [];
+  spots.forEach(([nq, nr], i) => { if (i > 0 && y1[i] !== y0[i]) changed.push({ q: nq, r: nr, delta: y1[i] - y0[i] }); });
+  return { before, after, gain: after - before, here: y1[0], changed };
+}
+
 export function incomeFor(state, player) {
   let s = 0;
   let cities = 0;
@@ -439,7 +476,7 @@ export function canBuildRoad(state, player, q, r, byUnit = false) {
   if (!inBounds(q, r)) return { ok: false, reason: 'Außerhalb der Karte' };
   const t = TERRAIN[terrainAt(state, q, r)];
   if (!t.walkable) return { ok: false, reason: 'Nur auf Land' };
-  if (roadAt(state, q, r)) return { ok: false, reason: 'Hier ist schon eine Straße' };
+  if (roadAt(state, q, r)) return { ok: false, reason: 'Hier ist schon ein Weg' };
   if (cityAt(state, q, r)) return { ok: false, reason: 'Städte sind schon angebunden' };
   const owner = tileCity(state, q, r);
   if (owner && owner.owner && owner.owner !== player) return { ok: false, reason: 'Fremdes Gebiet' };

@@ -69,7 +69,7 @@ function statusText() {
   }
   if (app.mode === 'online') {
     if (!app.myRole) return `Zuschauer · Am Zug: ${needName(st, st.turn)}`;
-    if (!app.hasOpponent) return `Warte auf Mitspieler (${app.seated || 1}/${app.humanSeats || 2} da) – teile den Link (Menü → Link kopieren).`;
+    if (!app.hasOpponent) return `Warte auf Mitspieler (${app.seated || 1}/${app.humanSeats || 2} da) – teile den Link (im Menü auf „Link zum Spiel kopieren“).`;
     if (myTurn()) return `Du bist am Zug (${needName(st, app.myRole)})`;
     if (R.isBot(st, st.turn)) return `KI zieht (${needName(st, st.turn)}) …`;
     return `Gegner ist am Zug (${needName(st, st.turn)})`;
@@ -685,7 +685,7 @@ async function doBuildRoad(q, r, unit) {
   const res = R.buildRoad(app.state, actAs(), q, r, unit);
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
   app.busy = true;
-  ui.toast('Straße gebaut', 'good');
+  ui.toast('Weg gebaut', 'good');
   sfx('build');
   await render.syncBoard(app.state, viewer());
   await afterAction();
@@ -1060,7 +1060,7 @@ const TUTOR = [
     done: (st, base) => st.techs.player_1.length > base.techs },
   { text: 'Städte wachsen durch Gebäude (Farm, Mine, Hafen …) im Stadtmenü und bringen dann mehr Sterne. Ein roter Ring warnt dich, wenn eine Stadt bedroht ist.',
     next: 'Weiter' },
-  { text: 'Ziel: Nimm die Hauptstadt des Gegners ein. Mehr steht im Menü unter Hilfe, z. B. zu Brücken, Straßen, Leuchttürmen und Monumenten. Viel Erfolg!',
+  { text: 'Ziel: Nimm die Hauptstadt des Gegners ein. Mehr steht im Menü unter Hilfe, z. B. zu Brücken, Wegen, Leuchttürmen und Monumenten. Viel Erfolg!',
     next: 'Fertig' }
 ];
 

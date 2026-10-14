@@ -8,7 +8,7 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, incomeFor, tileYield, improvePreview, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS, toWorld } from './hex.js';
 
@@ -148,6 +148,19 @@ function loadSettings() {
 function buildSettings() {
   const wrap = $('settings-box');
   if (!wrap) return;
+  // Darstellung (gilt sofort, gemerkt im Browser).
+  const themeBtns = wrap.querySelectorAll('[data-theme-pick]');
+  let theme = 'system';
+  try { theme = localStorage.getItem('pb_theme') || 'system'; } catch (e) { theme = 'system'; }
+  const markTheme = () => themeBtns.forEach(b => b.classList.toggle('active', b.dataset.themePick === theme));
+  themeBtns.forEach(b => b.addEventListener('click', () => {
+    theme = b.dataset.themePick;
+    if (theme === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    try { if (theme === 'system') localStorage.removeItem('pb_theme'); else localStorage.setItem('pb_theme', theme); } catch (e) { /* ignore */ }
+    markTheme();
+  }));
+  markTheme();
   loadSettings();
   wrap.addEventListener('click', e => { if (e.target.closest('button')) saveSettings(); });
   const bots = wrap.querySelectorAll('[data-bots]');
@@ -254,12 +267,12 @@ function chip(player, state, ctx) {
       <span class="dead-tag">besiegt${e ? ` · Runde ${e.round}` : ''}</span>
     </div>`;
   }
-  return `<div class="chip ${active ? 'active' : ''}">
+  const meta = `${cities} ${cities === 1 ? 'Stadt' : 'Städte'}, ${units} ${units === 1 ? 'Einheit' : 'Einheiten'}${state.turnLimit ? `, ${score(state, player)} Punkte` : ''}`;
+  return `<div class="chip ${active ? 'active' : ''}" title="${esc(name)}: ${s} Sterne, ${meta}">
     <span class="dot" style="background:${hex(playerColor(state, player))}"></span>
     <span>${name}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
-    <span class="stars">${s} Sterne</span>
+    <span class="stars">${s}</span>
     ${state.turnLimit ? `<span class="pts">${score(state, player)} P</span>` : ''}
-    <span class="meta">${cities} ${cities === 1 ? 'Stadt' : 'Städte'} · ${units} ${units === 1 ? 'Einheit' : 'Einheiten'}</span>
   </div>`;
 }
 
@@ -268,6 +281,14 @@ export function updateStrip(state, ctx) {
   // Besiegte Stämme ans Ende.
   const order = [...players.filter(p => state.cities.some(c => c.owner === p)), ...players.filter(p => !state.cities.some(c => c.owner === p))];
   $('player-strip').innerHTML = order.map(p => chip(p, state, ctx)).join('');
+  // Groß links: Sterne des Spielers, der hier handelt, und was nächste Runde dazukommt.
+  const me = ctx.actAs && state.players.includes(ctx.actAs) ? ctx.actAs : ctx.viewer;
+  const tr = $('treasury');
+  if (me && state.stars[me] != null) {
+    const inc = incomeFor(state, me);
+    tr.innerHTML = `<span class="tr-num">${state.stars[me]}</span><span class="tr-txt"><span class="tr-lbl">${state.stars[me] === 1 ? 'Stern' : 'Sterne'}</span><span class="tr-inc">+${inc} nächste Runde</span></span>`;
+    tr.title = `${state.stars[me]} Sterne, nächste Runde kommen ${inc} dazu`;
+  } else tr.innerHTML = '';
   $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' / ' + state.turnLimit : '');
 }
 
@@ -598,7 +619,7 @@ export function showUnitPanel(state, unit, ctx) {
       const spent = unit.mp <= 0 && unit.hasMoved;
       if (!(chk.reason === 'Städte sind schon angebunden')) {
         extra += `<div class="action-list"><button class="btn action" data-road ${chk.ok && !spent ? '' : 'disabled'}>
-          <span>Straße bauen<span class="sub">${spent ? 'Keine Bewegung mehr' : chk.ok ? 'Auf diesem Feld · verbraucht die restliche Bewegung' : chk.reason}</span></span>
+          <span>Weg bauen<span class="sub">${spent ? 'Keine Bewegung mehr' : chk.ok ? 'Auf diesem Feld · verbraucht die restliche Bewegung' : chk.reason}</span></span>
           <span class="cost">${ROAD.cost} Sterne</span></button></div>`;
       }
     }
@@ -644,8 +665,8 @@ export function showUnitPanel(state, unit, ctx) {
   panel(`
     <div class="panel-head">
       <div>
-        <div class="panel-title">${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ' <span class="vet-badge">${STAR_ICON} Veteran</span>' : ''}</div>
-        <div class="panel-sub" style="color:${hex(playerColor(state, unit.owner))}">${owner}${mine ? ' (deine Einheit)' : ''}</div>
+        <div class="panel-title">${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ` <span class="vet-badge">${STAR_ICON} Veteran</span>` : ''}</div>
+        <div class="panel-sub owner-line"><span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>${owner}${mine ? ' (deine Einheit)' : ''}</div>
       </div>
       <div class="panel-head-right">
         <span class="panel-sub">${unit.acted && unit.mp <= 0 ? 'erledigt' : 'bereit'}</span>
@@ -769,7 +790,7 @@ export function showCityPanel(state, city, ctx) {
     <div class="panel-head">
       <div>
         <div class="panel-title">Stadt${city.isCapital ? ' · Hauptstadt' : ''}</div>
-        <div class="panel-sub" style="color:${city.owner ? hex(playerColor(state, city.owner)) : '#71717a'}">${ownerName}</div>
+        <div class="panel-sub owner-line">${city.owner ? `<span class="dot" style="background:${hex(playerColor(state, city.owner))}"></span>` : ''}${ownerName}</div>
       </div>
       <div class="panel-head-right">
         <span class="panel-sub">${city.pop >= MAX_POP ? 'max. Bev.' : ''}</span>
@@ -809,7 +830,7 @@ function showRememberedCity(state, view) {
     <div class="panel-head">
       <div>
         <div class="panel-title">Stadt${view.isCapital ? ' · Hauptstadt' : ''}</div>
-        <div class="panel-sub" style="color:${view.owner ? hex(playerColor(state, view.owner)) : '#71717a'}">${ownerName}</div>
+        <div class="panel-sub owner-line">${view.owner ? `<span class="dot" style="background:${hex(playerColor(state, view.owner))}"></span>` : ''}${ownerName}</div>
       </div>
       <div class="panel-head-right">
         <button class="btn icon-btn panel-close" data-close>Schließen</button>
@@ -904,9 +925,10 @@ function tileOptions(state, city, q, r, ctx) {
     else if (!ctx.myTurn) reason = 'Nicht dein Zug';
     // Belegte Felder: keine Liste aller Gebäude, nur der Grund oben.
     if (!chk.ok && (chk.reason === 'Bereits bebaut' || chk.reason === 'Ressource wird genutzt')) continue;
-    const yieldHere = d.adjacent ? improvementIncome(state, owner, id, q, r) : null;
+    // Echter Gewinn an genau diesem Feld (inkl. Nachbarn wie Windmühle neben Farm).
+    const pv = known && chk.ok ? improvePreview(state, city, id, q, r) : null;
     out.push({ kind: 'imp', id, name: d.name, cost: d.monument ? 0 : improvementCost(state, owner, id), reason, known,
-      effect: impEffect(id) + (yieldHere != null ? ` – hier jetzt +${yieldHere}` : '') });
+      effect: impEffect(id), gain: pv ? pv.gain : null, changed: pv ? pv.changed : [], after: pv ? pv.after : null });
   }
   if (TERRAIN[tile].walkable && !roadAt(state, q, r)) {
     const known = state.techs[owner].includes(ROAD.tech);
@@ -957,7 +979,8 @@ function renderBuild(state, city, ctx) {
     build.sel = pick ? pick.key : null;
   }
   $('build-title').textContent = `${city.isCapital ? 'Hauptstadt' : 'Stadt'} ${mineCity ? 'ausbauen' : '· Gebiet'}`;
-  $('build-stars').textContent = mineCity ? `${state.stars[city.owner]} Sterne` : '';
+  build.income = mineCity ? incomeFor(state, city.owner) : 0;
+  $('build-stars').innerHTML = mineCity ? buildHead() : '';
 
   // Wabenkarte: gleiche Ausrichtung wie das Spielfeld (Spitze oben).
   const box = $('build-map');
@@ -978,16 +1001,20 @@ function renderBuild(state, city, ctx) {
     const isCity = !!cityAt(state, t.q, t.r);
     const unit = unitAt(state, t.q, t.r);
     const main = isCity ? (city.isCapital ? 'Hauptstadt' : 'Stadt') : imp ? IMPROVEMENTS[imp].name : res ? RESOURCES[res].name : '';
-    const tags = [roadAt(state, t.q, t.r) && !isCity ? 'Weg' : '', unit && !isCity ? 'Einheit' : ''].filter(Boolean).join(' · ');
+    const tags = [roadAt(state, t.q, t.r) && !isCity ? 'Weg' : '', unit && !isCity ? 'Einheit' : ''].filter(Boolean).join(', ');
+    const yld = isCity ? 0 : tileYield(state, city, t.q, t.r);
     const cls = ['bhex', t.key === build.sel ? 'sel' : '', t.can ? 'can' : '', imp ? 'built' : '', isCity ? 'city' : ''].filter(Boolean).join(' ');
-    const label = [TERRAIN[tile].name, main, tags, t.can ? 'baubar' : ''].filter(Boolean).join(', ');
+    const label = [TERRAIN[tile].name, main, tags, yld ? `bringt ${yld}` : '', t.can ? 'baubar' : ''].filter(Boolean).join(', ');
     return `<button class="${cls}" data-hex="${t.key}" aria-label="${label}" aria-pressed="${t.key === build.sel}"
       style="left:${(t.x - minX) * size}px;top:${(t.z - minZ) * size}px;width:${w}px;height:${h}px">
       <span class="hx-in" style="background:${hex(TERRAIN[tile].color)}">
         <span class="hx-t">${TERRAIN[tile].name}</span>
         ${main ? `<span class="hx-m${imp ? ' imp' : res ? ' res' : ''}">${main}</span>` : ''}
         ${tags ? `<span class="hx-g">${tags}</span>` : ''}
+        ${yld ? `<span class="hx-y">+${yld}</span>` : ''}
+        ${isCity && mineCity ? `<span class="hx-g">Stufe ${city.pop}</span>` : ''}
       </span>
+      <span class="hx-gain" aria-hidden="true"></span>
     </button>`;
   }).join('');
   box.querySelectorAll('[data-hex]').forEach(b => b.addEventListener('click', () => {
@@ -1012,7 +1039,8 @@ function renderBuildDetail(state, city, ctx, t) {
   const imp = improvementAt(state, t.q, t.r);
   const res = resourceAt(state, t.q, t.r);
   const lines = [];
-  if (cityAt(state, t.q, t.r)) lines.push(`Das Stadtfeld selbst (Stufe ${city.pop}, ${cityIncome(state, city)} Sterne pro Runde). Gebaut wird auf den Feldern drumherum.`);
+  const isCity = !!cityAt(state, t.q, t.r);
+  if (isCity) lines.push(`Stufe ${city.pop}, ${stars(cityIncome(state, city))} pro Runde. Gebaut wird auf den Feldern drumherum, hier bildest du Einheiten aus.`);
   if (imp) {
     const inc = improvementIncome(state, city.owner, imp, t.q, t.r);
     const extra = IMPROVEMENTS[imp].adjacent || IMPROVEMENTS[imp].monument || !inc ? ' ' + impEffect(imp) : '';
@@ -1024,15 +1052,27 @@ function renderBuildDetail(state, city, ctx, t) {
   if (unit && !cityAt(state, t.q, t.r)) lines.push(`Hier steht ${UNITS[unit.type].name} – zum Bauen muss das Feld frei sein.`);
   const mineCity = city.owner === ctx.actAs;
   let opts = '';
-  if (mineCity && t.opts.length) {
+  if (mineCity && isCity) {
+    // Ausbilden direkt im Bau-Fenster (gleiche Regeln wie im Stadtmenü).
+    const types = UNIT_ORDER.filter(ty => !UNITS[ty].reward && (!UNITS[ty].tech || state.techs[city.owner].includes(UNITS[ty].tech)));
+    build.opts = types.map(ty => ({ kind: 'train', id: ty, reason: trainReason(state, city, ty, ctx) }));
+    opts = `<div class="bsec">Einheiten ausbilden</div><div class="bopts">${types.map((ty, i) => {
+      const u = UNITS[ty], reason = build.opts[i].reason;
+      return `<button class="btn bopt" data-opt="${i}" ${reason ? 'disabled' : ''}>
+        <span class="bo-key">${i < 9 ? i + 1 : ''}</span>
+        <span class="bo-main"><b>${u.name}</b><span class="sub">${reason ? reason + ', ' : ''}Angriff ${attackOf(state, { type: ty, owner: city.owner })}, Verteidigung ${u.def}, Bewegung ${maxMove(state, city.owner, ty)}${u.range > 1 ? ', Reichweite ' + u.range : ''}, Leben ${u.hp}</span></span>
+        <span class="cost">${stars(unitCost(state, city.owner, ty))}</span>
+      </button>`;
+    }).join('')}</div>`;
+  } else if (mineCity && t.opts.length) {
     const ready = t.opts.filter(o => o.known);
     const later = t.opts.filter(o => !o.known);
     build.opts = ready;
     opts = `<div class="bopts">${ready.map((o, i) => `
       <button class="btn bopt" data-opt="${i}" ${o.reason ? 'disabled' : ''}>
         <span class="bo-key">${i < 9 ? i + 1 : ''}</span>
-        <span class="bo-main"><b>${o.name}</b><span class="sub">${o.reason ? o.reason + ' · ' : ''}${o.effect}</span></span>
-        <span class="cost">${o.cost ? o.cost + ' Sterne' : 'frei'}</span>
+        <span class="bo-main"><b>${o.name}${o.gain ? ` <span class="bo-gain">+${o.gain} pro Runde</span>` : ''}</b><span class="sub">${o.reason ? o.reason + ', ' : ''}${o.effect}${o.changed && o.changed.length ? `, dazu ${neighbourText(state, o.changed)}` : ''}</span></span>
+        <span class="cost">${o.cost ? stars(o.cost) : 'frei'}</span>
       </button>`).join('')}</div>`;
     if (!ready.length) opts += '<div class="hint">Noch nichts erforscht, was hier gebaut werden kann.</div>';
     if (later.length) opts += `<div class="blater"><span>Nach Forschung möglich:</span> ${later.map(o => `<span class="blater-chip" title="${o.effect}">${o.name} <i>${o.reason.replace('Forschung: ', '')}</i></span>`).join('')}</div>`;
@@ -1041,8 +1081,44 @@ function renderBuildDetail(state, city, ctx, t) {
   } else if (!mineCity) {
     opts = '<div class="hint">Nicht deine Stadt.</div>';
   }
-  box.innerHTML = `<h3>${TERRAIN[tile].name}</h3>${lines.map(l => `<p>${l}</p>`).join('')}${opts}`;
-  box.querySelectorAll('[data-opt]').forEach(b => b.addEventListener('click', () => doBuildOpt(Number(b.dataset.opt))));
+  box.innerHTML = `<h3>${isCity ? (city.isCapital ? 'Hauptstadt' : 'Stadt') : TERRAIN[tile].name}</h3>${lines.map(l => `<p>${l}</p>`).join('')}${opts}`;
+  box.querySelectorAll('[data-opt]').forEach(b => {
+    b.addEventListener('click', () => doBuildOpt(Number(b.dataset.opt)));
+    // Vorschau: profitierende Nachbarfelder hervorheben, Einkommen danach zeigen.
+    const on = () => previewOpt(build.opts[Number(b.dataset.opt)]);
+    b.addEventListener('mouseenter', on);
+    b.addEventListener('focus', on);
+    b.addEventListener('mouseleave', () => previewOpt(null));
+    b.addEventListener('blur', () => previewOpt(null));
+  });
+}
+
+const stars = n => `${n} ${n === 1 ? 'Stern' : 'Sterne'}`;
+
+function buildHead(after = null) {
+  const st = build.state, owner = build.city.owner;
+  return `${stars(st.stars[owner])}<span class="bh-inc">, Einkommen ${build.income}${after != null && after !== build.income ? `, danach <b>${after}</b>` : ''} pro Runde</span>`;
+}
+
+function neighbourText(state, changed) {
+  return changed.map(c => {
+    const imp = improvementAt(state, c.q, c.r);
+    return `${imp ? IMPROVEMENTS[imp].name : 'Nachbarfeld'} daneben ${c.delta > 0 ? '+' : ''}${c.delta}`;
+  }).join(', ');
+}
+
+function previewOpt(o) {
+  const map = $('build-map');
+  map.querySelectorAll('.bhex.gain').forEach(h => { h.classList.remove('gain'); h.querySelector('.hx-gain').textContent = ''; });
+  if (!build.open) return;
+  $('build-stars').innerHTML = buildHead(o && o.after != null ? o.after : null);
+  if (!o || !o.changed) return;
+  for (const c of o.changed) {
+    const h = map.querySelector(`[data-hex="${c.q},${c.r}"]`);
+    if (!h) continue;
+    h.classList.add('gain');
+    h.querySelector('.hx-gain').textContent = `${c.delta > 0 ? '+' : ''}${c.delta}`;
+  }
 }
 
 function doBuildOpt(i) {
@@ -1050,6 +1126,7 @@ function doBuildOpt(i) {
   if (!o || o.reason || !build.sel) return;
   const [q, r] = build.sel.split(',').map(Number);
   if (o.kind === 'road') handlers.onBuildRoad(q, r, null);
+  else if (o.kind === 'train') handlers.onTrain(build.city, o.id);
   else handlers.onImprove(build.city, o.id, q, r);
 }
 
@@ -1337,8 +1414,8 @@ export function openTech(state, ctx, keepView = false) {
     const t = TECHS[id];
     if (!t.req) continue;
     const a = pos[t.req], b = pos[id];
-    const color = mine.includes(id) ? BRANCH_COLOR[branchOf(id)] : '#d4d4d8';
-    lines += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${color}" stroke-width="4" stroke-linecap="round" />`;
+    const color = mine.includes(id) ? BRANCH_COLOR[branchOf(id)] : 'var(--border-strong)';
+    lines += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" style="stroke:${color}" stroke-width="4" stroke-linecap="round" />`;
   }
   svg.setAttribute('viewBox', `0 0 ${TREE_W} ${TREE_H}`);
   svg.setAttribute('width', TREE_W);
@@ -1495,15 +1572,15 @@ function chartSvg(state) {
   const y = v => padT + (1 - v / maxY) * (H - padT - padB);
   const grid = [0, 0.5, 1].map(f => {
     const v = Math.round(maxY * f);
-    return `<line x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}" stroke="#e4e4e7" stroke-width="1"/>
-      <text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="#71717a">${v}</text>`;
+    return `<line x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--border)" stroke-width="1"/>
+      <text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" style="fill:var(--muted)">${v}</text>`;
   }).join('');
   const lines = players.map(p => {
     const pts = hist.map(h => `${x(h.round).toFixed(1)},${y(h.scores[p] || 0).toFixed(1)}`).join(' ');
     return `<polyline points="${pts}" fill="none" stroke="${hex(playerColor(state, p))}" stroke-width="2" stroke-linejoin="round"/>`;
   }).join('');
-  const axis = `<text x="${padL}" y="${H - 6}" font-size="10" fill="#71717a">Runde ${r0}</text>
-    <text x="${W - padR}" y="${H - 6}" font-size="10" fill="#71717a" text-anchor="end">Runde ${r1}</text>`;
+  const axis = `<text x="${padL}" y="${H - 6}" font-size="10" style="fill:var(--muted)">Runde ${r0}</text>
+    <text x="${W - padR}" y="${H - 6}" font-size="10" style="fill:var(--muted)" text-anchor="end">Runde ${r1}</text>`;
   return `<div class="chart-cap">Punkteverlauf</div>
     <svg class="score-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Punkteverlauf aller Stämme">${grid}${lines}${axis}</svg>`;
 }
@@ -1652,7 +1729,7 @@ export function showOverview(state, ctx) {
           if (!chk.ok) status += ` · ${chk.reason}`;
         }
       }
-      row.innerHTML = `<span><span class="dip-name"><span class="dot" style="background:${met ? hex(playerColor(state, p)) : '#a1a1aa'}"></span>${esc(name)}</span>
+      row.innerHTML = `<span><span class="dip-name"><span class="dot" style="background:${met ? hex(playerColor(state, p)) : 'var(--faint)'}"></span>${esc(name)}</span>
         <span class="dip-state ${peace ? 'peace' : ''}">${esc(status)}</span></span>${action}`;
       row.querySelector('[data-peace]')?.addEventListener('click', () => handlers.onOfferPeace(p));
       row.querySelector('[data-war]')?.addEventListener('click', () => handlers.onDeclareWar(p));
