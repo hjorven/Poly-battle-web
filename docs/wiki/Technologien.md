@@ -73,7 +73,7 @@ Der Forschungsbaum hat 55 Technologien in sechs Stufen. Die Kosten steigen mit d
 | Stufe | Technologie | Voraussetzung | Bringt |
 | --- | --- | --- | --- |
 | 1 | **Reiten** | – | Zweig: Wege, Freier Geist |
-| 2 | **Wege** | Reiten | Straßen (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1 |
+| 2 | **Wege** | Reiten | Wege (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1 |
 | 3 | **Handel** | Wege | +1 Stern pro Stadt |
 | 4 | **Märkte** | Handel | Markt: +1 Stern je angrenzendem Gebäude (bis 4) |
 | 5 | **Bankwesen** | Märkte | +1 Stern pro Stadt |
