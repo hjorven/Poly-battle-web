@@ -8,9 +8,9 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
-import { DIRS } from './hex.js';
+import { DIRS, toWorld } from './hex.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
@@ -58,10 +58,28 @@ export function initUI(h) {
     handlers.onHotkey(action);
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
+  $('buildClose').addEventListener('click', closeBuild);
+  $('build-overlay').addEventListener('click', e => { if (e.target === $('build-overlay')) closeBuild(); });
+  document.addEventListener('keydown', e => { if (build.open && !e.target.closest('input, textarea, select')) buildKey(e); });
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
   $('winnerEasier').addEventListener('click', () => handlers.onRetry(true));
   document.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => handlers.onBoard(b.dataset.board)));
-  $('board-box').addEventListener('toggle', () => { if ($('board-box').open) handlers.onBoard('daily'); });
+  // Menü-Reiter: Maus/Touch per Antippen, Tastatur mit Pfeiltasten (letzter Reiter bleibt gemerkt).
+  const tabs = [...document.querySelectorAll('[data-mtab]')];
+  tabs.forEach(t => {
+    t.addEventListener('click', () => menuTab(t.dataset.mtab, true));
+    t.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      const i = tabs.indexOf(t) + (e.key === 'ArrowRight' ? 1 : -1);
+      const next = tabs[(i + tabs.length) % tabs.length];
+      menuTab(next.dataset.mtab, true);
+      next.focus();
+    });
+  });
+  let saved = null;
+  try { saved = localStorage.getItem('pb_menu_tab'); } catch (e) { saved = null; }
+  menuTab(tabs.some(t => t.dataset.mtab === saved) ? saved : 'play', false);
   $('winnerMap').addEventListener('click', () => handlers.onReview(true));
   $('reviewBack').addEventListener('click', () => handlers.onReview(false));
   $('winnerShare').addEventListener('click', () => handlers.onShare());
@@ -110,9 +128,28 @@ export function getTribe() {
   return selectedTribe;
 }
 
+// Einstellungen im Browser merken (nur bekannte Schlüssel und Werte).
+function saveSettings() {
+  try { localStorage.setItem('pb_settings_v1', JSON.stringify(settings)); } catch (e) { /* ignore */ }
+}
+
+function loadSettings() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('pb_settings_v1') || 'null'); } catch (e) { saved = null; }
+  if (!saved || typeof saved !== 'object') return;
+  for (const k of Object.keys(settings)) {
+    const v = saved[k];
+    if (k === 'bots' ? Number.isInteger(v) && v >= 1 && v <= 5 : typeof v === 'string' && v.length < 20) settings[k] = v;
+  }
+  if (!STARS_OPTIONS[settings.stars]) settings.stars = 'normal';
+  if (!GAME_MODES[settings.gamemode]) settings.gamemode = 'conquest';
+}
+
 function buildSettings() {
   const wrap = $('settings-box');
   if (!wrap) return;
+  loadSettings();
+  wrap.addEventListener('click', e => { if (e.target.closest('button')) saveSettings(); });
   const bots = wrap.querySelectorAll('[data-bots]');
   bots.forEach(b => b.addEventListener('click', () => {
     settings.bots = Number(b.dataset.bots);
@@ -148,29 +185,42 @@ function hex(c) {
 function buildTribePicker() {
   const wrap = $('tribe-pick');
   if (!wrap) return;
+  try { const t = localStorage.getItem('pb_tribe'); if (TRIBE_POOL.includes(t)) selectedTribe = t; } catch (e) { /* ignore */ }
   wrap.innerHTML = '';
   for (const id of TRIBE_POOL) {
     const t = TRIBES[id];
-    const startTech = t.startTechs.length
-      ? t.startTechs.map(x => TECHS[x].name).join(', ')
-      : `keine Tech (+${t.bonusStars} Sterne)`;
-    const startUnits = t.startUnits.map(u => UNITS[u].name).join(', ');
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'tribe-opt';
     btn.dataset.tribe = id;
+    btn.setAttribute('aria-pressed', 'false');
     btn.innerHTML = `<span class="tribe-name"><span class="dot" style="background:${hex(t.color)}"></span>${t.name}</span>
-      <span class="tribe-tech">Start: ${startTech} · ${startUnits}</span>
-      ${t.perk ? `<span class="tribe-perk">${STAR_ICON} ${t.perk.name}: ${t.perk.desc}</span>` : ''}`;
+      ${t.perk ? `<span class="tribe-tech">${t.perk.name}</span>` : ''}`;
     btn.addEventListener('click', () => {
       selectedTribe = selectedTribe === id ? null : id;
-      wrap.querySelectorAll('.tribe-opt').forEach(b => b.classList.toggle('active', b.dataset.tribe === selectedTribe));
+      try { if (selectedTribe) localStorage.setItem('pb_tribe', selectedTribe); else localStorage.removeItem('pb_tribe'); } catch (e) { /* ignore */ }
+      markTribe();
     });
     wrap.appendChild(btn);
   }
-  if (selectedTribe) {
-    wrap.querySelectorAll('.tribe-opt').forEach(b => b.classList.toggle('active', b.dataset.tribe === selectedTribe));
-  }
+  markTribe();
+}
+
+// Gewählten Stamm markieren und darunter ausführlich beschreiben.
+function markTribe() {
+  const wrap = $('tribe-pick');
+  wrap.querySelectorAll('.tribe-opt').forEach(b => {
+    const on = b.dataset.tribe === selectedTribe;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const info = $('tribe-info');
+  if (!info) return;
+  if (!selectedTribe) { info.innerHTML = 'Kein Stamm gewählt: Du bekommst einen zufälligen. Tippe einen Stamm an, um ihn zu wählen, und nochmal, um die Wahl aufzuheben.'; return; }
+  const t = TRIBES[selectedTribe];
+  const startTech = t.startTechs.length ? t.startTechs.map(x => TECHS[x].name).join(', ') : `keine Technologie (+${t.bonusStars} Sterne)`;
+  const startUnits = t.startUnits.map(u => UNITS[u].name).join(', ');
+  info.innerHTML = `<b>${t.name}</b> · Start: ${startTech} · ${startUnits}${t.perk ? `<br><span class="tribe-perk">${t.perk.name}: ${t.perk.desc}</span>` : ''}`;
 }
 
 export function setStatus(text) {
@@ -670,16 +720,9 @@ export function showCityPanel(state, city, ctx) {
   const income = city.owner ? cityIncome(state, city) : 0;
   const occupied = state.units.some(u => u.q === city.q && u.r === city.r);
 
-  const cells = cityTiles(state, city).map(([q, r]) => {
-    const tdef = TERRAIN[terrainAt(state, q, r)];
-    const imp = improvementAt(state, q, r);
-    const res = resourceAt(state, q, r);
-    let tag = tdef.name, cls = '';
-    if (imp) { tag = IMPROVEMENTS[imp].name; cls = 'built'; }
-    if (roadAt(state, q, r)) tag += ' + Straße';
-    else if (res) { tag = RESOURCES[res].name; cls = 'res'; }
-    return `<span class="tile-chip ${cls}">${tag}</span>`;
-  }).join('');
+  const tiles = cityTiles(state, city);
+  const built = tiles.filter(([q, r]) => improvementAt(state, q, r)).length;
+  const res = tiles.filter(([q, r]) => resourceAt(state, q, r)).length;
 
   let actions = '';
   if (city.owner && city.owner === ctx.actAs) {
@@ -691,28 +734,34 @@ export function showCityPanel(state, city, ctx) {
     });
     const lvl = pendingLevel(city);
     if (lvl && mine) {
-      actions += `<div class="action-list"><button class="btn primary action" data-reward-open>
-        <span>Stufe ${lvl} erreicht<span class="sub" style="color:#d4d4d8">Belohnung auswählen</span></span></button></div>`;
+      actions += `<button class="btn primary city-reward" data-reward-open>Stufe ${lvl} erreicht – Belohnung wählen</button>`;
     }
-    actions += `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Einheiten ausbilden</div></div><div class="action-list">`;
+    const can = buildOptionsCount(state, city, ctx);
+    const popReason = popReasonFor(state, city, ctx);
+    actions += `<div class="city-actions">
+      <button class="btn city-act" data-build-open>
+        <b>Ausbauen</b><span class="sub">${can ? `${can} ${can === 1 ? 'Möglichkeit' : 'Möglichkeiten'} jetzt` : 'Stadtgebiet ansehen'}</span>
+      </button>
+      <button class="btn city-act" data-buypop ${popReason ? 'disabled' : ''} title="${popReason || 'Mehr Sterne pro Runde, neue Stufe mit Belohnung'}">
+        <b>Bevölkerung +1</b><span class="sub">${popReason || popCost(city, state) + ' Sterne'}</span>
+      </button>
+    </div>`;
+    actions += `<div class="panel-sub city-sec">Einheiten ausbilden</div><div class="train-grid">`;
     for (const t of unlocked) {
       const u = UNITS[t];
       const reason = trainReason(state, city, t, ctx);
-      actions += `<button class="btn action" data-train="${t}" ${reason ? 'disabled' : ''}>
-        <span>${u.name}<span class="sub">${reason || `Angriff ${attackOf(state, { type: t, owner: city.owner })} · Verteidigung ${u.def} · Bewegung ${maxMove(state, city.owner, t)} · Reichweite ${u.range} · Leben ${u.hp}`}</span></span>
-        <span class="cost">${unitCost(state, city.owner, t)} Sterne</span>
+      const stats = `Angriff ${attackOf(state, { type: t, owner: city.owner })} · Verteidigung ${u.def} · Bewegung ${maxMove(state, city.owner, t)} · Reichweite ${u.range} · Leben ${u.hp}`;
+      actions += `<button class="btn train-tile" data-train="${t}" ${reason ? 'disabled' : ''} title="${reason ? reason + ' · ' : ''}${stats}">
+        <span class="tt-name">${u.name}</span><span class="tt-cost">${unitCost(state, city.owner, t)}</span>
+        <span class="tt-stats">${reason && reason !== 'Zu wenig Sterne' ? reason : `A ${attackOf(state, { type: t, owner: city.owner })} · V ${u.def} · B ${maxMove(state, city.owner, t)}${u.range > 1 ? ' · R ' + u.range : ''}`}</span>
       </button>`;
     }
-    actions += `</div>`;
-    const popReason = popReasonFor(state, city, ctx);
-    actions += `<div class="action-list"><button class="btn action ghost" data-buypop ${popReason ? 'disabled' : ''}>
-      <span>Bevölkerung +1<span class="sub">Mehr Sterne pro Runde, neue Stufe mit Belohnung (max ${MAX_POP})</span></span>
-      <span class="cost">${popCost(city, state)} Sterne</span>
-    </button></div>`;
+    actions += `</div><div class="hint tt-legend">Zahl rechts = Sterne · A Angriff · V Verteidigung · B Bewegung · R Reichweite</div>`;
     if (city.trained) actions += `<div class="hint">Diese Stadt hat diese Runde schon eine Landeinheit ausgebildet${cityPorts(state, city).length && !city.trainedShip ? ' – ein Schiff geht noch' : ''}.</div>`;
     else if (city.trainedShip) actions += `<div class="hint">Schiff gebaut – eine Landeinheit geht diese Runde noch.</div>`;
     if (occupied) actions += `<div class="hint">Einheit in der Stadt – zum Ausbilden zuerst wegziehen.</div>`;
-    actions += buildRows(state, city, ctx);
+  } else if (city.owner) {
+    actions = '';
   }
 
   panel(`
@@ -729,11 +778,11 @@ export function showCityPanel(state, city, ctx) {
     <div class="stat-row">
       <div class="stat">Stufe<b>${city.pop}/${MAX_POP}</b></div>
       <div class="stat">Einkommen<b>${income}/Runde</b></div>
-      <div class="stat">Gebiete<b>${cityTiles(state, city).length}</b></div>
+      <div class="stat">Gebiet<b>${tiles.length} Felder</b></div>
     </div>
+    <div class="hint city-sum">${built} ${built === 1 ? 'Gebäude' : 'Gebäude'} · ${res} ${res === 1 ? 'Rohstoff' : 'Rohstoffe'} im Stadtgebiet${city.owner === ctx.actAs ? '' : ` · <button class="linklike" data-build-open>Gebiet ansehen</button>`}</div>
     ${levelChips(city)}
     ${switchToUnit(state, city, ctx)}
-    <div class="tile-grid">${cells}</div>
     ${actions || (!city.owner ? '<div class="hint">Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.</div>'
       : city.owner !== ctx.actAs ? '<div class="hint">Feindliche Stadt – besiege die Verteidiger und rücke ein, um sie zu erobern.</div>'
       : '<div class="hint">Nicht dein Zug.</div>')}
@@ -748,15 +797,9 @@ export function showCityPanel(state, city, ctx) {
   if (rwBtn) rwBtn.addEventListener('click', () => showReward(state, city, ctx));
   const popBtn = $('panel').querySelector('[data-buypop]');
   if (popBtn) popBtn.addEventListener('click', () => handlers.onBuyPop(city));
-  $('panel').querySelectorAll('[data-buildroad]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const [q, r] = btn.dataset.buildroad.split(',').map(Number);
-      handlers.onBuildRoad(q, r, null);
-    });
-  });
-  $('panel').querySelectorAll('[data-improve]').forEach(btn => {
-    btn.addEventListener('click', () => handlers.onImprove(city, btn.dataset.improve, Number(btn.dataset.q), Number(btn.dataset.r)));
-  });
+  $('panel').querySelectorAll('[data-build-open]').forEach(btn => btn.addEventListener('click', () => openBuild(state, city, ctx)));
+  // Offenes Bau-Fenster mit dem neuen Stand nachziehen (z. B. nach dem Bauen).
+  if (build.open && build.city && build.city.q === city.q && build.city.r === city.r) renderBuild(state, city, ctx);
 }
 
 function showRememberedCity(state, view) {
@@ -822,36 +865,219 @@ export function showHandover(name, onGo) {
   $('handover-overlay').classList.remove('hidden');
 }
 
-function buildRows(state, city, ctx) {
-  const rows = [];
-  const roadsKnown = city.owner && state.techs[city.owner].includes(ROAD.tech);
-  for (const [q, r] of cityTiles(state, city)) {
-    const tile = terrainAt(state, q, r);
-    const free = !improvementAt(state, q, r) && !resourceAt(state, q, r);
-    const types = free ? Object.keys(IMPROVEMENTS).filter(k => IMPROVEMENTS[k].terrain.includes(tile) &&
-      (!IMPROVEMENTS[k].monument || monumentReady(state, city.owner, k))) : [];
-    const road = roadsKnown && TERRAIN[tile].walkable && !roadAt(state, q, r);
-    if (!types.length && !road) continue;
-    const cellName = TERRAIN[tile].name;
-    const btns = types.map(t => {
-      const d = IMPROVEMENTS[t];
-      let reason = '';
-      const chk = canImprove(state, city, t, q, r);
-      if (!chk.ok) reason = chk.reason;
-      else if (d.tech && !state.techs[city.owner].includes(d.tech)) reason = 'Technologie fehlt';
-      else if (state.stars[city.owner] < improvementCost(state, city.owner, t)) reason = 'Zu wenig Sterne';
-      if (!ctx.myTurn && !reason) reason = 'Nicht dein Zug';
-      const locked = !ctx.myTurn;
-      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-improve="${t}" data-q="${q}" data-r="${r}" ${locked ? 'disabled' : ''} title="${reason || d.name}">${d.name} <span class="cost">${d.monument ? 'frei' : improvementCost(state, city.owner, t)}</span></button>`;
-    }).join('') + (road ? (() => {
-      const chk = canBuildRoad(state, city.owner, q, r);
-      const reason = !ctx.myTurn ? 'Nicht dein Zug' : chk.ok ? '' : chk.reason;
-      return `<button class="btn chip-btn${reason ? ' disabled' : ''}" data-buildroad="${q},${r}" ${ctx.myTurn ? '' : 'disabled'} title="${reason || 'Straße: halbe Bewegung'}">Straße <span class="cost">${ROAD.cost}</span></button>`;
-    })() : '');
-    rows.push(`<div class="build-row"><span class="build-tile">${cellName}</span><span class="build-btns">${btns}</span></div>`);
+// --- Bau-Fenster: Stadtgebiet als Wabenkarte, Feld wählen, Gebäude bauen ---------
+
+const IMP_EFFECT = {
+  farm: '+1 Stern pro Runde',
+  sawmill: '+1 Stern pro Runde',
+  mine: '+1 Stern pro Runde',
+  port: '+1 Stern pro Runde, Schiffe ausbilden',
+  temple: '+2 Sterne pro Runde',
+  airfield: '+1 Stern pro Runde, Luft-Einheiten ausbilden',
+  mill: '+1 Stern je angrenzender Farm',
+  forge: '+2 Sterne je angrenzender Mine',
+  market: '+1 Stern je angrenzendem Gebäude (bis 4)',
+  fort: 'Einheiten darauf verteidigen dreifach',
+  monastery: '+2 Sterne, Einheiten im Gebiet heilen mehr'
+};
+const impEffect = id => IMPROVEMENTS[id].monument ? `+${3} Bevölkerung, 200 Punkte (einmalig je Stamm)` : IMP_EFFECT[id] || '';
+
+const build = { open: false, city: null, sel: null, state: null, ctx: null, opts: [] };
+
+// Was lässt sich auf diesem Feld bauen? Erforschtes zuerst, Fehlendes mit Grund.
+function tileOptions(state, city, q, r, ctx) {
+  const tile = terrainAt(state, q, r);
+  if (cityAt(state, q, r)) return [];
+  const owner = city.owner;
+  const out = [];
+  for (const id of Object.keys(IMPROVEMENTS)) {
+    const d = IMPROVEMENTS[id];
+    if (!d.terrain.includes(tile)) continue;
+    if (d.monument && !monumentReady(state, owner, id)) continue;
+    const chk = canImprove(state, city, id, q, r);
+    let reason = '';
+    const known = !d.tech || state.techs[owner].includes(d.tech);
+    if (!chk.ok) reason = chk.reason;
+    else if (!known) reason = 'Forschung: ' + TECHS[d.tech].name;
+    else if (state.stars[owner] < improvementCost(state, owner, id)) reason = 'Zu wenig Sterne';
+    else if (!ctx.myTurn) reason = 'Nicht dein Zug';
+    // Belegte Felder: keine Liste aller Gebäude, nur der Grund oben.
+    if (!chk.ok && (chk.reason === 'Bereits bebaut' || chk.reason === 'Ressource wird genutzt')) continue;
+    const yieldHere = d.adjacent ? improvementIncome(state, owner, id, q, r) : null;
+    out.push({ kind: 'imp', id, name: d.name, cost: d.monument ? 0 : improvementCost(state, owner, id), reason, known,
+      effect: impEffect(id) + (yieldHere != null ? ` – hier jetzt +${yieldHere}` : '') });
   }
-  if (!rows.length) return '';
-  return `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Gebäude im Stadtgebiet</div></div>${rows.join('')}`;
+  if (TERRAIN[tile].walkable && !roadAt(state, q, r)) {
+    const known = state.techs[owner].includes(ROAD.tech);
+    const chk = canBuildRoad(state, owner, q, r);
+    const reason = !known ? 'Forschung: ' + TECHS[ROAD.tech].name : !chk.ok ? chk.reason : !ctx.myTurn ? 'Nicht dein Zug' : '';
+    out.push({ kind: 'road', id: 'road', name: 'Weg', cost: ROAD.cost, reason, known, effect: 'Schritt von Weg zu Weg kostet halbe Bewegung' });
+  }
+  return out.sort((a, b) => (a.reason ? 1 : 0) - (b.reason ? 1 : 0) || (b.known ? 1 : 0) - (a.known ? 1 : 0));
+}
+
+function buildOptionsCount(state, city, ctx) {
+  if (!ctx.myTurn) return 0;
+  return cityTiles(state, city).reduce((n, [q, r]) => n + tileOptions(state, city, q, r, ctx).filter(o => !o.reason).length, 0);
+}
+
+function openBuild(state, city, ctx) {
+  build.open = true;
+  build.city = city;
+  build.sel = null;
+  $('build-overlay').classList.remove('hidden');
+  renderBuild(state, city, ctx);
+  const first = $('build-map').querySelector('.bhex.sel');
+  if (first) first.focus({ preventScroll: true });
+}
+
+export function closeBuild() {
+  build.open = false;
+  $('build-overlay').classList.add('hidden');
+}
+
+export function isBuildOpen() {
+  return build.open;
+}
+
+function renderBuild(state, city, ctx) {
+  build.state = state; build.city = city; build.ctx = ctx;
+  const mineCity = city.owner === ctx.actAs;
+  const tiles = cityTiles(state, city);
+  // Das Stadtfeld selbst gehört zur Ansicht (Mitte), auch wenn dort nichts gebaut wird.
+  if (!tiles.some(([q, r]) => q === city.q && r === city.r)) tiles.unshift([city.q, city.r]);
+  const info = tiles.map(([q, r]) => {
+    const opts = mineCity ? tileOptions(state, city, q, r, ctx) : [];
+    return { q, r, key: q + ',' + r, opts, can: opts.some(o => !o.reason) };
+  });
+  if (!build.sel || !info.some(t => t.key === build.sel)) {
+    const pick = info.find(t => t.can) || info.find(t => !cityAt(state, t.q, t.r)) || info[0];
+    build.sel = pick ? pick.key : null;
+  }
+  $('build-title').textContent = `${city.isCapital ? 'Hauptstadt' : 'Stadt'} ${mineCity ? 'ausbauen' : '· Gebiet'}`;
+  $('build-stars').textContent = mineCity ? `${state.stars[city.owner]} Sterne` : '';
+
+  // Wabenkarte: gleiche Ausrichtung wie das Spielfeld (Spitze oben).
+  const box = $('build-map');
+  const c0 = toWorld(city.q, city.r);
+  const pts = info.map(t => { const w = toWorld(t.q, t.r); return { ...t, x: w.x - c0.x, z: w.z - c0.z }; });
+  const minX = Math.min(...pts.map(p => p.x)), maxX = Math.max(...pts.map(p => p.x));
+  const minZ = Math.min(...pts.map(p => p.z)), maxZ = Math.max(...pts.map(p => p.z));
+  const avail = Math.max(240, Math.min(box.parentElement.clientWidth || 420, 520));
+  const sx = (maxX - minX) + Math.sqrt(3), sz = (maxZ - minZ) + 2;
+  const size = Math.max(26, Math.min(76, avail / sx, (window.innerHeight * 0.55) / sz));
+  const w = Math.sqrt(3) * size, h = 2 * size;
+  box.style.width = `${sx * size}px`;
+  box.style.height = `${sz * size}px`;
+  box.innerHTML = pts.map(t => {
+    const tile = terrainAt(state, t.q, t.r);
+    const imp = improvementAt(state, t.q, t.r);
+    const res = resourceAt(state, t.q, t.r);
+    const isCity = !!cityAt(state, t.q, t.r);
+    const unit = unitAt(state, t.q, t.r);
+    const main = isCity ? (city.isCapital ? 'Hauptstadt' : 'Stadt') : imp ? IMPROVEMENTS[imp].name : res ? RESOURCES[res].name : '';
+    const tags = [roadAt(state, t.q, t.r) && !isCity ? 'Weg' : '', unit && !isCity ? 'Einheit' : ''].filter(Boolean).join(' · ');
+    const cls = ['bhex', t.key === build.sel ? 'sel' : '', t.can ? 'can' : '', imp ? 'built' : '', isCity ? 'city' : ''].filter(Boolean).join(' ');
+    const label = [TERRAIN[tile].name, main, tags, t.can ? 'baubar' : ''].filter(Boolean).join(', ');
+    return `<button class="${cls}" data-hex="${t.key}" aria-label="${label}" aria-pressed="${t.key === build.sel}"
+      style="left:${(t.x - minX) * size}px;top:${(t.z - minZ) * size}px;width:${w}px;height:${h}px">
+      <span class="hx-in" style="background:${hex(TERRAIN[tile].color)}">
+        <span class="hx-t">${TERRAIN[tile].name}</span>
+        ${main ? `<span class="hx-m${imp ? ' imp' : res ? ' res' : ''}">${main}</span>` : ''}
+        ${tags ? `<span class="hx-g">${tags}</span>` : ''}
+      </span>
+    </button>`;
+  }).join('');
+  box.querySelectorAll('[data-hex]').forEach(b => b.addEventListener('click', () => {
+    build.sel = b.dataset.hex;
+    renderBuild(build.state, build.city, build.ctx);
+    const again = $('build-map').querySelector(`[data-hex="${build.sel}"]`);
+    if (again) again.focus({ preventScroll: true });
+  }));
+  renderBuildDetail(state, city, ctx, info.find(t => t.key === build.sel));
+  // Fokus nach dem Neuzeichnen (z. B. nach dem Bauen) auf dem gewählten Feld halten.
+  if (build.open && (!document.activeElement || document.activeElement === document.body)) {
+    const b = box.querySelector('.bhex.sel');
+    if (b) b.focus({ preventScroll: true });
+  }
+}
+
+function renderBuildDetail(state, city, ctx, t) {
+  const box = $('build-detail');
+  build.opts = [];
+  if (!t) { box.innerHTML = ''; return; }
+  const tile = terrainAt(state, t.q, t.r);
+  const imp = improvementAt(state, t.q, t.r);
+  const res = resourceAt(state, t.q, t.r);
+  const lines = [];
+  if (cityAt(state, t.q, t.r)) lines.push(`Das Stadtfeld selbst (Stufe ${city.pop}, ${cityIncome(state, city)} Sterne pro Runde). Gebaut wird auf den Feldern drumherum.`);
+  if (imp) {
+    const inc = improvementIncome(state, city.owner, imp, t.q, t.r);
+    const extra = IMPROVEMENTS[imp].adjacent || IMPROVEMENTS[imp].monument || !inc ? ' ' + impEffect(imp) : '';
+    lines.push(`<b>${IMPROVEMENTS[imp].name}</b> steht hier${inc ? ` und bringt +${inc} ${inc === 1 ? 'Stern' : 'Sterne'} pro Runde` : ''}.${extra}`);
+  }
+  if (res) lines.push(`<b>${RESOURCES[res].name}</b>: Rohstoff, bringt der Stadt schon Ertrag. Darauf lässt sich nichts bauen.`);
+  if (roadAt(state, t.q, t.r) && !cityAt(state, t.q, t.r)) lines.push('Hier verläuft ein Weg.');
+  const unit = unitAt(state, t.q, t.r);
+  if (unit && !cityAt(state, t.q, t.r)) lines.push(`Hier steht ${UNITS[unit.type].name} – zum Bauen muss das Feld frei sein.`);
+  const mineCity = city.owner === ctx.actAs;
+  let opts = '';
+  if (mineCity && t.opts.length) {
+    const ready = t.opts.filter(o => o.known);
+    const later = t.opts.filter(o => !o.known);
+    build.opts = ready;
+    opts = `<div class="bopts">${ready.map((o, i) => `
+      <button class="btn bopt" data-opt="${i}" ${o.reason ? 'disabled' : ''}>
+        <span class="bo-key">${i < 9 ? i + 1 : ''}</span>
+        <span class="bo-main"><b>${o.name}</b><span class="sub">${o.reason ? o.reason + ' · ' : ''}${o.effect}</span></span>
+        <span class="cost">${o.cost ? o.cost + ' Sterne' : 'frei'}</span>
+      </button>`).join('')}</div>`;
+    if (!ready.length) opts += '<div class="hint">Noch nichts erforscht, was hier gebaut werden kann.</div>';
+    if (later.length) opts += `<div class="blater"><span>Nach Forschung möglich:</span> ${later.map(o => `<span class="blater-chip" title="${o.effect}">${o.name} <i>${o.reason.replace('Forschung: ', '')}</i></span>`).join('')}</div>`;
+  } else if (mineCity && !cityAt(state, t.q, t.r) && !imp && !res) {
+    opts = '<div class="hint">Auf diesem Gelände gibt es nichts zu bauen.</div>';
+  } else if (!mineCity) {
+    opts = '<div class="hint">Nicht deine Stadt.</div>';
+  }
+  box.innerHTML = `<h3>${TERRAIN[tile].name}</h3>${lines.map(l => `<p>${l}</p>`).join('')}${opts}`;
+  box.querySelectorAll('[data-opt]').forEach(b => b.addEventListener('click', () => doBuildOpt(Number(b.dataset.opt))));
+}
+
+function doBuildOpt(i) {
+  const o = build.opts[i];
+  if (!o || o.reason || !build.sel) return;
+  const [q, r] = build.sel.split(',').map(Number);
+  if (o.kind === 'road') handlers.onBuildRoad(q, r, null);
+  else handlers.onImprove(build.city, o.id, q, r);
+}
+
+// Pfeiltasten: links/rechts = vorheriges/nächstes Feld, hoch/runter = nächstes
+// Feld in dieser Richtung. Ziffern bauen die entsprechende Möglichkeit.
+function buildKey(e) {
+  if (!build.open) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeBuild(); return; }
+  if (/^[1-9]$/.test(e.key)) { e.preventDefault(); doBuildOpt(Number(e.key) - 1); return; }
+  if (!e.key.startsWith('Arrow') || !build.sel) return;
+  e.preventDefault();
+  const list = [...$('build-map').querySelectorAll('[data-hex]')].map(b => ({ key: b.dataset.hex, x: parseFloat(b.style.left), y: parseFloat(b.style.top) }));
+  const cur = list.find(t => t.key === build.sel);
+  if (!cur) return;
+  let next = null;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    const sorted = list.slice().sort((a, b) => a.y - b.y || a.x - b.x);
+    const i = sorted.findIndex(t => t.key === cur.key);
+    next = sorted[(i + (e.key === 'ArrowRight' ? 1 : -1) + sorted.length) % sorted.length];
+  } else {
+    const dir = e.key === 'ArrowDown' ? 1 : -1;
+    const cand = list.filter(t => (t.y - cur.y) * dir > 1);
+    cand.sort((a, b) => Math.abs(a.y - cur.y) + Math.abs(a.x - cur.x) * 0.8 - (Math.abs(b.y - cur.y) + Math.abs(b.x - cur.x) * 0.8));
+    next = cand[0];
+  }
+  if (!next) return;
+  build.sel = next.key;
+  renderBuild(build.state, build.city, build.ctx);
+  const b = $('build-map').querySelector(`[data-hex="${next.key}"]`);
+  if (b) b.focus({ preventScroll: true });
 }
 
 function trainReason(state, city, type, ctx) {
@@ -1154,6 +1380,18 @@ export function closeTech() {
 
 export function isTechOpen() {
   return !$('tech-overlay').classList.contains('hidden');
+}
+
+function menuTab(id, remember) {
+  document.querySelectorAll('[data-mtab]').forEach(t => {
+    const on = t.dataset.mtab === id;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+    t.tabIndex = on ? 0 : -1;
+  });
+  document.querySelectorAll('.menu-pane').forEach(p => p.classList.toggle('hidden', p.id !== 'mpane-' + id));
+  if (remember) { try { localStorage.setItem('pb_menu_tab', id); } catch (e) { /* ignore */ } }
+  if (id === 'board' && handlers.onBoard) handlers.onBoard('daily');
 }
 
 export function showMenu() {
