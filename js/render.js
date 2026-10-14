@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HEX_SIZE, TERRAIN, COLORS, MAP_W, MAP_H, MONUMENTS, hasAbility } from './config.js';
-import { playerColor, isVisible, visibleKeys, cityView, lighthouseKeys, lighthouseFound, roadAt, onRoadNet } from './rules.js';
+import { playerColor, isVisible, visibleKeys, cityView, lighthouseKeys, lighthouseFound, roadAt, onRoadNet, useMap } from './rules.js';
 import { toWorld, forEachHex, hk, DIRS } from './hex.js';
 
 let colorMap = {};
@@ -68,6 +68,14 @@ export function initRender(canvas, opts = {}) {
     return false;
   }
   initialized = true;
+  // Handys entziehen WebGL manchmal den Kontext (App-Wechsel, Speicherdruck).
+  // Dann nicht weiterzeichnen und nach der Rückgabe alles neu aufbauen.
+  canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); contextLost = true; });
+  canvas.addEventListener('webglcontextrestored', () => {
+    contextLost = false;
+    boardSignature = null;
+    if (lastSync) syncBoard(lastSync.state, lastSync.viewer);
+  });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -154,8 +162,7 @@ export function initRender(canvas, opts = {}) {
     requestAnimationFrame(loop);
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
-    stepTweens(now);
-    stepEffects(now);
+    try { stepTweens(now); stepEffects(now); } catch (e) { reportOnce(e); }
     if (selectedMesh) {
       const s = 1 + Math.sin(now / 220) * 0.06;
       selectedMesh.scale.set(s, 1, s);
@@ -164,13 +171,14 @@ export function initRender(canvas, opts = {}) {
       const s = 0.82 + Math.sin(now / 140) * 0.1;
       targetMesh.scale.set(s, 1, s);
     }
-    stepFog(now, dt);
-    stepIdleMarkers(now);
-    stepLighthouses(dt);
-    stepMinimap(now);
+    // Ein Fehler in Nebenschritten (Minikarte, Nebel, Effekte) darf das Zeichnen
+    // des Spielfelds nie stoppen – sonst bleibt nur die Oberfläche auf Weiß.
+    for (const step of [() => stepFog(now, dt), () => stepIdleMarkers(now), () => stepLighthouses(dt), () => stepBridges(dt), () => stepMinimap(now)]) {
+      try { step(); } catch (e) { reportOnce(e); }
+    }
     controls.update();
     clampTarget();
-    renderer.render(scene, camera);
+    if (!contextLost) renderer.render(scene, camera);
   }
   requestAnimationFrame(loop);
   return true;
@@ -413,6 +421,41 @@ function roadNode(arms) {
   return g;
 }
 
+// Straßen durch Wald und Gebirge: Bäume auf dem Weg fällen (Größe 0, damit
+// die Sichtbarkeitslogik unberührt bleibt), den Gipfel verkleinern und von der
+// Straße weg verschieben – es entsteht ein Pass.
+function roadThroughDecor(t, sig) {
+  const arms = sig ? [...sig.slice(1)].map(Number) : [];
+  const env = { road: !!sig, arms };
+  let best = null;
+  if (sig) {
+    for (let k = 0; k < 6; k++) {
+      const ang = Math.PI / 6 + k * Math.PI / 3, vx = Math.cos(ang), vz = Math.sin(ang);
+      const gap = Math.min(Math.PI, ...arms.map(d => Math.acos(Math.max(-1, Math.min(1, vx * DIR_VEC[d][0] + vz * DIR_VEC[d][1])))));
+      if (!best || gap > best.gap) best = { vx, vz, gap };
+    }
+  }
+  for (const d of t.decor) {
+    if (d.userData.tree) {
+      const [x, z] = d.userData.tree;
+      const s = d.userData.size || 1;
+      const blocked = sig && onRoadPath(x, z, env, 0.24);
+      d.scale.setScalar(blocked ? 0.0001 : 1);
+      if (!blocked && d.userData.size) d.scale.setScalar(s);
+      if (!blocked && !d.userData.size) d.scale.set(1, d.userData.trunkScale || d.scale.y || 1, 1);
+    } else if (d.userData.peak || d.userData.snow) {
+      if (d.userData.base == null) d.userData.base = d.position.y;
+      const sc = sig ? 0.6 : 1;
+      d.scale.setScalar(sc);
+      d.position.x = sig ? best.vx * 0.38 : 0;
+      d.position.z = sig ? best.vz * 0.38 : 0;
+      // Kleinerer Gipfel sitzt tiefer, sonst schwebt er.
+      const top = TERRAIN.mountain.height / 2;
+      d.position.y = top + (d.userData.base - top) * sc;
+    }
+  }
+}
+
 function syncRoad(state, key, t) {
   const [q, r] = key.split(',').map(Number);
   let sig = '';
@@ -421,6 +464,7 @@ function syncRoad(state, key, t) {
     DIRS.forEach(([dq, dr], d) => { if (onRoadNet(state, q + dq, r + dr)) sig += d; });
   }
   if (t.roadSig === sig) return;
+  roadThroughDecor(t, sig);
   if (t.roadNode) {
     t.mesh.remove(t.roadNode);
     t.decor = t.decor.filter(d => d !== t.roadNode);
@@ -438,23 +482,36 @@ function syncRoad(state, key, t) {
 
 // --- Brücken ----------------------------------------------------------------
 
-function bridgeNode(axis) {
+// Zugbrücke: Fahrbahn als Klappe mit Drehpunkt am Landende (`hinge` = +1 oder
+// −1 entlang der Achse). Liegt ein Schiff darunter, klappt sie hoch.
+function bridgeNode(axis, hinge = 1) {
   const g = new THREE.Group();
   const wood = mat(0x8a5a33), dark = mat(0x5c3d22);
+  const leaf = new THREE.Group();
+  leaf.position.x = hinge * 0.89;
+  g.add(leaf);
+  const part = new THREE.Group();
+  part.position.x = -hinge * 0.89;
+  leaf.add(part);
   const deck = new THREE.Mesh(geo('brDeck', () => new THREE.BoxGeometry(1.78, 0.07, 0.44)), wood);
   deck.castShadow = true;
   deck.receiveShadow = true;
-  g.add(deck);
+  part.add(deck);
   for (const z of [-0.2, 0.2]) {
     const rail = new THREE.Mesh(geo('brRail', () => new THREE.BoxGeometry(1.7, 0.04, 0.04)), dark);
     rail.position.set(0, 0.13, z);
-    g.add(rail);
+    part.add(rail);
     for (const x of [-0.75, -0.25, 0.25, 0.75]) {
       const post = new THREE.Mesh(geo('brPost', () => new THREE.BoxGeometry(0.04, 0.13, 0.04)), dark);
       post.position.set(x, 0.07, z);
-      g.add(post);
+      part.add(post);
     }
   }
+  // Ketten vom Landende zur Klappe (nur angedeutet).
+  const chain = new THREE.Mesh(geo('brChain', () => new THREE.BoxGeometry(0.03, 0.45, 0.03)), mat(0x52525b));
+  chain.position.set(hinge * 0.86, 0.22, 0);
+  g.add(chain);
+  g.userData = { leaf, hinge, open: 0, want: 0 };
   for (const x of [-0.42, 0.42]) {
     const pier = new THREE.Mesh(geo('brPier', () => new THREE.CylinderGeometry(0.05, 0.06, 0.4, 6)), dark);
     pier.position.set(x, -0.2, 0);
@@ -467,8 +524,34 @@ function bridgeNode(axis) {
   return g;
 }
 
-function syncBridge(t, axis) {
-  const want = axis == null ? null : axis;
+// Drehpunkt der Klappe: auf der Seite, an der Land (keine weitere Brücke) liegt.
+function bridgeHinge(state, key, axis) {
+  const [q, r] = key.split(',').map(Number);
+  const [dq, dr] = DIRS[axis];
+  const nq = q + dq, nr = r + dr;
+  if (nq < 0 || nr < 0 || nq >= MAP_W || nr >= MAP_H) return -1;
+  const land = TERRAIN[state.terrain[nr * MAP_W + nq]].walkable && !(state.bridges && state.bridges[nq + ',' + nr] != null);
+  return land ? 1 : -1;
+}
+
+// Schiff auf dem Brückenfeld: Klappe öffnen. Animiert in stepBridges.
+function updateBridgeOpen(state) {
+  const ships = new Set(state.units.filter(u => hasAbility(u.type, 'water')).map(u => hk(u.q, u.r)));
+  for (const [key, t] of tiles) if (t.bridgeNode) t.bridgeNode.userData.want = ships.has(key) ? 1 : 0;
+}
+
+function stepBridges(dt) {
+  for (const t of tiles.values()) {
+    const n = t.bridgeNode;
+    if (!n || n.userData.open === n.userData.want) continue;
+    const u = n.userData;
+    u.open += Math.sign(u.want - u.open) * Math.min(Math.abs(u.want - u.open), dt * 1.6);
+    u.leaf.rotation.z = -u.hinge * 1.15 * (u.open * u.open * (3 - 2 * u.open));
+  }
+}
+
+function syncBridge(t, axis, hinge = 1) {
+  const want = axis == null ? null : axis + ':' + hinge;
   if (!t || (t.bridgeAxis ?? null) === want) return;
   if (t.bridgeNode) {
     t.mesh.remove(t.bridgeNode);
@@ -477,7 +560,7 @@ function syncBridge(t, axis) {
   }
   t.bridgeAxis = want;
   if (want == null) return;
-  const n = bridgeNode(want);
+  const n = bridgeNode(axis, hinge);
   // Fahrbahn knapp über Ufer-Höhe (Land 0.5), relativ zur Kachelmitte.
   n.position.y = 0.53 - TERRAIN[t.terrain].height / 2;
   n.visible = t.seen;
@@ -648,6 +731,8 @@ export function drawMinimap(state, viewer) {
 function paintMinimap() {
   const { ctx, canvas, state, viewer } = mini;
   if (!state || !initialized) return;
+  // Gehört der gemerkte Stand zu einer anderen Kartengröße (gerade neues Spiel), aussetzen.
+  if (state.terrain.length !== MAP_W * MAP_H) return;
   const { scale, ox, oz } = miniFrame();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#1e3a5f';
@@ -712,7 +797,7 @@ export function setIdleMarkers(units) {
   for (const u of units) {
     const m = new THREE.Mesh(markGeo, markMat);
     const p = toWorld(u.q, u.r);
-    m.position.set(p.x, hexTop(hk(u.q, u.r)) + 1.3, p.z);
+    m.position.set(p.x, unitTop(hk(u.q, u.r), u.type) + 1.3, p.z);
     m.scale.set(1, 1.6, 1);
     m.userData.base = m.position.y;
     m.userData.phase = (u.q * 7 + u.r * 3) % 10;
@@ -1200,13 +1285,17 @@ function buildTiles(state) {
           const trunk = new THREE.Mesh(trunkGeo, trunkMat);
           trunk.position.set(sp[0] + jx, def.height / 2 + 0.11, sp[1] + jz);
           trunk.scale.set(1, sc, 1);
+          trunk.userData.trunkScale = sc;
           trunk.castShadow = true;
+          trunk.userData.tree = [trunk.position.x, trunk.position.z];
           mesh.add(trunk);
           decor.push(trunk);
           const foliage = new THREE.Mesh(foliageGeo, rnd() < 0.5 ? foliageMat : foliageMat2);
           foliage.position.set(sp[0] + jx, def.height / 2 + 0.45 * sc, sp[1] + jz);
           foliage.scale.set(sc, sc, sc);
           foliage.castShadow = true;
+          foliage.userData.tree = [foliage.position.x, foliage.position.z];
+          foliage.userData.size = sc;
           mesh.add(foliage);
           decor.push(foliage);
         }
@@ -1215,11 +1304,13 @@ function buildTiles(state) {
         peak.position.y = def.height / 2 + 0.41;
         peak.rotation.y = 0.4;
         peak.castShadow = true;
+        peak.userData.peak = true;
         mesh.add(peak);
         decor.push(peak);
         const snow = new THREE.Mesh(snowGeo, snowMat);
         snow.position.y = def.height / 2 + 0.68;
         snow.castShadow = true;
+        snow.userData.snow = true;
         mesh.add(snow);
         decor.push(snow);
       }
@@ -1295,6 +1386,15 @@ function terrainSignature(state) {
 function hexTop(key) {
   const t = tiles.get(key);
   return t ? t.top : 0.5;
+}
+
+// Standhöhe einer Einheit: Landeinheiten (und Luft) stehen auf dem Brückendeck,
+// Schiffe fahren darunter durch.
+const BRIDGE_DECK = 0.56;
+function unitTop(key, type) {
+  const t = tiles.get(key);
+  if (t && t.bridgeNode && !hasAbility(type, 'water')) return Math.max(t.top, BRIDGE_DECK);
+  return hexTop(key);
 }
 
 function exploredSet(state, viewer) {
@@ -1837,7 +1937,7 @@ function placeUnitNode(state, unit) {
   const group = unitBody(unit.type, color, passengerOf(unit));
   const p = toWorld(unit.q, unit.r);
   const key = hk(unit.q, unit.r);
-  group.position.set(p.x, hexTop(key), p.z);
+  group.position.set(p.x, unitTop(key, unit.type), p.z);
   const sprite = makeHpSprite();
   drawHp(sprite, unit.hp, !!unit.vet, color);
   sprite.position.y = hasAbility(unit.type, 'air') ? 1.6 : 0.95;
@@ -1926,8 +2026,21 @@ function stepEffects(now) {
   }
 }
 
+let contextLost = false;
+let lastSync = null;
+const reported = new Set();
+function reportOnce(e) {
+  const k = String(e && e.message);
+  if (reported.has(k)) return;
+  reported.add(k);
+  console.warn('Darstellung:', e);
+}
+
 export function syncBoard(state, viewer = null) {
   if (!initialized) return Promise.resolve();
+  lastSync = { state, viewer };
+  // Kartengröße immer passend zum Stand (z. B. direkt nach einem neuen Spiel).
+  if (state.terrain && state.mapW && state.mapH && (state.mapW !== MAP_W || state.mapH !== MAP_H)) useMap(state);
   colorMap = {};
   for (const p of state.players || []) colorMap[p] = playerColor(state, p);
   const sig = terrainSignature(state);
@@ -1943,7 +2056,8 @@ export function syncBoard(state, viewer = null) {
     const imp = state.improvements ? state.improvements[key] : null;
     syncImprovement(t, imp, imp ? tileEnv(state, key, imp) : {});
     syncRuin(t, state.ruins && state.ruins[key]);
-    syncBridge(t, state.bridges ? state.bridges[key] : null);
+    const axis = state.bridges ? state.bridges[key] : null;
+    syncBridge(t, axis, axis == null ? 1 : bridgeHinge(state, key, axis));
     syncRoad(state, key, t);
     const seen = !explored || explored.has(key);
     t.seen = seen;
@@ -1953,6 +2067,7 @@ export function syncBoard(state, viewer = null) {
     if (t.decor) for (const d of t.decor) d.visible = seen;
   }
   syncLighthouses(state, viewer);
+  updateBridgeOpen(state);
   // Städte so zeigen, wie der Betrachter sie kennt (live oder aus dem Gedächtnis).
   const cityViews = new Map();
   for (const c of state.cities) {
@@ -1996,7 +2111,7 @@ export function syncBoard(state, viewer = null) {
     }
     const target = new THREE.Vector3();
     const p = toWorld(u.q, u.r);
-    target.set(p.x, hexTop(hk(u.q, u.r)), p.z);
+    target.set(p.x, unitTop(hk(u.q, u.r), u.type), p.z);
     const pos = node.group.position;
     if (pos.distanceToSquared(target) > 0.0004 && !node.moving) {
       node.moving = true;
