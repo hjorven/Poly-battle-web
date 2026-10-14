@@ -1359,6 +1359,12 @@ function clearBoard() {
 }
 
 let boardSignature = null;
+// Karte beim nächsten syncBoard komplett neu aufbauen (z. B. nach Admin-Änderungen
+// an Rohstoffen, die die Signatur nicht erfasst).
+export function invalidateBoard() {
+  boardSignature = null;
+}
+
 function terrainSignature(state) {
   return MAP_W + 'x' + MAP_H + ':' + state.terrain.join('|');
 }

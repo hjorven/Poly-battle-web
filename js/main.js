@@ -8,6 +8,7 @@ import { saveGame, loadGame, saveInfo, clearSave, validState } from './save.js';
 import * as P from './profile.js';
 import { shareResult } from './share.js';
 import * as K from './campaign.js';
+import * as AP from './admin-panel.js';
 import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS, PERSONAS } from './config.js';
 
 const app = {
@@ -96,6 +97,7 @@ function refresh() {
   render.drawMinimap(app.state, viewer());
   updateSelection();
   checkWinnerUI();
+  AP.update();
 }
 
 // Bedrohte Städte rot markieren und einmal pro Zug darauf hinweisen.
@@ -357,6 +359,12 @@ function recordProfile() {
   const st = app.state;
   const me = app.mode === 'online' ? app.myRole : app.mode === 'bot' ? 'player_1' : null;
   if (!me) { ui.showProfileResult(null); return; }
+  // Testpartien (Admin-Panel) zählen nur auf Wunsch fürs Profil, nie für die Bestenliste.
+  if (st.admin && !st.adminScore) {
+    if (app.recordedGen !== app.gen) { app.recordedGen = app.gen; app.lastResult = null; ui.toast('Testpartie: nicht gewertet'); }
+    ui.showProfileResult(null);
+    return;
+  }
   if (app.recordedGen !== app.gen) {
     app.recordedGen = app.gen;
     const score = st.finalScores && st.finalScores[me] != null ? st.finalScores[me] : R.score(st, me);
@@ -381,7 +389,7 @@ async function syncOnline(profile, st, me, score) {
     if (st.daily || st.weekly) ui.toast('Wähle im Menü einen Namen, dann zählen deine Punkte in der Bestenliste.');
     return;
   }
-  const kind = st.daily ? 'daily' : st.weekly ? 'weekly' : null;
+  const kind = st.admin ? null : st.daily ? 'daily' : st.weekly ? 'weekly' : null;
   if (kind) {
     const res = await net.submitScore(kind, st.daily || st.weekly, score, st.tribes ? st.tribes[me] : null, st.round);
     if (res.data) ui.toast(`Bestenliste ${kind === 'daily' ? 'heute' : 'diese Woche'}: Platz ${res.data.rank} von ${res.data.total}`, 'good');
@@ -891,6 +899,8 @@ async function maybeBot() {
       if (stale()) return;
       let step = null;
       let shown = false;
+      // Admin-Panel: pausierte KI beendet ihren Zug sofort.
+      if (app.adminPauseAi) break;
       try {
         step = botStep(app.state, player);
         if (!step) break;
@@ -931,8 +941,13 @@ async function maybeBot() {
 }
 
 async function onHexPick(key) {
-  if (!app.state || app.state.winner || app.busy) return;
+  if (!app.state) return;
   const [q, r] = key.split(',').map(Number);
+  if (AP.activeTool()) {
+    if (app.busy) { ui.toast('Warte, bis die KI fertig ist', 'warn'); return; }
+    if (AP.pick(q, r)) return;
+  }
+  if (app.state.winner || app.busy) return;
   const st = app.state;
   const v = viewer();
   const rawUnit = R.unitAt(st, q, r);
@@ -1227,6 +1242,25 @@ function continueGame() {
   maybeBot();
 }
 
+// Admin-Panel: geladenen Spielstand als lokale Partie fortsetzen.
+function adminLoad(state) {
+  app.gen++;
+  app.mode = state.ai && state.ai.length ? 'bot' : 'hotseat';
+  app.online = false;
+  app.gameId = null;
+  app.myRole = null;
+  app.hasOpponent = true;
+  app.sel = null;
+  app.busy = false;
+  app.idleWarned = null;
+  app.lastReport = null;
+  adopt(state);
+  enterLocal();
+  persist();
+  offerReward();
+  maybeBot();
+}
+
 async function startOnline() {
   endReview();
   app.gen++;
@@ -1460,8 +1494,37 @@ function boot() {
   ui.setSoundIcon(isMuted());
   render.initMinimap(document.getElementById('minimap'), ([q, r]) => render.cameraTo(q, r));
 
-  if (location.hash.length > 1) startOnline();
+  AP.initAdmin({
+    app: () => app,
+    viewer,
+    toast: ui.toast,
+    persist,
+    playerName: needName,
+    redraw: () => { app.sel = null; render.syncBoard(app.state, viewer()); refresh(); },
+    invalidateBoard: render.invalidateBoard,
+    ai: { botStep, applyStep },
+    validState,
+    loadState: adminLoad,
+    offerReward,
+    showReport: () => { if (app.lastReport) ui.showNews(app.lastReport); else ui.toast('Noch kein Rundenbericht in diesem Spiel'); },
+    askCode: onSave => ui.askName('', onSave, { title: 'Admin-Code', max: 40, ok: 'Freischalten', text: 'Nur für den Entwickler: Code eingeben, um das Admin-/Kreativ-Panel freizuschalten.' }),
+    profileChanged: () => { if (!document.getElementById('menu-overlay').classList.contains('hidden')) showMenu(); },
+    setPicking: on => document.body.classList.toggle('adm-picking', on)
+  });
+
+  // #admin am Ende der Adresse öffnet die Code-Abfrage (statt eines Online-Spiels).
+  if (location.hash === '#admin') {
+    history.replaceState(null, '', location.pathname + location.search);
+    showMenu();
+    AP.open();
+  } else if (location.hash.length > 1) startOnline();
   else showMenu();
+  // Auch bei schon offener Seite (Browser lädt bei geändertem # nicht neu).
+  window.addEventListener('hashchange', () => {
+    if (location.hash !== '#admin') return;
+    history.replaceState(null, '', location.pathname + location.search);
+    AP.open();
+  });
 
   window.__pb = { app, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera };
 }
