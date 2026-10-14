@@ -15,6 +15,9 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" defer></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English&display=swap">
 </head>
 <body>
 
@@ -60,7 +63,7 @@
     <div class="card menu-card">
       <div class="menu-top">
         <div class="menu-brand">
-          <h1>Poly Battle</h1>
+          <h1 class="wordmark">Poly Battle</h1>
           <p class="tagline">Rundenbasierte Eroberung im Stil von Battle of Polytopia</p>
         </div>
         <div id="profile-card"></div>
@@ -87,11 +90,13 @@
               <button class="btn big mode ghost" data-mode="tutorial">Tutorial<span class="sub">Das erste Spiel mit Anleitung</span></button>
             </div>
           </div>
-          <div class="play-setup">
+          <div class="play-tribe">
             <h3 class="menu-h">Dein Stamm <span class="menu-h-sub">gegen KI und online</span></h3>
             <div id="tribe-pick" class="tribe-pick"></div>
             <div id="tribe-info" class="tribe-info" aria-live="polite"></div>
-            <h3 class="menu-h settings-h">Spieleinstellungen</h3>
+          </div>
+          <div class="play-settings">
+            <h3 class="menu-h">Spieleinstellungen</h3>
             <div id="settings-box" class="settings-box">
           <div class="setting-row">
             <span class="setting-label">Modus</span>
