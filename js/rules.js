@@ -60,6 +60,16 @@ export function unitCost(state, player, type) {
   return Math.max(1, cost);
 }
 
+export function defenseOf(state, unit) {
+  return UNITS[unit.type].def + (unit.owner ? techBonus(state, unit.owner, 'def', unit.type) : 0);
+}
+
+export function improvementCost(state, player, type) {
+  const def = IMPROVEMENTS[type];
+  if (!def || def.monument) return def ? def.cost : 0;
+  return Math.max(1, def.cost - (player ? techBonus(state, player, 'buildDiscount') : 0));
+}
+
 export function attackOf(state, unit) {
   return UNITS[unit.type].atk + (unit.owner ? techBonus(state, unit.owner, 'atk', unit.type) : 0);
 }
@@ -266,13 +276,34 @@ export function cityTiles(state, city) {
 
 // Einkommen einer Stadt: Bevölkerung + gesammelte Ressourcen + Gebäude
 // im umliegenden Stadtterritorium.
+// Ertrag eines Gebäudes: fester Wert plus Nachbarschaftsbonus (Windmühle je
+// Farm, Schmelzhütte je Mine, Markt je Gebäude) – nur eigene Nachbarfelder.
+export function improvementIncome(state, owner, type, q, r) {
+  const def = IMPROVEMENTS[type];
+  if (!def) return 0;
+  let s = def.pop;
+  if (def.adjacent) {
+    let n = 0;
+    for (const [nq, nr] of neighbors(q, r)) {
+      const imp = improvementAt(state, nq, nr);
+      if (!imp || !ownLand(state, owner, nq, nr)) continue;
+      const each = def.adjacent[imp] ?? (def.adjacent['*'] && imp !== type && !IMPROVEMENTS[imp].monument ? def.adjacent['*'] : 0);
+      n += each;
+    }
+    s += def.max ? Math.min(def.max, n) : n;
+  }
+  if (type === 'farm' && owner) s += techBonus(state, owner, 'farmBonus');
+  return s;
+}
+
 export function cityIncome(state, city) {
   let s = city.pop;
   for (const [nq, nr] of cityTiles(state, city)) {
-    if (resourceAt(state, nq, nr)) s += 1;
+    const res = resourceAt(state, nq, nr);
+    if (res) s += 1 + (res === 'fish' && city.owner ? techBonus(state, city.owner, 'fishBonus') : 0);
     else {
       const imp = improvementAt(state, nq, nr);
-      if (imp && IMPROVEMENTS[imp]) s += IMPROVEMENTS[imp].pop;
+      if (imp && IMPROVEMENTS[imp]) s += improvementIncome(state, city.owner, imp, nq, nr);
     }
   }
   if (hasReward(city, 'workshop')) s += 1;
@@ -432,6 +463,7 @@ export function defenceBonus(state, defender) {
   const t = TERRAIN[tile];
   let b = t.def;
   if (t.tech && !hasTech(state, defender.owner, t.tech)) b = DEF_BONUS.none;
+  if (improvementAt(state, defender.q, defender.r) === 'fort') b = Math.max(b, DEF_BONUS.fort);
   const city = cityAt(state, defender.q, defender.r);
   if (city && city.owner === defender.owner && hasAbility(defender.type, 'fortify')) {
     b = Math.max(b, hasReward(city, 'wall') ? DEF_BONUS.wall : DEF_BONUS.standard);
@@ -443,13 +475,17 @@ export function defenceBonus(state, defender) {
 // damage = Schaden am Verteidiger, retaliation = Schaden am Angreifer.
 export function battleResults(state, attacker, defender) {
   const atk = attackOf(state, attacker);
-  const D = UNITS[defender.type];
+  const dv = defenseOf(state, defender);
   const af = atk * (attacker.hp / hpCap(attacker));
-  const df = D.def * (defender.hp / hpCap(defender)) * defenceBonus(state, defender);
+  const df = dv * (defender.hp / hpCap(defender)) * defenceBonus(state, defender);
   const total = af + df;
   if (total <= 0) return { damage: 0, retaliation: 0 };
   let damage = Math.round((af / total) * atk * ACCELERATOR);
-  let retaliation = Math.round((df / total) * D.def * ACCELERATOR);
+  let retaliation = Math.round((df / total) * dv * ACCELERATOR);
+  // Pikeniere gegen Reiterei: anderthalbfacher Schaden in beide Richtungen.
+  const mounted = u => u.type === 'rider' || u.type === 'knight' || u.type === 'paladin';
+  if (hasAbility(attacker.type, 'pikes') && mounted(defender)) damage = Math.round(damage * 1.5);
+  if (hasAbility(defender.type, 'pikes') && mounted(attacker)) retaliation = Math.round(retaliation * 1.5);
   const ranged = u => UNITS[u.type].range >= 2;
   // Fernkämpfer gegen Luft: Zerbrechliches fällt sofort, große Hüllen leiden doppelt.
   if (isAir(defender.type) && ranged(attacker)) {
@@ -475,7 +511,7 @@ export function unitSight(state, u) {
   }
   if (hasTech(state, u.owner, 'sailing')) radius += 1;
   if ((u.type === 'rider' || u.type === 'knight') && perkOf(state, u.owner) === 'lookouts') radius += 1;
-  radius += techBonus(state, u.owner, 'sight', u.type);
+  radius += techBonus(state, u.owner, 'sight', u.type) + techBonus(state, u.owner, 'sightAll');
   return radius;
 }
 
@@ -621,7 +657,9 @@ export function startTurn(state) {
     const cap = hpCap(u);
     if (u.hp >= cap) continue;
     const city = cityAt(state, u.q, u.r);
-    const amt = (city && city.owner === p ? 4 : 2) + spirit;
+    const home = city || tileCity(state, u.q, u.r);
+    const cloister = home && home.owner === p && cityTiles(state, home).some(([q, r]) => improvementAt(state, q, r) === 'monastery') ? 2 : 0;
+    const amt = (city && city.owner === p ? 4 : 2) + spirit + cloister;
     u.hp = Math.min(cap, u.hp + amt);
   }
   for (const u of state.units) {
@@ -1080,8 +1118,9 @@ export function improve(state, city, type, q, r, player) {
     return { ok: true };
   }
   if (def.tech && !state.techs[player].includes(def.tech)) return { ok: false, reason: 'Technologie fehlt' };
-  if (state.stars[player] < def.cost) return { ok: false, reason: 'Zu wenig Sterne' };
-  state.stars[player] -= def.cost;
+  const cost = improvementCost(state, player, type);
+  if (state.stars[player] < cost) return { ok: false, reason: 'Zu wenig Sterne' };
+  state.stars[player] -= cost;
   if (!state.improvements) state.improvements = {};
   state.improvements[hk(q, r)] = type;
   return { ok: true };
@@ -1316,7 +1355,8 @@ export function techCost(state, techId, player) {
   const t = TECHS[techId];
   const cities = citiesFor(state, player).length;
   const discount = state.techs[player].includes('philosophy');
-  const cost = researchCost(t.tier, cities, discount, state.techs[player].filter(x => x !== 'basic').length);
+  let cost = researchCost(t.tier, cities, discount, state.techs[player].filter(x => x !== 'basic').length);
+  if (state.techs[player].includes('printing')) cost = Math.ceil(cost * 0.85);
   return perkOf(state, player) === 'wisdom' ? Math.max(1, cost - 1) : cost;
 }
 
