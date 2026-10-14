@@ -54,14 +54,20 @@
     <div class="card">
       <h1>Poly Battle</h1>
       <p class="tagline">Rundenbasierte Eroberung im Stil von Battle of Polytopia</p>
+      <div id="profile-card"></div>
       <div class="menu-buttons">
         <button id="continueBtn" class="btn primary big hidden">Weiterspielen</button>
+        <button class="btn big daily-btn" data-mode="daily" id="dailyBtn">Tagesherausforderung</button>
         <button class="btn primary big" data-mode="bot">Gegen KI (1 Spieler)</button>
         <button class="btn big" data-mode="hotseat">Hotseat (ein Gerät)</button>
         <button class="btn big" data-mode="online">Online (Link teilen)</button>
         <button class="btn big ghost" data-mode="tutorial">Tutorial (erstes Spiel)</button>
         <button id="copyLinkBtn" class="btn big hidden">Link zum Spiel kopieren</button>
       </div>
+      <details class="menu-section" id="achievements-box">
+        <summary id="achievements-title">Erfolge</summary>
+        <div class="menu-body"><div id="achievements" class="ach-grid"></div></div>
+      </details>
       <details class="menu-section" open id="tribe-box">
         <summary>Dein Stamm (Gegen KI und Online)</summary>
         <div class="menu-body">
@@ -157,6 +163,7 @@
           <li><b>Stadtstufen</b>: Wächst eine Stadt (Bevölkerung 2 bis 5), wählst du eine Belohnung – Werkstatt oder Erkunder, Stadtmauer oder Vorräte, Wachstum oder Grenzerweiterung, Park oder Riese.</li>
           <li><b>Ruinen</b> liegen verstreut auf der Karte. Ziehe mit einer Einheit hinein: Sterne, eine Technologie, ein Schwertkämpfer, Bevölkerung oder eine aufgedeckte Umgebung.</li>
           <li><b>Tastatur</b>: Leertaste nächste Einheit, Enter Zug beenden, T Forschung, O Übersicht, I Info-Menü, H zur Hauptstadt, M Ton, Esc Auswahl aufheben. Kamera: Pfeiltasten schieben, + und − zoomen, Q/E drehen, R/F neigen, N Standardansicht.</li>
+          <li><b>Profil</b>: Jede beendete Partie gegen die KI oder online bringt Erfahrung (mehr bei Siegen und höherer Schwierigkeit). Mit jeder Stufe steigt dein Titel, von Häuptling bis Legende. 16 <b>Erfolge</b> warten im Menü. Die <b>Tagesherausforderung</b> ist für alle gleich (Karte, Stamm, 30 Runden) – spiele jeden Tag für deine Tagesserie und schlage deinen Bestwert.</li>
           <li><b>Schonfrist</b>: Auf „Leicht“ greift die KI dich bis Runde 12 nicht an, auf „Normal“ bis Runde 6 – außer du greifst einen Stamm zuerst an; dann endet sie für diesen Stamm. Für jede besiegte gegnerische Einheit gibt es 1 Stern Beute.</li>
           <li><b>Bedrohte Städte</b> bekommen einen roten Ring, sobald eine sichtbare feindliche Einheit sie im nächsten Zug angreifen könnte.</li>
           <li><b>Monumente</b> schaltest du durch Erfolge frei: 20 Technologien, 10 besiegte Gegner, alle Leuchttürme, 100 Sterne auf einmal, drei Städte auf Stufe 5, 8 Städte. Jedes Monument baust du einmal kostenlos auf ein freies Feld- oder Waldfeld im Stadtgebiet: +3 Bevölkerung und 200 Punkte. Den Stand siehst du in der Übersicht.</li>
@@ -230,6 +237,7 @@
     <div class="card narrow wide">
       <h1 id="winner-title">Gewonnen!</h1>
       <div id="winner-text"></div>
+      <div id="winner-profile"></div>
       <div id="winner-stats"></div>
       <div class="menu-buttons">
         <button class="btn primary big hidden" id="winnerEasier">Nochmal – etwas leichter</button>
