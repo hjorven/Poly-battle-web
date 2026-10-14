@@ -518,6 +518,7 @@ function viewer() {
 
 async function doMove(unit, q, r) {
   app.busy = true;
+  render.setMovePath(unit.id, R.pathTo(app.state, unit, q, r));
   const res = R.moveUnit(app.state, unit, q, r);
   if (!res.ok) { app.busy = false; refresh(); return; }
   if (!res.events.some(e => e.kind === 'embark')) sfx('move');
@@ -530,8 +531,9 @@ async function doAttack(attacker, defender) {
   app.busy = true;
   const { events } = R.attack(app.state, attacker, defender);
   sfx(events.some(e => e.kind === 'kill') ? 'kill' : 'attack');
-  render.syncBoard(app.state, viewer());
+  // Erst der Schlagabtausch (Geschoss, Treffer), dann Umfallen und Nachrücken.
   await render.playCombat(events);
+  await render.syncBoard(app.state, viewer());
   if (R.findUnit(app.state, attacker.id)) app.sel = { kind: 'unit', id: attacker.id };
   else app.sel = null;
   await afterAction(events);
@@ -741,6 +743,7 @@ async function playBotStep(step, player) {
   const human = viewer() || 'player_1';
   const seen = (q, r) => R.isVisible(app.state, human, q, r);
   const visibleBefore = botStepVisible(step);
+  if (step.kind === 'move' && visibleBefore) render.setMovePath(step.unit.id, R.pathTo(app.state, step.unit, step.q, step.r));
   const res = applyStep(app.state, step, player) || {};
   const visible = visibleBefore || botStepVisible(step);
   if (!visible && step.kind !== 'war') {
@@ -751,8 +754,8 @@ async function playBotStep(step, player) {
     if (seen(step.defender.q, step.defender.r) || seen(step.attacker.q, step.attacker.r)) {
       sfx((res.events || []).some(e => e.kind === 'kill') ? 'kill' : 'attack');
     }
-    render.syncBoard(app.state, viewer());
     await render.playCombat(res.events || []);
+    await render.syncBoard(app.state, viewer());
     if ((res.events || []).some(e => e.kind === 'capture' && e.from === human)) {
       ui.toast(`${needName(app.state, player)} hat eine deiner Städte erobert!`, 'warn');
     }
