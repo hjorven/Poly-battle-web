@@ -8,6 +8,7 @@ import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
 import { saveGame, loadGame, saveInfo, clearSave, validState } from '../js/save.js';
 import * as P from '../js/profile.js';
+import * as K from '../js/campaign.js';
 
 let passed = 0;
 let failed = 0;
@@ -622,6 +623,38 @@ test('Kosmetik: Freischaltung über Stufe/Erfolg, gesperrte Wahl fällt auf Stan
   prof.achievements.warlord = '2026-10-14';
   assert.deepStrictEqual(P.lookOf(prof), { banner: 'pennant', plume: 'gold', decor: 'none' });
   assert.ok(P.cosmeticHint('decor', 'statue').includes('Baumeister'));
+});
+
+test('Kampagne: Fortschritt, Sterne nach Runden, Freischaltung, Profil', () => {
+  assert.strictEqual(K.MISSIONS.length, 10);
+  const st = R.createGame(4, 2, { mapSize: 'small' });
+  K.prepareMission(st, K.missionById('m1'));
+  let s = K.missionStatus(st);
+  assert.strictEqual(s.have, 1);
+  assert.ok(!s.done);
+  st.cities.filter(c => !c.owner).slice(0, 2).forEach(c => { c.owner = 'player_1'; });
+  st.round = 4;
+  s = K.missionStatus(st);
+  assert.ok(s.done && s.stars === 3, 'schnell: 3 Sterne');
+  st.round = 7;
+  assert.strictEqual(K.missionStatus(st).stars, 2);
+  st.round = 30;
+  assert.strictEqual(K.missionStatus(st).stars, 1);
+  // Belagerung: eigene Hauptstadt zählt nicht, fremde schon – auch wenn die eigene fällt.
+  const b = R.createGame(4, 2, { mapSize: 'small' });
+  K.prepareMission(b, K.missionById('m7'));
+  assert.strictEqual(K.missionStatus(b).have, 0);
+  const foe = b.cities.find(c => c.isCapital && c.owner === 'player_2');
+  foe.owner = 'player_1';
+  b.cities.find(c => c.isCapital && c.q === b.home.q && c.r === b.home.r).owner = 'player_2';
+  assert.ok(K.missionStatus(b).done);
+  // Freischaltung und Profil
+  const prof = P.emptyProfile();
+  assert.ok(K.missionUnlocked(prof, 0) && !K.missionUnlocked(prof, 1));
+  P.recordGame(prof, { ...P.gameFacts(st, 'player_1', { won: true, mode: 'bot', score: 500 }), mission: 'm1', missionStars: 2 });
+  assert.ok(K.missionUnlocked(prof, 1));
+  assert.strictEqual(K.campaignStars(prof), 2);
+  R.createGame(1, 4);
 });
 
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {

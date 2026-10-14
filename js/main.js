@@ -7,6 +7,7 @@ import { sfx, isMuted, setMuted } from './sound.js';
 import { saveGame, loadGame, saveInfo, clearSave, validState } from './save.js';
 import * as P from './profile.js';
 import { shareResult } from './share.js';
+import * as K from './campaign.js';
 import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS, PERSONAS } from './config.js';
 
 const app = {
@@ -91,6 +92,7 @@ function refresh() {
   showNews();
   turnStartFeedback();
   tutorTick();
+  missionTick();
   render.drawMinimap(app.state, viewer());
   updateSelection();
   checkWinnerUI();
@@ -382,6 +384,7 @@ function showMenu() {
   const profile = P.loadProfile();
   ui.renderProfile(profile, P.levelProgress(profile.xp), P.dailyChallenge(), P.ACHIEVEMENTS, P.weeklyChallenge());
   ui.renderLooks(profile, P.COSMETICS, P.cosmeticUnlocked, P.cosmeticHint, P.lookOf(profile));
+  ui.renderCampaign(profile, K.MISSIONS, K.missionUnlocked, K.campaignStars(profile));
   ui.setContinue(saveInfo());
   ui.showMenu();
 }
@@ -1031,6 +1034,37 @@ function startDaily() {
   ui.toast('Tagesherausforderung: Heute spielen alle dieselbe Karte mit demselben Stamm. Nach 30 Runden zählt die Punktzahl.', 'good');
 }
 
+function startMission(id) {
+  const m = K.missionById(id);
+  if (!m) return;
+  const s = m.setup;
+  let seed = 0;
+  for (const ch of 'mission:' + id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  startLocal('bot', { count: s.count, tribe: s.tribe, mapSize: s.mapSize, mapType: s.mapType, aiLevel: s.aiLevel, turnLimit: null, seed });
+  K.prepareMission(app.state, m);
+  persist();
+  refresh();
+  ui.toast(`Mission „${m.title}“: ${m.goal}`, 'good');
+}
+
+// Missionsleiste und Abschluss: geschafft = Sieg mit Sternen.
+function missionTick() {
+  const st = app.state;
+  if (!st || !st.mission || app.mode !== 'bot') { ui.showMission(null); return; }
+  const s = K.missionStatus(st);
+  if (!s) { ui.showMission(null); return; }
+  const m = s.mission;
+  const par = m.par ? ` · 2 Sterne bis Runde ${m.par[0]}, 3 bis Runde ${m.par[1]}` : ' · Sterne für 3 bzw. 5 Städte am Ende';
+  ui.showMission(`<b>${esc2(m.title)}</b>: ${esc2(m.goal)} (${Math.min(s.have, s.need)}/${s.need})${par}`, s.have / s.need);
+  if (s.done && !st.winner) {
+    st.missionStars = s.stars;
+    st.winner = 'player_1';
+    st.endReason = 'mission';
+    R.recordHistory(st, true);
+  }
+}
+const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 function startWeekly() {
   const ch = P.weeklyChallenge();
   startLocal('bot', {
@@ -1357,7 +1391,7 @@ function boot() {
       if (easier) ui.toast(`Neues Spiel: ${AI_LEVELS[aiLevel].label}, ${count - 1} ${count === 2 ? 'Gegner' : 'Gegner'}`, 'good');
     },
     onContinue: continueGame,
-    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : mode === 'daily' ? startDaily() : mode === 'weekly' ? startWeekly() : startLocal(mode),
+    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : mode === 'daily' ? startDaily() : mode === 'weekly' ? startWeekly() : mode.startsWith('mission:') ? startMission(mode.slice(8)) : startLocal(mode),
     onTutor,
     onCopyLink: copyLink
   });
