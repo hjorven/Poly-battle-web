@@ -4,7 +4,7 @@ import {
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
-  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY, UPGRADES
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -1239,6 +1239,38 @@ export function unloadCargo(state, balloon, q, r) {
   if (ruin) events.push(ruin);
   updateExplored(state, u.owner);
   return { ok: true, unit: u, events };
+}
+
+// --- Aufrüsten -------------------------------------------------------------------
+// Im eigenen Gebiet, vor dem Handeln: gegen den Preisunterschied zur nächsten
+// Stufe. Verletzungen bleiben anteilig, Veteranen bleiben Veteranen.
+
+export function upgradeOption(state, unit) {
+  const to = UPGRADES[unit.type];
+  if (!to || unit.carry || unit.cargo) return null;
+  const cost = Math.max(1, unitCost(state, unit.owner, to) - unitCost(state, unit.owner, unit.type));
+  let reason = null;
+  if (!hasTech(state, unit.owner, UNITS[to].tech)) reason = `Technologie fehlt: ${TECHS[UNITS[to].tech].name}`;
+  else if (unit.acted || unit.hasMoved) reason = 'Nur zu Beginn des Zuges (vor dem Ziehen)';
+  else if (!ownLand(state, unit.owner, unit.q, unit.r)) reason = 'Nur im eigenen Gebiet';
+  else if (state.stars[unit.owner] < cost) reason = 'Zu wenig Sterne';
+  return { to, cost, ok: !reason, reason };
+}
+
+export function upgradeUnit(state, unit, player) {
+  if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
+  if (!unit || unit.owner !== player) return { ok: false, reason: 'Nicht deine Einheit' };
+  const opt = upgradeOption(state, unit);
+  if (!opt) return { ok: false, reason: 'Keine höhere Stufe' };
+  if (!opt.ok) return { ok: false, reason: opt.reason };
+  const frac = unit.hp / hpCap(unit);
+  state.stars[player] -= opt.cost;
+  unit.type = opt.to;
+  unit.hp = Math.max(1, Math.round(frac * hpCap(unit)));
+  unit.mp = 0;
+  unit.acted = true;
+  unit.hasMoved = true;
+  return { ok: true, to: opt.to, cost: opt.cost };
 }
 
 export function unitOptions(state, unit) {

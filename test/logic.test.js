@@ -454,6 +454,28 @@ test('Ballonplatz und Lastenballon: aufsteigen, aufnehmen, absetzen', () => {
   assert.ok(st.units.includes(res.unit));
 });
 
+test('Aufrüsten: nächste Stufe gegen Preisunterschied, im eigenen Gebiet, Verletzung anteilig', () => {
+  const st = makeState();
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }];
+  st.stars.player_1 = 20;
+  const w = unit('w', 'player_1', 'warrior', 5, 5, { hp: 5, vet: false });
+  st.units = [w];
+  assert.ok(!R.upgradeOption(st, w).ok, 'ohne Schmiedekunst nicht');
+  st.techs.player_1.push('climbing', 'mining', 'smithery');
+  const opt = R.upgradeOption(st, w);
+  assert.ok(opt.ok && opt.to === 'swordsman');
+  assert.strictEqual(opt.cost, UNITS.swordsman.cost - UNITS.warrior.cost);
+  assert.ok(R.upgradeUnit(st, w, 'player_1').ok);
+  assert.strictEqual(w.type, 'swordsman');
+  assert.strictEqual(w.hp, Math.round(5 / 10 * UNITS.swordsman.hp), 'halb verletzt bleibt halb verletzt');
+  assert.ok(w.acted && w.mp === 0);
+  assert.strictEqual(st.stars.player_1, 20 - opt.cost);
+  const far = unit('f', 'player_1', 'warrior', 12, 12);
+  st.units.push(far);
+  assert.strictEqual(R.upgradeOption(st, far).reason, 'Nur im eigenen Gebiet');
+  assert.strictEqual(R.upgradeOption(st, unit('d', 'player_1', 'defender', 5, 5)), null, 'keine höhere Stufe');
+});
+
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
   const st = makeState();
   st.explored = { player_1: [], player_2: [] };
