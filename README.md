@@ -1,80 +1,69 @@
-# Battle of Poly – Web
+# Poly Battle
 
-Low-Poly Rundenstrategiespiel im Stil von *The Battle of Polytopia*, komplett im Browser lauffähig (Three.js, kein Build-Schritt). Sprache: Deutsch.
+Rundenbasierte Eroberung im Browser, angelehnt an *The Battle of Polytopia*: Gründe Städte, erforsche Technologien und erobere eine Welt aus Sechsecken – in Low-Poly-3D, auf PC, Tablet und Handy.
 
-## Spielprinzip
+**[Jetzt spielen](https://hjorven.github.io/Poly-battle-web/)** · [Wiki](https://github.com/hjorven/Poly-battle-web/wiki) · [Fehler melden](https://github.com/hjorven/Poly-battle-web/issues/new/choose)
 
-- **Große hexagonale Karte** (26×18) mit Feldern, Wäldern (Verteidigungsbonus), Bergen (mit „Klettern" begehbar), Wasser, Ozean und Eis.
-- **12 Stämme** mit eigener Start-Technologie und Starteinheit – du wählst deinen Stamm, 1 bis 5 KI-Gegner (Spieleinstellungen).
-- **Sterne-Wirtschaft**: Städte generieren pro Runde Einkommen basierend auf der Bevölkerung.
-- **Einheiten**: Krieger, Schütze, Reiter, Verteidiger, Schwertkämpfer, Katapult, Gedankenbeuger – jede mit eigenen Werten für Angriff, Verteidigung, Bewegung und Reichweite.
-- **Technologiebaum** in drei Stufen: Organisation, Jagd, Klettern, Reiten, Fischerei; Landwirtschaft, Schildmacher, Forstwirtschaft, Bogenschießen, Bergbau, Freie Hände, Wege, Segeln; Philosophie, Diplomatie, Mathematik, Schmiedekunst, Navigation. Die Kosten skalieren mit der Zahl eigener Städte.
-- **Städte**: Bevölkerung kaufen, pro Stadt und Runde eine Einheit ausbilden, Städte erobern.
-- **Stadtstufen**: Jede neue Bevölkerungsstufe (2 bis 5) bringt eine Belohnung zur Wahl – Werkstatt oder Erkunder, Stadtmauer oder Vorräte, Wachstum oder Grenzerweiterung, Park oder Riese.
-- **Ruinen** auf der Karte geben beim Betreten Sterne, eine Technologie, einen Schwertkämpfer, Bevölkerung oder eine aufgedeckte Umgebung.
-- **Spielmodi**: Eroberung (bis nur noch ein Stamm übrig ist) oder Perfektion (30 Runden, höchste Punktzahl gewinnt). Am Ende gibt es eine Auswertung mit Punkteverlauf.
-- **KI-Stärke** Leicht, Normal oder Schwer (Einkommen, Startsterne, Angriffsverhalten).
-- **Fog of War**: Unentdecktes Land liegt unter treibendem Nebel, entdecktes, aber unbeobachtetes Land unter leichtem Dunst. Feindliche Einheiten sieht (und trifft) man nur in Sichtweite; Städte im Dunst zeigen den Stand, in dem man sie zuletzt gesehen hat.
-- **Wasser & Brücken**: Alle Gewässer sind zu einem Netz verbunden. An schmalen Stellen gibt es natürliche Brücken; mit „Wege“ bauen Landeinheiten eigene Brücken über 1–2 Felder Flachwasser (5 Sterne pro Feld). Schiffe fahren darunter durch oder reißen sie ein.
-- **Spion**: Günstiger Späher (Bewegung 2, Sicht 2, auf Bergen 3), betritt Berge ohne Klettern, greift nicht an.
-- **Einheiten auflösen** (halbe Kosten zurück) und **Regeneration**: Einheiten heilen zu Rundenbeginn, wenn sie nicht angegriffen haben und kein Gegner sie erreichen kann.
-- **Tipps**: Der Knopf „N bereit“ springt reihum zu Einheiten, die noch handeln können; diese tragen eine gelbe Markierung.
-- **Veteranen**: Nach 3 Siegen wird eine Einheit befördert (+5 Leben, voll geheilt, ★ an der Lebensanzeige).
-- **Einschiffen**: Landeinheiten fahren über einen eigenen Hafen aufs Wasser und als Boot weiter; an Land gehen beendet den Zug.
-- **Kontrollzonen**: Wer neben eine feindliche Einheit zieht, muss dort anhalten.
-- **Diplomatie**: Mit „Diplomatie“ lässt sich Stämmen, denen man begegnet ist, Frieden anbieten (Übersicht). Im Frieden kein Angriff und kein Betreten der Städte des anderen; Kriegserklärung jederzeit, danach 3 Runden Pause.
-- **Stammes-Fähigkeiten**: Jeder Stamm hat eine Besonderheit (z. B. Xin-Xi: Berge kosten 1 Bewegung, Kickoo: Schiffe +1 Bewegung, Luxidoor: Hauptstadt +2 Sterne).
-- **Karten**: Größe Klein/Normal/Groß und Typ Kontinente/Pangäa/Archipel in den Spieleinstellungen.
-- **Komfort**: Minikarte (antippen springt dorthin), Soundeffekte (Lautsprecher-Knopf schaltet stumm). Kein Rückgängig – jeder Zug zählt.
-- **KI**: verteidigt bedrohte Städte, schickt Spione, baut Schiffe und Brücken und bricht Frieden, wenn sie sonst keine Ziele hat. Züge im Nebel laufen ohne Animation durch.
-- **Kamera**: verschieben (ziehen), zoomen (Mausrad/zwei Finger), drehen und neigen (rechte Maustaste, Zwei-Finger-Drehgeste, Knöpfe unten rechts oder Q/E und R/F; N = Standardansicht).
-- **Städte** wachsen sichtbar: Hütten, Dorf mit Wachturm, Steinturm mit Markt, Halle, Burg; Hauptstadt mit Krone, Mauer/Park/Werkstatt am Modell erkennbar.
-- **Einheiten** drehen sich in Lauf- und Angriffsrichtung; die Lebensanzeige trägt die Teamfarbe.
-- **Online mit KI**: Beim Erstellen einer Online-Partie lassen sich 0–3 KI-Gegner hinzufügen. Die KI-Züge rechnet das Gerät des Spielers, der gerade seinen Zug beendet hat.
-- **Sieg**: Wer als Letzter noch Städte besitzt (alle anderen eliminiert), gewinnt. Verlierst du gegen die KI deine letzte Stadt, endet die Partie mit „Besiegt".
-- **Spielstand**: Partien gegen die KI und Hotseat-Partien werden nach jeder Aktion im Browser gespeichert und lassen sich über „Weiterspielen" im Menü fortsetzen.
+![Eine Partie in Runde 18: Hauptstadt mit Farmen, Leuchttürme an den Kartenecken, der Rest der Welt unter Nebel](docs/screenshot.png)
 
-## Spielmodi
+## Was dich erwartet
 
-| Modus | Beschreibung |
-|---|---|
-| **Gegen KI** | Dein Stamm gegen 1–5 Bots auf einer großen Welt (lokal, kein Server nötig) |
-| **Hotseat** | Zwei Spieler abwechselnd an einem Gerät, mit Übergabe-Bildschirm zwischen den Zügen (lokal) |
-| **Online** | Über Supabase (`matches`-Tabelle) – Link teilen und gemeinsam spielen |
+- **12 Stämme** mit eigener Start-Technologie und Besonderheit, dazu KI-Gegner mit Persönlichkeit (Eroberer, Händler, Seefahrer, Baumeister).
+- **21 Einheiten** an Land, auf See und in der Luft – vom Krieger bis zum Kriegsluftschiff, mit Veteranen und Aufrüsten.
+- **55 Technologien** in einem Wabenbaum mit sechs Stufen.
+- **Städte ausbauen** in einem eigenen Fenster: Feld im Stadtgebiet antippen, Gebäude wählen. Stadtstufen bringen Belohnungen, Monumente werden durch Erfolge freigeschaltet.
+- **Nebel, Diplomatie, Brücken, Häfen, Ruinen und Leuchttürme.**
+- **Spielmodi:** gegen die KI, Hotseat an einem Gerät, online per Link, Tutorial, zehn Kampagnen-Missionen, Tages- und Wochen-Herausforderung mit Bestenliste.
+- **Profil** mit Stufen, 17 Erfolgen, freischaltbarem Aussehen und Statistik; mit dem Profil-Code geht es auf jedem Gerät weiter.
+- **Bedienung** mit Maus und Tastatur oder Touch; Ziehen und Angreifen brauchen zwei Tipps, damit nichts aus Versehen passiert. Kein Rückgängig – jeder Zug zählt.
 
-## Starten
+![Bau-Fenster einer Hauptstadt: Stadtgebiet als Wabenkarte, rechts die Bauoptionen für das gewählte Feld](docs/build.png)
+
+Regeln, Werte und Tabellen stehen im **[Wiki](https://github.com/hjorven/Poly-battle-web/wiki)**.
+
+## Lokal starten
+
+Kein Build-Schritt, keine Abhängigkeiten außer Node.js für die Tests und einem statischen Webserver.
 
 ```bash
-npm run serve     # startet einen lokalen Webserver auf Port 8080
+git clone https://github.com/hjorven/Poly-battle-web.git
+cd Poly-battle-web
+npm run serve   # http://localhost:8080
+npm test        # Logiktests
 ```
 
-Einfach `index.html` über einen beliebigen statischen Server ausliefern (GitHub Pages funktioniert direkt). Voraussetzung: Internetzugang für die Three.js-Importmap (jsDelivr). Für den Online-Modus werden die Supabase-Zugangsdaten in `js/net.js` benötigt.
-
-### Online-Modus (Supabase)
-
-Die Tabelle `matches` ist nur lesbar. Geschrieben wird ausschließlich über die Datenbank-Funktionen `create_match`, `join_match` und `save_match` aus `supabase/migrations/20261012_secure_matches.sql`. Sie prüfen, ob du Spieler der Partie bist, ob du am Zug bist und ob der Stand neuer ist. Spieler-Kennungen liegen nur als SHA-256-Hash in der Datenbank.
-
-Grenze: Der Server prüft nicht die Spielregeln selbst. Wer am Zug ist, könnte theoretisch einen manipulierten Spielstand senden.
-
-## Tests
-
-```bash
-npm test                      # Logik-Tests (Regeln, Kampf, KI, Spielstand, komplette KI-Partien)
-```
+Three.js wird über eine Importmap von jsDelivr geladen, dafür braucht der Browser Internet. Gegen KI, Hotseat, Kampagne und Herausforderungen laufen ohne Server; Online-Partien und die Bestenliste nutzen Supabase.
 
 ## Aufbau
 
 ```
-index.html        Einstieg, Importmap, Overlays
-css/style.css     UI-Styling
-js/config.js      Balancing-Konstanten (Einheiten, Kosten, Techs)
-js/hex.js         Hex-Koordinaten-Mathematik
-js/rules.js       Spielregeln (Zug, Kampf, Ausbildung, Sieg)
-js/ai.js          Bot-KI
-js/render.js      Three.js-Szene (Kacheln, Einheiten, Städte)
-js/ui.js          DOM-Panels, Tech-Baum, Toasts
-js/net.js         Supabase-Online-Partien
-js/save.js        Lokaler Spielstand (Weiterspielen)
-js/main.js        Verkabelung, Eingabe, Bot-Loop
-test/logic.test.js
+index.html            Einstieg, Importmap, Dialoge
+css/style.css         Gestaltung
+js/config.js          Spieldaten und Balancing
+js/rules.js           Spielregeln (reine Funktionen, getestet)
+js/ai.js              KI
+js/render.js          3D-Darstellung mit Three.js
+js/ui.js              Menüs, Stadtmenü, Bau-Fenster, Forschungsbaum
+js/main.js            Verkabelung, Eingabe, Zugablauf
+js/net.js             Online-Partien, Profile, Bestenliste (Supabase)
+js/save.js            Lokaler Spielstand
+js/profile.js         Profil, Erfolge, Herausforderungen
+js/campaign.js        Kampagne
+supabase/migrations/  Datenbank-Schema und Server-Funktionen
+scripts/gen-wiki.mjs  erzeugt die Datenseiten des Wikis
+test/logic.test.js    Tests
 ```
+
+Mehr dazu auf der Wiki-Seite [Technik](https://github.com/hjorven/Poly-battle-web/wiki/Technik).
+
+## Online und Datenschutz
+
+Clients haben keinen direkten Zugriff auf die Tabellen. Gelesen und geschrieben wird nur über Datenbank-Funktionen, die prüfen, wer mitspielt, wer am Zug ist und ob Namen und Punkte plausibel sind. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Gespeichert werden Spielstände, Name, Profildaten und Punkte – keine E-Mail-Adressen, kein Konto.
+
+## Mitmachen
+
+Fehlerberichte, Ideen und Pull Requests sind willkommen. Wie das abläuft, steht in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Lizenz
+
+[MIT](LICENSE). *The Battle of Polytopia* ist ein Spiel von Midjiwan; Poly Battle ist ein unabhängiges Fanprojekt und steht in keiner Verbindung dazu.
