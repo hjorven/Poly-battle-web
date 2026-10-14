@@ -10,7 +10,8 @@ import {
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
   hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, incomeFor, tileYield, improvePreview, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
-import { DIRS, toWorld } from './hex.js';
+import { DIRS, toWorld, hexDistance } from './hex.js';
+import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks } from './render.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
@@ -950,13 +951,50 @@ function openBuild(state, city, ctx) {
   build.city = city;
   build.sel = null;
   $('build-overlay').classList.remove('hidden');
+  // Echte 3D-Ansicht des Stadtgebiets; ohne WebGL bleibt die Wabenkarte.
+  const box = $('build-map');
+  box.innerHTML = '<canvas class="b3-canvas" aria-hidden="true"></canvas><div class="b3-tags"></div><div class="b3-hint">Ziehen dreht die Ansicht, Rad oder zwei Finger zoomen</div>';
+  box.classList.add('b3');
+  box.style.width = ''; box.style.height = '';
+  const radius = Math.max(1, ...cityTiles(state, city).map(([q, r]) => hexDistance(q, r, city.q, city.r)));
+  build.view3d = openCityView(box.querySelector('.b3-canvas'), city.q, city.r, radius, placeTags);
+  if (build.view3d) {
+    box.querySelector('.b3-canvas').addEventListener('click', e => {
+      const hex = cityViewPick(e.clientX, e.clientY);
+      if (!hex || !box.querySelector(`[data-hex="${hex.q},${hex.r}"]`)) return;
+      selectBuildHex(hex.q + ',' + hex.r);
+    });
+  } else {
+    box.classList.remove('b3');
+    box.innerHTML = '';
+  }
   renderBuild(state, city, ctx);
-  const first = $('build-map').querySelector('.bhex.sel');
+  const first = $('build-map').querySelector('[data-hex].sel');
   if (first) first.focus({ preventScroll: true });
+}
+
+function selectBuildHex(key) {
+  build.sel = key;
+  renderBuild(build.state, build.city, build.ctx);
+  const again = $('build-map').querySelector(`[data-hex="${key}"]`);
+  if (again) again.focus({ preventScroll: true });
+}
+
+// Marken über den Feldern der 3D-Ansicht an die Kamera anpassen.
+function placeTags() {
+  const box = $('build-map');
+  if (!box) return;
+  box.querySelectorAll('.b3-tag').forEach(t => {
+    const [q, r] = t.dataset.hex.split(',').map(Number);
+    const p = cityViewProject(q, r);
+    t.style.visibility = p ? '' : 'hidden';
+    if (p) { t.style.left = p.x + 'px'; t.style.top = p.y + 'px'; }
+  });
 }
 
 export function closeBuild() {
   build.open = false;
+  if (build.view3d) { closeCityView(); build.view3d = false; }
   $('build-overlay').classList.add('hidden');
 }
 
@@ -981,6 +1019,8 @@ function renderBuild(state, city, ctx) {
   $('build-title').textContent = `${city.isCapital ? 'Hauptstadt' : 'Stadt'} ${mineCity ? 'ausbauen' : '· Gebiet'}`;
   build.income = mineCity ? incomeFor(state, city.owner) : 0;
   $('build-stars').innerHTML = mineCity ? buildHead() : '';
+
+  if (build.view3d) { renderBuild3d(state, city, ctx, info); return; }
 
   // Wabenkarte: gleiche Ausrichtung wie das Spielfeld (Spitze oben).
   const box = $('build-map');
@@ -1027,6 +1067,32 @@ function renderBuild(state, city, ctx) {
   // Fokus nach dem Neuzeichnen (z. B. nach dem Bauen) auf dem gewählten Feld halten.
   if (build.open && (!document.activeElement || document.activeElement === document.body)) {
     const b = box.querySelector('.bhex.sel');
+    if (b) b.focus({ preventScroll: true });
+  }
+}
+
+// 3D-Ansicht: Marken (Knöpfe) über den Feldern und Ringe in der Szene.
+function renderBuild3d(state, city, ctx, info) {
+  const mineCity = city.owner === ctx.actAs;
+  const tags = $('build-map').querySelector('.b3-tags');
+  tags.innerHTML = info.map(t => {
+    const imp = improvementAt(state, t.q, t.r);
+    const res = resourceAt(state, t.q, t.r);
+    const isCity = !!cityAt(state, t.q, t.r);
+    const yld = isCity ? 0 : tileYield(state, city, t.q, t.r);
+    const unit = unitAt(state, t.q, t.r);
+    const main = isCity ? (city.isCapital ? 'Hauptstadt' : 'Stadt') : imp ? IMPROVEMENTS[imp].name : res ? RESOURCES[res].name : '';
+    const tile = TERRAIN[terrainAt(state, t.q, t.r)].name;
+    const label = [tile, main, unit && !isCity ? 'Einheit' : '', yld ? `bringt ${yld}` : '', t.can ? 'baubar' : ''].filter(Boolean).join(', ');
+    const cls = ['b3-tag', t.key === build.sel ? 'sel' : '', t.can ? 'can' : '', main ? 'named' : 'blank', isCity ? 'city' : ''].filter(Boolean).join(' ');
+    return `<button class="${cls}" data-hex="${t.key}" aria-label="${esc(label)}" aria-pressed="${t.key === build.sel}">${main ? `<span class="b3-m">${esc(main)}</span>` : ''}${yld ? `<span class="b3-y">+${yld}</span>` : ''}${isCity && mineCity ? `<span class="b3-y">Stufe ${city.pop}</span>` : ''}<span class="hx-gain" aria-hidden="true"></span></button>`;
+  }).join('');
+  tags.querySelectorAll('[data-hex]').forEach(b => b.addEventListener('click', () => selectBuildHex(b.dataset.hex)));
+  placeTags();
+  setCityViewMarks({ sel: build.sel, can: info.filter(t => t.can).map(t => t.key) });
+  renderBuildDetail(state, city, ctx, info.find(t => t.key === build.sel));
+  if (build.open && (!document.activeElement || document.activeElement === document.body)) {
+    const b = tags.querySelector('.sel');
     if (b) b.focus({ preventScroll: true });
   }
 }
@@ -1109,9 +1175,13 @@ function neighbourText(state, changed) {
 
 function previewOpt(o) {
   const map = $('build-map');
-  map.querySelectorAll('.bhex.gain').forEach(h => { h.classList.remove('gain'); h.querySelector('.hx-gain').textContent = ''; });
+  map.querySelectorAll('[data-hex].gain').forEach(h => { h.classList.remove('gain'); h.querySelector('.hx-gain').textContent = ''; });
   if (!build.open) return;
   $('build-stars').innerHTML = buildHead(o && o.after != null ? o.after : null);
+  if (build.view3d) {
+    const can = [...map.querySelectorAll('[data-hex].can')].map(h => h.dataset.hex);
+    setCityViewMarks({ sel: build.sel, can, gain: o && o.changed ? o.changed.map(c => c.q + ',' + c.r) : [] });
+  }
   if (!o || !o.changed) return;
   for (const c of o.changed) {
     const h = map.querySelector(`[data-hex="${c.q},${c.r}"]`);
@@ -1138,7 +1208,7 @@ function buildKey(e) {
   if (/^[1-9]$/.test(e.key)) { e.preventDefault(); doBuildOpt(Number(e.key) - 1); return; }
   if (!e.key.startsWith('Arrow') || !build.sel) return;
   e.preventDefault();
-  const list = [...$('build-map').querySelectorAll('[data-hex]')].map(b => ({ key: b.dataset.hex, x: parseFloat(b.style.left), y: parseFloat(b.style.top) }));
+  const list = [...$('build-map').querySelectorAll('[data-hex]')].map(b => ({ key: b.dataset.hex, x: parseFloat(b.style.left) || 0, y: parseFloat(b.style.top) || 0 }));
   const cur = list.find(t => t.key === build.sel);
   if (!cur) return;
   let next = null;
@@ -1153,10 +1223,7 @@ function buildKey(e) {
     next = cand[0];
   }
   if (!next) return;
-  build.sel = next.key;
-  renderBuild(build.state, build.city, build.ctx);
-  const b = $('build-map').querySelector(`[data-hex="${next.key}"]`);
-  if (b) b.focus({ preventScroll: true });
+  selectBuildHex(next.key);
 }
 
 function trainReason(state, city, type, ctx) {

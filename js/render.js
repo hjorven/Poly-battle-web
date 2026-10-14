@@ -178,7 +178,8 @@ export function initRender(canvas, opts = {}) {
     }
     controls.update();
     clampTarget();
-    if (!contextLost) renderer.render(scene, camera);
+    // Solange das Bau-Fenster seine eigene 3D-Ansicht zeigt, ruht das Hauptbild.
+    if (!contextLost && !cityCam) renderer.render(scene, camera);
   }
   requestAnimationFrame(loop);
   return true;
@@ -2599,6 +2600,153 @@ export function project(q, r) {
     x: rect.left + (v.x * 0.5 + 0.5) * rect.width,
     y: rect.top + (-v.y * 0.5 + 0.5) * rect.height
   };
+}
+
+// --- 3D-Ansicht im Bau-Fenster ---------------------------------------------------
+// Ein zweiter, kleiner Renderer zeigt dieselbe Szene mit eigener Kamera auf das
+// Stadtgebiet. Ziehen dreht um die Stadt, Rad/zwei Finger zoomen, Antippen
+// wählt ein Feld (Raycast auf die Feld-Kacheln).
+let cityCam = null;
+
+export function openCityView(canvas, q, r, radius = 1, onMove = null) {
+  if (!initialized) return false;
+  closeCityView();
+  let r2;
+  try { r2 = new THREE.WebGLRenderer({ canvas, antialias: true }); } catch (e) { return false; }
+  r2.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const cam = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
+  const marks = new THREE.Group();
+  marks.visible = false;
+  scene.add(marks);
+  const c = toWorld(q, r);
+  cityCam = { renderer: r2, camera: cam, canvas, marks, cx: c.x, cz: c.z, yaw: 0, dist: 5.2 + radius * 3.4, min: 4, max: 9 + radius * 5, onMove, dirty: true, raf: 0, drag: null, pointers: new Map() };
+  const cv = cityCam;
+  const place = () => {
+    const tilt = 0.95;
+    cam.position.set(cv.cx + Math.sin(cv.yaw) * Math.cos(tilt) * cv.dist, Math.sin(tilt) * cv.dist + 0.4, cv.cz + Math.cos(cv.yaw) * Math.cos(tilt) * cv.dist);
+    cam.lookAt(cv.cx, 0.45, cv.cz);
+    cam.updateMatrixWorld();
+  };
+  const size = () => {
+    const w = canvas.clientWidth || 400, h = canvas.clientHeight || 300;
+    r2.setSize(w, h, false);
+    cam.aspect = w / h;
+    cam.updateProjectionMatrix();
+    cv.dirty = true;
+  };
+  cv.size = size;
+  size();
+  place();
+  // Ziehen dreht, zwei Finger zoomen, Rad zoomt; kurzer Tipp = Feld wählen.
+  canvas.addEventListener('pointerdown', cv.down = e => {
+    canvas.setPointerCapture(e.pointerId);
+    cv.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    cv.moved = 0;
+    if (cv.pointers.size === 2) { const [a, b] = [...cv.pointers.values()]; cv.pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+  });
+  canvas.addEventListener('pointermove', cv.move = e => {
+    const p = cv.pointers.get(e.pointerId);
+    if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    cv.moved += Math.abs(dx) + Math.abs(dy);
+    if (cv.pointers.size === 1) cv.yaw -= dx * 0.008;
+    else if (cv.pointers.size === 2) {
+      const [a, b] = [...cv.pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (cv.pinch) cv.dist = THREE.MathUtils.clamp(cv.dist * cv.pinch / d, cv.min, cv.max);
+      cv.pinch = d;
+    }
+    place(); cv.dirty = true;
+  });
+  const up = e => { cv.pointers.delete(e.pointerId); if (cv.pointers.size < 2) cv.pinch = 0; };
+  canvas.addEventListener('pointerup', cv.up = up);
+  canvas.addEventListener('pointercancel', cv.cancel = up);
+  canvas.addEventListener('wheel', cv.wheel = e => {
+    e.preventDefault();
+    cv.dist = THREE.MathUtils.clamp(cv.dist * (e.deltaY < 0 ? 0.9 : 1.1), cv.min, cv.max);
+    place(); cv.dirty = true;
+  }, { passive: false });
+  cv.ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(size) : null;
+  if (cv.ro) cv.ro.observe(canvas);
+  const frame = () => {
+    if (cityCam !== cv) return;
+    cv.raf = requestAnimationFrame(frame);
+    // Markierte Felder pulsieren leicht; sonst nur neu zeichnen, wenn sich etwas bewegt.
+    const t = performance.now();
+    for (const m of marks.children) if (m.userData.pulse) m.material.opacity = 0.55 + Math.sin(t / 260) * 0.3;
+    const hidden = [highlightGroup, idleGroup];
+    const was = hidden.map(o => o.visible);
+    hidden.forEach(o => { o.visible = false; });
+    marks.visible = true;
+    try { r2.render(scene, cam); } catch (e) { reportOnce(e); }
+    marks.visible = false;
+    hidden.forEach((o, i) => { o.visible = was[i]; });
+    if (cv.dirty) { cv.dirty = false; if (cv.onMove) cv.onMove(); }
+  };
+  frame();
+  return true;
+}
+
+export function closeCityView() {
+  const cv = cityCam;
+  if (!cv) return;
+  cityCam = null;
+  cancelAnimationFrame(cv.raf);
+  if (cv.ro) cv.ro.disconnect();
+  const c = cv.canvas;
+  c.removeEventListener('pointerdown', cv.down);
+  c.removeEventListener('pointermove', cv.move);
+  c.removeEventListener('pointerup', cv.up);
+  c.removeEventListener('pointercancel', cv.cancel);
+  c.removeEventListener('wheel', cv.wheel);
+  scene.remove(cv.marks);
+  for (const m of cv.marks.children) m.material.dispose();
+  cv.renderer.dispose();
+  try { cv.renderer.forceContextLoss(); } catch (e) { /* ignore */ }
+}
+
+// War die letzte Berührung ein Tipp (kein Ziehen)? Dann das Feld darunter.
+export function cityViewPick(clientX, clientY) {
+  const cv = cityCam;
+  if (!cv || cv.moved > 8) return null;
+  const rect = cv.canvas.getBoundingClientRect();
+  const v = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(v, cv.camera);
+  const hit = raycaster.intersectObjects(tileMeshes, false)[0];
+  return hit ? hit.object.userData.hex : null;
+}
+
+// Bildschirmposition (in der Ansicht) über einem Feld; null, wenn hinter der Kamera.
+export function cityViewProject(q, r, lift = 0.55) {
+  const cv = cityCam;
+  if (!cv) return null;
+  const p = toWorld(q, r);
+  const v = new THREE.Vector3(p.x, hexTop(hk(q, r)) + lift, p.z).project(cv.camera);
+  if (v.z > 1) return null;
+  return { x: (v.x * 0.5 + 0.5) * cv.canvas.clientWidth, y: (-v.y * 0.5 + 0.5) * cv.canvas.clientHeight };
+}
+
+// Ringe auf Feldern: gewählt (Grün), jetzt bebaubar (Bernstein), Nutznießer der Vorschau.
+export function setCityViewMarks({ sel = null, can = [], gain = [] } = {}) {
+  const cv = cityCam;
+  if (!cv) return;
+  for (const m of cv.marks.children) m.material.dispose();
+  cv.marks.clear();
+  const ring = geo('cvRing', () => new THREE.RingGeometry(0.66, 0.84, 6).rotateX(-Math.PI / 2).rotateY(Math.PI / 6));
+  const add = (key, color, pulse) => {
+    const [q, r] = key.split(',').map(Number);
+    const m = new THREE.Mesh(ring, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }));
+    const p = toWorld(q, r);
+    m.position.set(p.x, hexTop(key) + 0.04, p.z);
+    m.renderOrder = 20;
+    m.userData.pulse = pulse;
+    cv.marks.add(m);
+  };
+  for (const k of can) if (k !== sel) add(k, 0xf59e0b, false);
+  for (const k of gain) if (k !== sel) add(k, 0x4ade80, true);
+  if (sel) add(sel, 0xffffff, true);
+  cv.dirty = true;
 }
 
 // Foto der ganzen Welt von schräg oben (ohne Nebel, ohne Markierungen) für das

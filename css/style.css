@@ -931,7 +931,7 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
 .build-legend { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); flex-wrap: wrap; justify-content: center; }
 .build-legend .lg { width: 14px; height: 14px; display: inline-block; margin-left: 8px; }
 .build-legend .lg.can { background: #f59e0b; }
-.build-legend .lg.sel { background: var(--primary); }
+.build-legend .lg.sel { background: var(--primary); box-shadow: inset 0 0 0 2px #fff, 0 0 0 1px var(--border-strong); }
 .build-detail h3 { font-size: 18px; margin-bottom: 6px; }
 .build-detail p { font-size: 13px; color: var(--text); margin: 4px 0; }
 .bopts { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
@@ -1110,3 +1110,29 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
   #techBtn, #overviewBtn { padding: 6px 7px; font-size: 13px; }
   #endTurnBtn { padding: 8px 10px; }
 }
+
+/* Bau-Fenster in 3D: echte Szene, Marken als Knöpfe darüber */
+.build-map.b3 { position: relative; width: 100%; height: min(54vh, 460px); min-height: 280px; margin: 0; background: #8fc9ea; overflow: hidden; touch-action: none; }
+.b3-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+.b3-canvas:active { cursor: grabbing; }
+.b3-tags { position: absolute; inset: 0; pointer-events: none; }
+.b3-tag {
+  position: absolute; transform: translate(-50%, -100%); pointer-events: auto; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 7px;
+  background: var(--panel); color: var(--text); border: 1px solid var(--border-strong);
+  font: inherit; font-size: 11px; font-weight: 600; line-height: 1.15; white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+.b3-tag.blank { width: 14px; height: 14px; padding: 0; opacity: 0.75; }
+.b3-tag.can { border-color: #f59e0b; border-width: 2px; }
+.b3-tag.blank.can { opacity: 1; background: #fde68a; }
+.b3-tag.sel, .b3-tag.blank.sel, .b3-tag.blank.can.sel { background: var(--primary); color: var(--on-primary); border: 2px solid #fff; opacity: 1; z-index: 2; }
+.b3-tag.blank.sel { width: 18px; height: 18px; }
+.b3-tag.gain { border-color: var(--ok); }
+.b3-tag .b3-y { font-size: 10px; font-weight: 700; color: var(--accent); }
+.b3-tag.sel .b3-y { color: var(--on-primary-sub); }
+.b3-tag .hx-gain { display: none; font-size: 11px; font-weight: 700; color: #fff; background: var(--ok); padding: 0 5px; }
+.b3-tag.gain .hx-gain { display: block; }
+.b3-tag:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.b3-hint { position: absolute; left: 8px; bottom: 6px; font-size: 11px; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); pointer-events: none; }
+@media (hover: none) { .b3-tag.blank { width: 22px; height: 22px; } .b3-tag { padding: 5px 8px; } }
