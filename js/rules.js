@@ -616,7 +616,7 @@ export function startTurn(state) {
     }
   }
   for (const c of state.cities) {
-    if (c.owner === p) c.trained = false;
+    if (c.owner === p) { c.trained = false; c.trainedShip = false; }
   }
   state.stars[p] += incomeFor(state, p);
   checkMonuments(state, p);
@@ -951,9 +951,12 @@ export function spawnSpot(state, city, type) {
 export function canTrain(state, city, type, player) {
   if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
   if (city.owner !== player) return { ok: false, reason: 'Fremde Stadt' };
-  if (city.trained) return { ok: false, reason: 'Bereits ausgebildet' };
   const u = UNITS[type];
   if (!u) return { ok: false, reason: 'Unbekannte Einheit' };
+  // Zwei Bauplätze: eine Landeinheit und – mit Hafen – zusätzlich ein Schiff pro Runde.
+  if (hasAbility(type, 'water') ? city.trainedShip : city.trained) {
+    return { ok: false, reason: hasAbility(type, 'water') ? 'Schon ein Schiff gebaut' : 'Bereits ausgebildet' };
+  }
   if (u.reward) return { ok: false, reason: 'Nur als Stadtbelohnung' };
   if (u.capital && !city.isCapital) return { ok: false, reason: 'Nur in der Hauptstadt' };
   if (u.tech && !state.techs[player].includes(u.tech)) return { ok: false, reason: 'Technologie fehlt' };
@@ -972,7 +975,8 @@ export function trainUnit(state, city, type, player) {
   if (!chk.ok) return chk;
   const [sq, sr] = spawnSpot(state, city, type);
   state.stars[player] -= unitCost(state, player, type);
-  city.trained = true;
+  if (hasAbility(type, 'water')) city.trainedShip = true;
+  else city.trained = true;
   state.units.push({
     id: `${player.replace('_', '')}_${Date.now().toString(36)}_${unitSeq++}`,
     owner: player, type, q: sq, r: sr,

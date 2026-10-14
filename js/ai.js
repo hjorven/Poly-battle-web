@@ -357,15 +357,15 @@ export function botStep(state, player) {
       'giant', 'knight', 'battleship', 'ship', 'swordsman', 'catapult',
       'boat', 'mindbender', 'archer', 'defender', 'rider', 'warrior'
     ];
-    let type = null;
+    // Bestes Wunschziel, das hier gerade möglich ist (Land- und Schiffsplatz getrennt).
     for (const t of order) {
       if (!unlocked.includes(t)) continue;
       if (R.unitCost(state, player, t) > stars) continue;
       if (t === 'giant' && stars < 10) continue;
-      type = t;
-      break;
+      if (R.canTrain(state, c, t, player).ok) return { kind: 'train', city: c, type: t };
+      // Nur bis zum ersten bezahlbaren Landwunsch suchen: sonst spart die KI nie.
+      if (!UNITS[t].abilities.includes('water')) break;
     }
-    if (type && R.canTrain(state, c, type, player).ok) return { kind: 'train', city: c, type };
     // Küstenstädte bauen auch Schiffe, solange die KI keine hat.
     const naval = ['battleship', 'ship', 'boat'].find(t => unlocked.includes(t) && R.unitCost(state, player, t) <= stars - 2);
     if (naval && !state.units.some(u => u.owner === player && UNITS[u.type].abilities.includes('water') && !u.carry) &&
