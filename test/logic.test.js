@@ -612,6 +612,18 @@ test('Wochen-Herausforderung: feste Woche, Sonderregeln wirken, Bestwert im Prof
   R.createGame(1, 4);
 });
 
+test('Kosmetik: Freischaltung über Stufe/Erfolg, gesperrte Wahl fällt auf Standard zurück', () => {
+  const prof = P.emptyProfile();
+  assert.ok(P.cosmeticUnlocked(prof, 'banner', 'standard'));
+  assert.ok(!P.cosmeticUnlocked(prof, 'banner', 'pennant'), 'Stufe 2 nötig');
+  prof.look = { banner: 'pennant', plume: 'gold' };
+  assert.deepStrictEqual(P.lookOf(prof), { banner: 'standard', plume: 'none', decor: 'none' });
+  prof.xp = P.xpFor(4);
+  prof.achievements.warlord = '2026-10-14';
+  assert.deepStrictEqual(P.lookOf(prof), { banner: 'pennant', plume: 'gold', decor: 'none' });
+  assert.ok(P.cosmeticHint('decor', 'statue').includes('Baumeister'));
+});
+
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
   const st = makeState();
   st.explored = { player_1: [], player_2: [] };

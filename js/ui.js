@@ -300,6 +300,20 @@ function renderStats(profile) {
     ${recent ? `<ul class="recent">${recent}</ul>` : '<div class="hint">Noch keine Partie beendet.</div>'}`;
 }
 
+// Kosmetik-Auswahl: freigeschaltete Teile wählbar, gesperrte mit Hinweis.
+export function renderLooks(profile, cosmetics, unlocked, hint, current) {
+  $('looks').innerHTML = Object.entries(cosmetics).map(([cat, c]) => `<div class="setting-row">
+      <span class="setting-label">${esc(c.label)}</span>
+      <div class="seg">${Object.entries(c.items).map(([id, it]) => {
+        const ok = unlocked(profile, cat, id);
+        return `<button class="chip-btn ${current[cat] === id ? 'active' : ''}" data-look="${cat}:${id}" ${ok ? '' : 'disabled'} title="${esc(ok ? it.name : 'Gesperrt: ' + hint(cat, id))}">${esc(it.name)}${ok ? '' : ' · ' + esc(hint(cat, id))}</button>`;
+      }).join('')}</div></div>`).join('') + '<div class="hint">Gilt für deine Städte und Einheiten. Mehr schaltest du mit Stufen und Erfolgen frei.</div>';
+  $('looks').querySelectorAll('[data-look]').forEach(b => b.addEventListener('click', () => {
+    const [cat, id] = b.dataset.look.split(':');
+    handlers.onLook(cat, id);
+  }));
+}
+
 // Ergebnis für das Profil auf dem Endbildschirm.
 export function showProfileResult(res, lp, achievements) {
   const box = $('winner-profile');
