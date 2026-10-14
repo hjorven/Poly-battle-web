@@ -381,12 +381,18 @@ function persist() {
 function showMenu() {
   const profile = P.loadProfile();
   ui.renderProfile(profile, P.levelProgress(profile.xp), P.dailyChallenge(), P.ACHIEVEMENTS, P.weeklyChallenge());
+  ui.renderLooks(profile, P.COSMETICS, P.cosmeticUnlocked, P.cosmeticHint, P.lookOf(profile));
   ui.setContinue(saveInfo());
   ui.showMenu();
 }
 
 async function saveOnline() {
   if (!app.online || !app.gameId) return;
+  // Eigenes Aussehen mitschicken (Mitspieler setzen ihres beim ersten Speichern).
+  if (app.myRole) {
+    if (!app.state.looks) app.state.looks = {};
+    app.state.looks[app.myRole] = P.lookOf(P.loadProfile());
+  }
   app.state.rev = (app.state.rev || 0) + 1;
   const { error, rejected } = await net.saveMatch(app.gameId, app.state);
   if (!error) return;
@@ -1075,6 +1081,8 @@ function startLocal(mode, override = null) {
       }
     : { turnLimit: settings.turnLimit, ...map };
   app.state = R.createGame(override && override.seed != null ? override.seed : Math.floor(Math.random() * 2 ** 31), count, opts);
+  // Eigenes Aussehen (Kosmetik) für den Menschen gegen die KI.
+  if (mode === 'bot') app.state.looks = { player_1: P.lookOf(P.loadProfile()) };
   enterLocal();
   persist();
 }
@@ -1294,6 +1302,20 @@ function boot() {
       refresh();
     },
     onMenu: () => showMenu(),
+    onLook: (cat, id) => {
+      const profile = P.loadProfile();
+      if (!P.cosmeticUnlocked(profile, cat, id)) return;
+      profile.look = { ...(profile.look || {}), [cat]: id };
+      P.saveProfile(profile);
+      ui.renderLooks(profile, P.COSMETICS, P.cosmeticUnlocked, P.cosmeticHint, P.lookOf(profile));
+      const me = viewer();
+      if (app.state && me && app.mode !== 'hotseat') {
+        app.state.looks = { ...(app.state.looks || {}), [me]: P.lookOf(profile) };
+        render.syncBoard(app.state, viewer());
+        persist();
+      }
+      sfx('select');
+    },
     onRestart: () => { endReview(); ui.hideWinner(); showMenu(); },
     onReview: on => {
       if (!app.state) return;

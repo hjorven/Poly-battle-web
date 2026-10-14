@@ -1470,7 +1470,9 @@ function passengerOf(u) {
   return u.carry || (u.cargo && u.cargo.type) || null;
 }
 
-function unitBody(type, color, passenger = null) {
+const PLUME = { red: 0xdc2626, white: 0xf5f5f4, gold: 0xeab308 };
+
+function unitBody(type, color, passenger = null, plume = null) {
   const g = new THREE.Group();
   const teamMats = [];
   const teamMat = () => {
@@ -1499,6 +1501,8 @@ function unitBody(type, color, passenger = null) {
     if (robe) put(p, cone(0.17, 0.42, 7), torso || teamMat(), 0, 0.21, 0);
     else put(p, cyl(0.1, 0.12, 0.24), torso || teamMat(), 0, 0.29, 0);
     put(p, ico(0.085), mat(SKIN), 0, 0.49, 0);
+    // Helmbusch (Kosmetik) über dem Kopf.
+    if (plume && PLUME[plume]) put(p, cone(0.035, 0.14, 4), mat(PLUME[plume]), -0.02, 0.7, 0).rotation.z = 0.35;
     const hand = (side, swing) => {
       const shoulder = new THREE.Group();
       shoulder.position.set(0, 0.38, 0.15 * side);
@@ -1714,7 +1718,7 @@ function unitBody(type, color, passenger = null) {
 // isCapital. Jede Stufe (Bevölkerung 1–5) hat eigene Gebäude; Dächer und
 // Fahnen tragen die Teamfarbe.
 
-function buildCity(city, color) {
+function buildCity(city, color, look = null) {
   const g = new THREE.Group();
   const team = city.owner ? mat(color) : mat(0x8f939c);
   const stone = mat(0xd6d3cb), stoneDark = mat(0x9ca3af), plaster = mat(0xe8e2d2);
@@ -1756,7 +1760,21 @@ function buildCity(city, color) {
   const flag = (x, z, top, big = false) => {
     if (!city.owner) return;
     put(cyl(0.012, 0.012, 0.3, 5), mat(0x52525b), x, top + 0.15, z);
-    put(box(big ? 0.2 : 0.15, big ? 0.12 : 0.09, 0.015), team, x + (big ? 0.1 : 0.075), top + 0.24, z);
+    const w = big ? 0.2 : 0.15, h = big ? 0.12 : 0.09;
+    const style = look ? look.banner : 'standard';
+    if (style === 'pennant') {
+      // Wimpel: spitzes Dreieck.
+      const pen = put(cone(h / 2, w * 1.2, 3), team, x + w * 0.6, top + 0.24, z);
+      pen.rotation.z = -Math.PI / 2;
+      pen.scale.z = 0.15;
+    } else if (style === 'swallow') {
+      // Schwalbenschwanz: zwei Zipfel.
+      put(box(w * 0.6, h, 0.015), team, x + w * 0.3, top + 0.24, z);
+      for (const dy of [-h * 0.28, h * 0.28]) put(box(w * 0.45, h * 0.4, 0.015), team, x + w * 0.8, top + 0.24 + dy, z);
+    } else {
+      if (style === 'gold') put(box(w + 0.03, h + 0.03, 0.01), gold, x + w / 2, top + 0.24, z);
+      put(box(w, h, 0.015), team, x + w / 2, top + 0.24, z);
+    }
   };
   const crown = top => {
     put(cyl(0.07, 0.07, 0.04, 8), gold, 0, top + 0.03, 0);
@@ -1814,6 +1832,23 @@ function buildCity(city, color) {
   }
   if (city.isCapital && city.owner) crown(top + (lvl === 1 ? 0.0 : 0.02));
 
+  // Stadtschmuck (Kosmetik) vorn am Stadtplatz der Hauptstadt.
+  const decor = city.isCapital && look ? look.decor : 'none';
+  if (decor === 'fountain') {
+    put(cyl(0.09, 0.1, 0.05, 10), stone, 0, Y + 0.025, 0.46);
+    put(cyl(0.075, 0.075, 0.01, 10), mat(0x60a5fa), 0, Y + 0.05, 0.46);
+    put(cyl(0.015, 0.02, 0.1, 6), stone, 0, Y + 0.08, 0.46);
+  } else if (decor === 'statue') {
+    put(box(0.08, 0.08, 0.08), stone, 0, Y + 0.04, 0.46);
+    put(cyl(0.025, 0.03, 0.1, 6), gold, 0, Y + 0.13, 0.46);
+    put(ico(0.03), gold, 0, Y + 0.2, 0.46);
+  } else if (decor === 'garden') {
+    for (const [x, z] of [[-0.12, 0.46], [0.12, 0.46], [0, 0.5]]) {
+      put(ico(0.05), mat(0x3e9140), x, Y + 0.05, z);
+      put(ico(0.02), mat(0xf472b6), x + 0.02, Y + 0.09, z);
+    }
+  }
+
   // Belohnungen sichtbar machen.
   if (city.park) {
     for (const [x, z] of [[-0.45, 0.05], [-0.4, 0.2]]) {
@@ -1836,21 +1871,27 @@ function buildCity(city, color) {
   return g;
 }
 
-function cityKey(city) {
-  return [city.owner, city.pop, city.wall, city.park, city.workshop, city.isCapital].join('|');
+function cityKey(city, look = null) {
+  return [city.owner, city.pop, city.wall, city.park, city.workshop, city.isCapital, look ? look.banner + look.decor : ''].join('|');
+}
+
+// Aussehen (Kosmetik) des Besitzers aus dem Spielstand.
+function lookFor(state, owner) {
+  return (owner && state.looks && state.looks[owner]) || null;
 }
 
 function placeCityNode(state, city) {
   const key = hk(city.q, city.r);
   const existing = cityNodes.get(key);
-  if (existing && existing.sig === cityKey(city)) return;
+  const look = lookFor(state, city.owner);
+  if (existing && existing.sig === cityKey(city, look)) return;
   // Wachstum oder Besitzerwechsel: neue Stadt kurz „aufploppen“ lassen.
   const changed = existing && (existing.pop !== city.pop || existing.owner !== city.owner);
   if (existing) {
     scene.remove(existing.group);
     cityNodes.delete(key);
   }
-  const group = buildCity(city, city.owner ? ownerColor(city.owner) : 0xb9bdc6);
+  const group = buildCity(city, city.owner ? ownerColor(city.owner) : 0xb9bdc6, look);
   const p = toWorld(city.q, city.r);
   group.position.set(p.x, hexTop(key), p.z);
   scene.add(group);
@@ -1858,7 +1899,7 @@ function placeCityNode(state, city) {
     group.scale.setScalar(0.7);
     addTween({ dur: 520, ease: easeOutBack, update: t => group.scale.setScalar(0.7 + 0.3 * t) });
   }
-  cityNodes.set(key, { group, owner: city.owner, pop: city.pop, sig: cityKey(city) });
+  cityNodes.set(key, { group, owner: city.owner, pop: city.pop, sig: cityKey(city, look) });
 }
 
 // Luft-Einheiten: schweben über dem Feld, Schatten am Boden. Weidenkorb oder
@@ -1933,7 +1974,8 @@ function airBody(type, g, put, teamMat) {
 
 function placeUnitNode(state, unit) {
   const color = ownerColor(unit.owner);
-  const group = unitBody(unit.type, color, passengerOf(unit));
+  const look = lookFor(state, unit.owner);
+  const group = unitBody(unit.type, color, passengerOf(unit), look && look.plume);
   const p = toWorld(unit.q, unit.r);
   const key = hk(unit.q, unit.r);
   group.position.set(p.x, unitTop(key, unit.type), p.z);
@@ -1944,7 +1986,7 @@ function placeUnitNode(state, unit) {
   group.rotation.y = DEFAULT_FACING;
   scene.add(group);
   const bt = tiles.get(key);
-  const node = { underBridge: !!(bt && bt.bridgeNode && hasAbility(unit.type, 'water')), group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, passenger: passengerOf(unit), acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
+  const node = { plume: look && look.plume, underBridge: !!(bt && bt.bridgeNode && hasAbility(unit.type, 'water')), group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, passenger: passengerOf(unit), acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
   unitNodes.set(unit.id, node);
   if (unit.acted) {
     for (const m of node.group.userData.teamMats) m.color.multiplyScalar(0.55);
@@ -2088,7 +2130,8 @@ export function syncBoard(state, viewer = null) {
     alive.add(u.id);
     let node = unitNodes.get(u.id);
     // Ein-/Ausschiffen wechselt den Typ: Modell neu aufbauen.
-    if (node && (node.type !== u.type || node.passenger !== passengerOf(u))) {
+    const lk = lookFor(state, u.owner);
+    if (node && (node.type !== u.type || node.passenger !== passengerOf(u) || node.plume !== (lk && lk.plume))) {
       removeUnitNode(u.id, node);
       node = null;
     }

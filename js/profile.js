@@ -16,7 +16,8 @@ export function emptyProfile() {
     totals: { kills: 0, captures: 0, trained: 0, rounds: 0, techs: 0 }, tribeGames: {}, recent: [],
     bestScore: 0, fastestWin: null, tribeWins: {}, achievements: {}, seen: [],
     daily: { last: null, streak: 0, bestStreak: 0, best: {} },
-    weekly: { best: {} }
+    weekly: { best: {} },
+    look: {}
   };
 }
 
@@ -53,7 +54,8 @@ function sanitize(p) {
       last: typeof d.last === 'string' ? d.last : null,
       streak: num(d.streak), bestStreak: num(d.bestStreak), best: obj(d.best)
     },
-    weekly: { best: obj(obj(p.weekly).best) }
+    weekly: { best: obj(obj(p.weekly).best) },
+    look: Object.fromEntries(Object.entries(obj(p.look)).filter(([k, v]) => typeof v === 'string' && COSMETICS[k] && COSMETICS[k].items[v]))
   };
 }
 
@@ -116,6 +118,66 @@ export const ACHIEVEMENTS = {
   online: { name: 'Gemeinsam stark', desc: 'Gewinne ein Online-Spiel.', check: r => r.won && r.mode === 'online' },
   weekly: { name: 'Wochenkämpfer', desc: 'Schließe eine Wochen-Herausforderung ab.', check: r => !!r.weekly }
 };
+
+// --- Kosmetik -------------------------------------------------------------------
+// Freigeschaltet über Stufe oder Erfolg; im Spiel für eigene Städte/Einheiten.
+
+export const COSMETICS = {
+  banner: {
+    label: 'Banner',
+    items: {
+      standard: { name: 'Standard' },
+      pennant: { name: 'Wimpel', need: { level: 2 } },
+      swallow: { name: 'Schwalbenschwanz', need: { level: 4 } },
+      gold: { name: 'Goldbanner', need: { ach: 'win_hard' } }
+    }
+  },
+  plume: {
+    label: 'Helmbusch',
+    items: {
+      none: { name: 'Keiner' },
+      red: { name: 'Rot', need: { ach: 'first_win' } },
+      white: { name: 'Weiß', need: { level: 3 } },
+      gold: { name: 'Gold', need: { ach: 'warlord' } }
+    }
+  },
+  decor: {
+    label: 'Stadtschmuck',
+    items: {
+      none: { name: 'Keiner' },
+      fountain: { name: 'Brunnen', need: { level: 5 } },
+      statue: { name: 'Statue', need: { ach: 'builder' } },
+      garden: { name: 'Gärten', need: { ach: 'streak3' } }
+    }
+  }
+};
+
+export function cosmeticUnlocked(profile, cat, id) {
+  const item = COSMETICS[cat] && COSMETICS[cat].items[id];
+  if (!item) return false;
+  const need = item.need;
+  if (!need) return true;
+  if (need.level) return levelOf(profile.xp) >= need.level;
+  if (need.ach) return !!profile.achievements[need.ach];
+  return false;
+}
+
+export function cosmeticHint(cat, id) {
+  const need = COSMETICS[cat].items[id].need;
+  if (!need) return '';
+  if (need.level) return `ab Stufe ${need.level}`;
+  return `Erfolg „${ACHIEVEMENTS[need.ach].name}“`;
+}
+
+// Gewähltes Aussehen, nur freigeschaltete Teile.
+export function lookOf(profile) {
+  const look = {};
+  for (const cat of Object.keys(COSMETICS)) {
+    const want = profile.look && profile.look[cat];
+    look[cat] = want && cosmeticUnlocked(profile, cat, want) ? want : Object.keys(COSMETICS[cat].items)[0];
+  }
+  return look;
+}
 
 // --- Tagesherausforderung -----------------------------------------------------
 
