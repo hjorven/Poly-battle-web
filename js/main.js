@@ -536,6 +536,31 @@ async function doFound(unit) {
   await afterAction();
 }
 
+async function doLoadCargo(balloon, unitId) {
+  balloon = liveUnit(balloon);
+  const unit = R.findUnit(app.state, unitId);
+  if (!balloon || !unit) return;
+  const res = R.loadCargo(app.state, balloon, unit);
+  if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  app.busy = true;
+  ui.toast(`${UNITS[unit.type].name} steigt in den Ballon`, 'good');
+  sfx('move');
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
+async function doUnloadCargo(balloon, q, r) {
+  balloon = liveUnit(balloon);
+  if (!balloon) return;
+  const res = R.unloadCargo(app.state, balloon, q, r);
+  if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  app.busy = true;
+  ui.toast(`${UNITS[res.unit.type].name} abgesetzt`, 'good');
+  sfx('move');
+  await render.syncBoard(app.state, viewer());
+  await afterAction(res.events);
+}
+
 async function doBuildBridge(unit, dir) {
   unit = liveUnit(unit);
   if (!unit) return;
@@ -1054,6 +1079,8 @@ function boot() {
     onImprove: doImprove,
     onFound: doFound,
     onBuildBridge: doBuildBridge,
+    onLoadCargo: doLoadCargo,
+    onUnloadCargo: doUnloadCargo,
     onBuildRoad: doBuildRoad,
     onJump: (q, r) => render.cameraTo(q, r, true),
     onDestroyBridge: doDestroyBridge,
