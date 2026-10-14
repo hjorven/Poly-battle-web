@@ -747,20 +747,187 @@ function stepIdleMarkers(now) {
   }
 }
 
-function improvementNode(type) {
+// --- Gebäude-Umgebung -------------------------------------------------------------
+
+const HEX_R = HEX_SIZE * TILE_GAP;            // Eckradius eines Feldes
+const HEX_A = HEX_R * Math.sqrt(3) / 2;       // Abstand Mitte–Kante
+const DIR_VEC = DIRS.map(([dq, dr]) => { const p = toWorld(dq, dr); const l = Math.hypot(p.x, p.z); return [p.x / l, p.z / l]; });
+
+// Straßenarme und (für den Hafen) Richtungen mit begehbarem Land.
+function tileEnv(state, key, imp) {
+  const [q, r] = key.split(',').map(Number);
+  const arms = [];
+  if (roadAt(state, q, r)) DIRS.forEach(([dq, dr], d) => { if (onRoadNet(state, q + dq, r + dr)) arms.push(d); });
+  const env = { arms, road: roadAt(state, q, r) };
+  if (imp === 'port') {
+    env.land = [];
+    DIRS.forEach(([dq, dr], d) => {
+      const nq = q + dq, nr = r + dr;
+      if (nq < 0 || nr < 0 || nq >= MAP_W || nr >= MAP_H) return;
+      if (TERRAIN[state.terrain[nr * MAP_W + nq]].walkable) env.land.push(d);
+    });
+  }
+  return env;
+}
+
+function insideHex(x, z, a = HEX_A) {
+  const ax = Math.abs(x), az = Math.abs(z);
+  return ax <= a && ax * 0.5 + az * (Math.sqrt(3) / 2) <= a;
+}
+
+// Liegt der Punkt auf einer Straße (Arm oder Mittelstück)?
+function onRoadPath(x, z, env, width = 0.13) {
+  if (!env.road) return false;
+  if (Math.hypot(x, z) < 0.17) return true;
+  for (const d of env.arms || []) {
+    const [ux, uz] = DIR_VEC[d];
+    const along = x * ux + z * uz, across = Math.abs(x * uz - z * ux);
+    if (along > -0.05 && across < width) return true;
+  }
+  return false;
+}
+
+// Platz für ein Gebäude: Mitte, oder bei Straßen die Ecke mit dem größten
+// Abstand zu allen Straßenarmen.
+function buildingSpot(env) {
+  if (!env.road) return [0, 0, 1];
+  let best = null;
+  for (let k = 0; k < 6; k++) {
+    const ang = Math.PI / 6 + k * Math.PI / 3;
+    const vx = Math.cos(ang), vz = Math.sin(ang);
+    const gap = Math.min(Math.PI, ...(env.arms || []).map(d => Math.acos(Math.max(-1, Math.min(1, vx * DIR_VEC[d][0] + vz * DIR_VEC[d][1])))));
+    if (!best || gap > best.gap) best = { x: vx * 0.42, z: vz * 0.42, gap };
+  }
+  return [best.x, best.z, 0.8];
+}
+
+// Acker über das ganze Feld: Furchen (Erde) mit Pflanzen, Feldweg wo die
+// Straße durchläuft. Instanziert, damit viele Felder billig bleiben.
+function farmNode(env) {
   const g = new THREE.Group();
-  if (type === 'farm') {
-    for (let i = 0; i < 4; i++) {
-      for (let j = 0; j < 2; j++) {
-        const bed = new THREE.Mesh(geo('fmBed', () => new THREE.BoxGeometry(0.065, 0.02, 0.14)), mat(0x7a5230));
-        bed.position.set(-0.15 + i * 0.1, 0.01, -0.07 + j * 0.14);
-        g.add(bed);
-        const crop = new THREE.Mesh(geo('fmCrop', () => new THREE.ConeGeometry(0.022, 0.05, 4)), mat((i + j) % 2 ? 0x54a63a : 0x6fbf3f));
-        crop.position.set(bed.position.x, 0.045, bed.position.z);
-        g.add(crop);
+  const soil = [], crops = [];
+  const margin = HEX_A - 0.05;
+  for (let z = -0.78; z <= 0.78; z += 0.105) {
+    let start = null;
+    const flush = xEnd => {
+      if (start != null && xEnd - start > 0.06) soil.push([start, xEnd, z]);
+      start = null;
+    };
+    for (let x = -0.9; x <= 0.9; x += 0.02) {
+      const ok = insideHex(x, z, margin) && !onRoadPath(x, z, env);
+      if (ok && start == null) start = x;
+      if (!ok) flush(x);
+    }
+    flush(0.9);
+  }
+  const soilMat = mat(0x7a5230);
+  const soilGeo = geo('fmRow', () => new THREE.BoxGeometry(1, 0.025, 0.06));
+  const rows = new THREE.InstancedMesh(soilGeo, soilMat, soil.length);
+  const m4 = new THREE.Matrix4();
+  soil.forEach(([x0, x1, z], i) => {
+    m4.compose(new THREE.Vector3((x0 + x1) / 2, 0.0125, z), new THREE.Quaternion(), new THREE.Vector3(x1 - x0, 1, 1));
+    rows.setMatrixAt(i, m4);
+    for (let x = x0 + 0.03; x < x1 - 0.02; x += 0.07) crops.push([x, z]);
+  });
+  rows.receiveShadow = true;
+  g.add(rows);
+  const cropGeo = geo('fmCrop', () => new THREE.ConeGeometry(0.024, 0.06, 4));
+  const plants = new THREE.InstancedMesh(cropGeo, mat(0x6fbf3f), crops.length);
+  const tint = new THREE.Color();
+  crops.forEach(([x, z], i) => {
+    m4.makeTranslation(x, 0.055, z);
+    plants.setMatrixAt(i, m4);
+    plants.setColorAt(i, tint.setHex((Math.round(x * 50) + Math.round(z * 30)) % 3 ? 0x6fbf3f : 0x54a63a));
+  });
+  plants.castShadow = true;
+  g.add(plants);
+  return g;
+}
+
+// Hafen: Kaimauern bis auf Landhöhe an den Landseiten, niedrige Molen zum
+// Wasser, eine Einfahrt zur offenen See – in der Mitte das Hafenbecken, in
+// dem die Schiffe liegen. Stege überbrücken die Fuge zum Land.
+function portNode(env) {
+  const g = new THREE.Group();
+  const land = new Set(env.land || []);
+  const quayH = Math.max(0.12, TERRAIN.field.height - env.base);
+  const stone = mat(0xa8a29e), wood = mat(0x8a5a33);
+  // Einfahrt: die Wasserseite gegenüber dem Land (Mittel der Landrichtungen).
+  let mx = 0, mz = 0;
+  for (const d of land) { mx += DIR_VEC[d][0]; mz += DIR_VEC[d][1]; }
+  let open = -1, bestDot = Infinity;
+  for (let d = 0; d < 6; d++) {
+    if (land.has(d)) continue;
+    const dot = DIR_VEC[d][0] * mx + DIR_VEC[d][1] * mz;
+    if (dot < bestDot) { bestDot = dot; open = d; }
+  }
+  const edgeLen = HEX_R * 0.98;
+  for (let d = 0; d < 6; d++) {
+    if (d === open) continue;
+    const [ux, uz] = DIR_VEC[d];
+    const isLand = land.has(d);
+    const h = isLand ? quayH : 0.1;
+    const depth = isLand ? 0.2 : 0.09;
+    const wall = new THREE.Mesh(geo(`ptWall${isLand}|${h.toFixed(3)}`, () => new THREE.BoxGeometry(edgeLen, h, depth)), stone);
+    const dist = HEX_A - depth / 2 + (isLand ? 0.04 : 0);
+    wall.position.set(ux * dist, h / 2, uz * dist);
+    wall.rotation.y = -Math.atan2(uz, ux) + Math.PI / 2;
+    wall.castShadow = true; wall.receiveShadow = true;
+    g.add(wall);
+    if (isLand) {
+      // Steg vom Kai ins Becken.
+      const pier = new THREE.Mesh(geo('ptPier', () => new THREE.BoxGeometry(0.34, 0.03, 0.1)), wood);
+      const pd = HEX_A - 0.32;
+      pier.position.set(ux * pd, Math.min(h, 0.14), uz * pd);
+      pier.rotation.y = -Math.atan2(uz, ux);
+      g.add(pier);
+      for (const side of [-1, 1]) {
+        const post = new THREE.Mesh(geo('ptPost', () => new THREE.CylinderGeometry(0.015, 0.015, 0.2, 5)), wood);
+        post.position.set(ux * (pd - 0.14) - uz * side * 0.05, 0.06, uz * (pd - 0.14) + ux * side * 0.05);
+        g.add(post);
       }
     }
-  } else if (type === 'sawmill') {
+  }
+  // Lagerhaus und Kran auf der ersten Landseite (sonst auf einer Mole).
+  const home = land.size ? [...land][0] : (open + 3) % 6;
+  const [hx, hz] = DIR_VEC[home];
+  const top = land.size ? quayH : 0.1;
+  const shed = new THREE.Mesh(geo('ptShed', () => new THREE.BoxGeometry(0.2, 0.13, 0.13)), mat(0x6b4a2b));
+  const sd = HEX_A - 0.1;
+  shed.position.set(hx * sd + hz * 0.2, top + 0.065, hz * sd - hx * 0.2);
+  shed.rotation.y = -Math.atan2(hz, hx) + Math.PI / 2;
+  shed.castShadow = true;
+  g.add(shed);
+  const roof = new THREE.Mesh(geo('ptRoof2', () => new THREE.ConeGeometry(0.15, 0.08, 4)), mat(0x9c6b3a));
+  roof.position.set(shed.position.x, top + 0.17, shed.position.z);
+  roof.rotation.y = Math.PI / 4 + shed.rotation.y;
+  g.add(roof);
+  const mast = new THREE.Mesh(geo('ptCrane', () => new THREE.BoxGeometry(0.03, 0.34, 0.03)), wood);
+  mast.position.set(hx * sd - hz * 0.22, top + 0.17, hz * sd + hx * 0.22);
+  g.add(mast);
+  const arm = new THREE.Mesh(geo('ptArm', () => new THREE.BoxGeometry(0.26, 0.025, 0.025).translate(-0.1, 0, 0)), wood);
+  arm.position.set(mast.position.x, top + 0.33, mast.position.z);
+  arm.rotation.y = -Math.atan2(hz, hx);
+  g.add(arm);
+  return g;
+}
+
+function improvementNode(type, env = {}) {
+  if (type === 'farm') return farmNode(env);
+  if (type === 'port') return portNode(env);
+  const g = buildingNode(type);
+  // Gebäude weichen der Straße aus.
+  const [x, z, sc] = buildingSpot(env);
+  g.position.set(x, 0, z);
+  g.scale.setScalar(sc);
+  const wrap = new THREE.Group();
+  wrap.add(g);
+  return wrap;
+}
+
+function buildingNode(type) {
+  const g = new THREE.Group();
+  if (type === 'sawmill') {
     const base = new THREE.Mesh(geo('swBase', () => new THREE.BoxGeometry(0.3, 0.1, 0.22)), mat(0x6b4a2b));
     base.position.y = 0.05;
     g.add(base);
@@ -788,17 +955,6 @@ function improvementNode(type) {
     const dark = new THREE.Mesh(geo('mHole', () => new THREE.CylinderGeometry(0.09, 0.11, 0.05, 6)), mat(0x27272a));
     dark.position.set(0, 0.03, 0);
     g.add(dark);
-  } else if (type === 'port') {
-    const planks = new THREE.Mesh(geo('ptPlanks', () => new THREE.BoxGeometry(0.46, 0.07, 0.16)), mat(0x8a5a33));
-    planks.position.y = 0.035;
-    g.add(planks);
-    const shed = new THREE.Mesh(geo('ptShed', () => new THREE.BoxGeometry(0.16, 0.14, 0.12)), mat(0x6b4a2b));
-    shed.position.set(-0.14, 0.11, 0);
-    g.add(shed);
-    const roof = new THREE.Mesh(geo('ptRoof', () => new THREE.ConeGeometry(0.14, 0.08, 4)), mat(0x9c6b3a));
-    roof.rotation.y = Math.PI / 4;
-    roof.position.set(-0.14, 0.21, 0);
-    g.add(roof);
   } else if (type === 'temple') {
     const base = new THREE.Mesh(geo('tpBase', () => new THREE.BoxGeometry(0.2, 0.16, 0.2)), mat(0xf1ece1));
     base.position.y = 0.08;
@@ -933,16 +1089,21 @@ function buildTiles(state) {
 
 // Gebäude auf einer Kachel an den Spielstand anpassen (auch für Gebäude,
 // die erst während der Partie gebaut werden).
-function syncImprovement(t, imp) {
-  if (!t || (t.imp || null) === (imp || null)) return;
+// Gebäude passen sich der Umgebung an: Felder und Gebäude lassen Straßen frei,
+// der Hafen baut Kaimauern und Stege zum angrenzenden Land.
+function syncImprovement(t, imp, env = {}) {
+  if (!t) return;
+  const sig = imp ? `${imp}|${(env.arms || []).join('')}|${imp === 'port' ? (env.land || []).join('') : ''}` : '';
+  if ((t.impSig || '') === sig) return;
   if (t.impNode) {
     t.mesh.remove(t.impNode);
     t.decor = t.decor.filter(d => d !== t.impNode);
     t.impNode = null;
   }
   t.imp = imp || null;
+  t.impSig = sig;
   if (!imp) return;
-  const inode = improvementNode(imp);
+  const inode = improvementNode(imp, { ...env, base: TERRAIN[t.terrain].height });
   inode.position.y = TERRAIN[t.terrain].height / 2 + 0.02;
   inode.visible = t.seen;
   t.mesh.add(inode);
@@ -1512,7 +1673,8 @@ export function syncBoard(state, viewer = null) {
   const explored = exploredSet(state, viewer);
   const visible = explored ? visibleKeys(state, viewer) : null;
   for (const [key, t] of tiles) {
-    syncImprovement(t, state.improvements ? state.improvements[key] : null);
+    const imp = state.improvements ? state.improvements[key] : null;
+    syncImprovement(t, imp, imp ? tileEnv(state, key, imp) : {});
     syncRuin(t, state.ruins && state.ruins[key]);
     syncBridge(t, state.bridges ? state.bridges[key] : null);
     syncRoad(state, key, t);
