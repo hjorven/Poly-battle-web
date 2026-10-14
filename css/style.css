@@ -814,3 +814,15 @@ button:focus-visible {
 #mission-bar .mb-bar { height: 4px; background: #3f3f46; border-radius: 2px; margin-top: 5px; overflow: hidden; }
 #mission-bar .mb-bar div { height: 100%; background: #facc15; }
 @media (max-width: 760px) { #mission-bar { bottom: 96px; } }
+
+/* Namenswahl und Bestenliste */
+.name-input { width: 100%; box-sizing: border-box; font-size: 18px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin: 6px 0; }
+#name-error { color: #b91c1c; min-height: 18px; }
+.board-tabs { margin-bottom: 8px; }
+.board-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 3px; font-size: 14px; }
+.board-list li { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; padding: 4px 8px; border-radius: 6px; background: #fafafa; }
+.board-list li.me { background: #fef3c7; font-weight: 700; }
+.board-list .b-sub { color: #71717a; font-size: 12px; }
+.profile-name { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; grid-column: 1 / -1; font-size: 13px; }
+.profile-name .btn { padding: 3px 8px; font-size: 12px; }
+.menu-section .menu-body .board-list li::before, .menu-section .menu-body .recent li::before { content: none; }

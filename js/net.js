@@ -76,3 +76,35 @@ export async function saveMatch(gameId, state) {
   if (error) return { error: 'Zug nicht gespeichert: ' + error.message, rejected: true };
   return {};
 }
+
+// --- Profile und Bestenliste (siehe supabase/migrations/…profiles_leaderboard) ---
+
+async function rpc(fn, args) {
+  const sb = getClient();
+  if (!sb) return { error: 'Keine Verbindung zum Server.' };
+  try {
+    const { data, error } = await sb.rpc(fn, args);
+    if (error) return { error: error.message || 'Serverfehler' };
+    return { data };
+  } catch (e) {
+    return { error: 'Keine Verbindung zum Server.' };
+  }
+}
+
+export const claimName = name => rpc('pb_claim_name', { p_token: getToken(), p_name: name });
+export const myRemoteProfile = () => rpc('pb_my_profile', { p_token: getToken() });
+export const saveRemoteProfile = (data, level) => rpc('pb_save_profile', { p_token: getToken(), p_data: data, p_level: level });
+export const submitScore = (kind, period, score, tribe, round) =>
+  rpc('pb_submit_score', { p_token: getToken(), p_kind: kind, p_period: period, p_score: score, p_tribe: tribe, p_round: round });
+export const leaderboard = (kind, period) => rpc('pb_leaderboard', { p_kind: kind, p_period: period, p_token: getToken() });
+
+// Profil-Code: die geheime Kennung dieses Browsers (zum Übertragen auf ein anderes Gerät).
+export function profileCode() {
+  return getToken();
+}
+
+export function useProfileCode(code) {
+  const c = String(code || '').trim();
+  if (c.length < 16 || c.length > 64 || !/^[A-Za-z0-9-]+$/.test(c)) return false;
+  try { localStorage.setItem('pb_token', c); return true; } catch (e) { return false; }
+}

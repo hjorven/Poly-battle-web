@@ -60,6 +60,8 @@ export function initUI(h) {
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
   $('winnerEasier').addEventListener('click', () => handlers.onRetry(true));
+  document.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => handlers.onBoard(b.dataset.board)));
+  $('board-box').addEventListener('toggle', () => { if ($('board-box').open) handlers.onBoard('daily'); });
   $('winnerMap').addEventListener('click', () => handlers.onReview(true));
   $('reviewBack').addEventListener('click', () => handlers.onReview(false));
   $('winnerShare').addEventListener('click', () => handlers.onShare());
@@ -267,7 +269,12 @@ export function renderProfile(profile, lp, daily, achievements, weekly = null) {
   $('profile-card').innerHTML = `<div class="pc-level">${lp.level}</div>
     <div><span class="pc-title">${esc(lp.title)}</span> <span class="pc-sub">· Stufe ${lp.level} · ${lp.into}/${lp.need} Erfahrung</span></div>
     <div class="pc-sub">${profile.games} ${profile.games === 1 ? 'Spiel' : 'Spiele'} · ${profile.wins} ${profile.wins === 1 ? 'Sieg' : 'Siege'}${profile.games ? ` (${winRate} %)` : ''}${profile.winStreak > 1 ? ` · ${profile.winStreak} Siege in Folge` : ''}${profile.daily.streak ? ` · Tagesserie ${profile.daily.streak}` : ''}</div>
-    <div class="xp-bar"><div style="width:${Math.round(lp.frac * 100)}%"></div></div>`;
+    <div class="xp-bar"><div style="width:${Math.round(lp.frac * 100)}%"></div></div>
+    <div class="profile-name">${profile.name ? `Name: <b>${esc(profile.name)}</b>` : 'Noch kein Name für die Bestenliste'}
+      <button class="btn ghost" data-pname>${profile.name ? 'Ändern' : 'Namen wählen'}</button>
+      <button class="btn ghost" data-pcode>Profil-Code</button></div>`;
+  $('profile-card').querySelector('[data-pname]').addEventListener('click', () => handlers.onChooseName());
+  $('profile-card').querySelector('[data-pcode]').addEventListener('click', () => handlers.onProfileCode());
   const best = profile.daily.best[daily.key];
   const tribe = TRIBES[daily.tribe] ? TRIBES[daily.tribe].name : daily.tribe;
   $('dailyBtn').innerHTML = `Tagesherausforderung ${fmtDate(daily.key)}<span class="sub">${esc(tribe)} · ${esc(MAP_TYPES[daily.mapType].label)} · 30 Runden · ${best != null ? `dein Bestwert: ${best} Punkte` : 'heute noch nicht gespielt'}</span>`;
@@ -298,6 +305,47 @@ function renderStats(profile) {
     <div class="panel-sub" style="margin-top:10px">Tagesherausforderung (Bestwerte)</div>${bars}
     <div class="panel-sub" style="margin-top:10px">Letzte Partien</div>
     ${recent ? `<ul class="recent">${recent}</ul>` : '<div class="hint">Noch keine Partie beendet.</div>'}`;
+}
+
+// Namensdialog; `onSave(name)` liefert eine Fehlermeldung oder null.
+const NAME_TEXT = 'Mit diesem Namen erscheinst du in der Bestenliste. 3–16 Zeichen, Buchstaben, Ziffern, Leerzeichen, _ und -.';
+export function askName(current, onSave, { title = 'Wähle deinen Namen', text = NAME_TEXT, max = 16, ok = 'Speichern' } = {}) {
+  $('name-title').textContent = title;
+  $('name-text').textContent = text;
+  $('nameOk').textContent = ok;
+  const input = $('name-input');
+  input.maxLength = max;
+  input.value = current || '';
+  $('name-error').textContent = '';
+  $('name-overlay').classList.remove('hidden');
+  input.focus();
+  const close = () => { $('name-overlay').classList.add('hidden'); $('nameOk').onclick = null; input.onkeydown = null; };
+  const save = async () => {
+    $('nameOk').disabled = true;
+    const err = await onSave(input.value);
+    $('nameOk').disabled = false;
+    if (err) $('name-error').textContent = err;
+    else close();
+  };
+  $('nameOk').onclick = save;
+  input.onkeydown = e => { if (e.key === 'Enter') save(); };
+  $('nameCancel').onclick = close;
+}
+
+// Bestenliste anzeigen (oder Hinweis bei Fehler/ohne Einträge).
+export function renderBoard(res, kind, myName) {
+  const box = $('board');
+  document.querySelectorAll('[data-board]').forEach(b => b.classList.toggle('active', b.dataset.board === kind));
+  if (!res) { box.innerHTML = '<div class="hint">Lädt …</div>'; return; }
+  if (res.error) { box.innerHTML = `<div class="hint">${esc(res.error)}</div>`; return; }
+  const d = res.data || {};
+  const top = d.top || [];
+  const tribe = id => (TRIBES[id] ? TRIBES[id].name : '');
+  const rows = top.map(r => `<li class="${myName && r.name === myName ? 'me' : ''}"><span>${r.rank}.</span><span>${esc(r.name)} <span class="b-sub">Stufe ${r.level} · ${esc(tribe(r.tribe))} · Runde ${r.round}</span></span><b>${r.score}</b></li>`).join('');
+  const me = d.me && !top.some(r => r.name === d.me.name) ? `<li class="me"><span>${d.me.rank}.</span><span>${esc(d.me.name)}</span><b>${d.me.score}</b></li>` : '';
+  box.innerHTML = top.length ? `<ol class="board-list">${rows}${me}</ol><div class="hint">${d.total} ${d.total === 1 ? 'Spieler' : 'Spieler'} ${kind === 'daily' ? 'heute' : 'diese Woche'}</div>`
+    : `<div class="hint">Noch keine Einträge ${kind === 'daily' ? 'heute' : 'diese Woche'} – spiel die ${kind === 'daily' ? 'Tages' : 'Wochen'}-Herausforderung und sei die Nummer 1!</div>`;
+  if (!myName) box.innerHTML += '<div class="hint">Wähle oben im Profil einen Namen, damit deine Punkte hier erscheinen.</div>';
 }
 
 // Kampagne im Menü: Missionen mit Sternen, gesperrte mit Hinweis.

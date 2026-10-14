@@ -71,6 +71,13 @@
         <button class="btn big ghost" data-mode="tutorial">Tutorial (erstes Spiel)</button>
         <button id="copyLinkBtn" class="btn big hidden">Link zum Spiel kopieren</button>
       </div>
+      <details class="menu-section" id="board-box">
+        <summary>Bestenliste</summary>
+        <div class="menu-body">
+          <div class="seg board-tabs"><button class="chip-btn active" data-board="daily">Heute</button><button class="chip-btn" data-board="weekly">Diese Woche</button></div>
+          <div id="board"></div>
+        </div>
+      </details>
       <details class="menu-section" id="campaign-box">
         <summary id="campaign-title">Kampagne</summary>
         <div class="menu-body" id="campaign"></div>
@@ -188,6 +195,7 @@
           <li><b>Tastatur</b>: Leertaste nächste Einheit, Enter Zug beenden, T Forschung, O Übersicht, B Rundenbericht, I Info-Menü, H zur Hauptstadt, M Ton, Esc Auswahl aufheben. Kamera: Pfeiltasten schieben, + und − zoomen, Q/E drehen, R/F neigen, N Standardansicht.</li>
           <li><b>Nach Spielende</b> kannst du mit „Karte ansehen“ die ganze Welt ohne Nebel erkunden und mit „Ergebnis teilen“ ein Bild mit Karte, Rangliste und Punkteverlauf verschicken (Handy: Teilen-Menü, PC: Download).</li>
           <li><b>Profil</b>: Jede beendete Partie gegen die KI oder online bringt Erfahrung (mehr bei Siegen und höherer Schwierigkeit). Mit jeder Stufe steigt dein Titel, von Häuptling bis Legende. 16 <b>Erfolge</b> warten im Menü. Die <b>Tagesherausforderung</b> ist für alle gleich (Karte, Stamm, 30 Runden) – spiele jeden Tag für deine Tagesserie und schlage deinen Bestwert.</li>
+          <li><b>Bestenliste</b>: Wähle im Profil einen Namen. Deine Ergebnisse der Tages- und Wochen-Herausforderung erscheinen dann in der Bestenliste aller Spieler. Mit dem <b>Profil-Code</b> nimmst du Name, Stufe und Erfolge auf ein anderes Gerät mit – verrate ihn niemandem.</li>
           <li><b>Kampagne</b>: zehn Missionen mit eigenem Ziel (Dorf einnehmen, Ruinen, Leuchttürme, Belagerung …). Geschafft = 1 Stern, schneller als die Vorgaben = 2 oder 3 Sterne. Jede Mission schaltet die nächste frei.</li>
           <li><b>Aussehen</b>: Banner, Helmbusch und Stadtschmuck schaltest du mit Stufen und Erfolgen frei und wählst sie im Menü.</li>
           <li><b>KI-Persönlichkeiten</b>: Jeder KI-Stamm ist <b>Eroberer</b> (greift gern an, bricht Frieden schneller), <b>Händler</b> (baut Wirtschaft, nimmt Frieden gern an), <b>Seefahrer</b> (früh Häfen und Flotte) oder <b>Baumeister</b> (Gebäude und Verteidigung). Du erkennst sie an ihren Botschaften und in der Übersicht.</li>
@@ -257,6 +265,19 @@
       <p id="handover-text" class="confirm-text">Gib das Gerät weiter.</p>
       <div class="menu-buttons">
         <button id="handoverGo" class="btn primary big">Bereit</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="name-overlay" class="overlay hidden">
+    <div class="card narrow">
+      <h2 id="name-title">Wähle deinen Namen</h2>
+      <p class="confirm-text" id="name-text">Mit diesem Namen erscheinst du in der Bestenliste. 3–16 Zeichen, Buchstaben, Ziffern, Leerzeichen, _ und -.</p>
+      <input id="name-input" class="name-input" maxlength="16" autocomplete="nickname" />
+      <div class="hint" id="name-error"></div>
+      <div class="menu-buttons">
+        <button id="nameOk" class="btn primary big">Speichern</button>
+        <button id="nameCancel" class="btn big">Abbrechen</button>
       </div>
     </div>
   </div>
