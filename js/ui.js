@@ -898,8 +898,8 @@ function tileOptions(state, city, q, r, ctx) {
     const chk = canImprove(state, city, id, q, r);
     let reason = '';
     const known = !d.tech || state.techs[owner].includes(d.tech);
-    if (!chk.ok) reason = chk.reason;
-    else if (!known) reason = 'Forschung: ' + TECHS[d.tech].name;
+    if (!known) reason = 'Forschung: ' + TECHS[d.tech].name;
+    else if (!chk.ok) reason = chk.reason;
     else if (state.stars[owner] < improvementCost(state, owner, id)) reason = 'Zu wenig Sterne';
     else if (!ctx.myTurn) reason = 'Nicht dein Zug';
     // Belegte Felder: keine Liste aller Gebäude, nur der Grund oben.
@@ -919,7 +919,8 @@ function tileOptions(state, city, q, r, ctx) {
 
 function buildOptionsCount(state, city, ctx) {
   if (!ctx.myTurn) return 0;
-  return cityTiles(state, city).reduce((n, [q, r]) => n + tileOptions(state, city, q, r, ctx).filter(o => !o.reason).length, 0);
+  // Wege zählen nicht mit – sie gehen fast überall und würden alles überdecken.
+  return cityTiles(state, city).reduce((n, [q, r]) => n + tileOptions(state, city, q, r, ctx).filter(o => !o.reason && o.kind !== 'road').length, 0);
 }
 
 function openBuild(state, city, ctx) {
@@ -949,7 +950,7 @@ function renderBuild(state, city, ctx) {
   if (!tiles.some(([q, r]) => q === city.q && r === city.r)) tiles.unshift([city.q, city.r]);
   const info = tiles.map(([q, r]) => {
     const opts = mineCity ? tileOptions(state, city, q, r, ctx) : [];
-    return { q, r, key: q + ',' + r, opts, can: opts.some(o => !o.reason) };
+    return { q, r, key: q + ',' + r, opts, can: opts.some(o => !o.reason && o.kind !== 'road') };
   });
   if (!build.sel || !info.some(t => t.key === build.sel)) {
     const pick = info.find(t => t.can) || info.find(t => !cityAt(state, t.q, t.r)) || info[0];
