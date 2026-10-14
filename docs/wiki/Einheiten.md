@@ -66,11 +66,11 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 
 Steht eine Einheit zu Zugbeginn im eigenen Gebiet, kann sie gegen den Preisunterschied aufgerüstet werden (Technologie nötig, verbraucht den Zug):
 
-- Krieger wird zu Schwertkämpfer
-- Bogenschütze wird zu Armbrustschütze
-- Reiter wird zu Ritter
-- Ritter wird zu Paladin
-- Boot wird zu Schiff
-- Schiff wird zu Kriegsschiff
-- Heißluftballon wird zu Brandballon
-- Brandballon wird zu Kriegsluftschiff
+- Krieger → Schwertkämpfer
+- Bogenschütze → Armbrustschütze
+- Reiter → Ritter
+- Ritter → Paladin
+- Boot → Schiff
+- Schiff → Kriegsschiff
+- Heißluftballon → Brandballon
+- Brandballon → Kriegsluftschiff
