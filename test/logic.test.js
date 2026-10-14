@@ -8,6 +8,7 @@ import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
 import { saveGame, loadGame, saveInfo, clearSave, validState } from '../js/save.js';
 import * as P from '../js/profile.js';
+import * as K from '../js/campaign.js';
 
 let passed = 0;
 let failed = 0;
@@ -589,6 +590,71 @@ test('Beschädigte Spielstände und Profile werden abgewiesen bzw. bereinigt', (
   const prof = P.loadProfile(store);
   assert.ok(prof.xp <= 1e7 && prof.games === 0 && typeof prof.achievements === 'object' && prof.daily.streak === 0);
   assert.ok(P.levelOf(1e308) > 1 && P.levelOf(NaN) === 1, 'Stufe ohne Endlosschleife');
+});
+
+test('Wochen-Herausforderung: feste Woche, Sonderregeln wirken, Bestwert im Profil', () => {
+  assert.strictEqual(P.weekKey(new Date('2026-10-14T12:00')), '2026-W42');
+  assert.strictEqual(P.weekKey(new Date('2027-01-01T12:00')), '2026-W53');
+  assert.deepStrictEqual(P.weeklyChallenge('2026-W42'), P.weeklyChallenge('2026-W42'));
+  const st = R.createGame(9, 4);
+  R.applyWeeklyRule(st, 'clearsky');
+  assert.ok(R.isVisible(st, 'player_1', MAP_W - 2, MAP_H - 2), 'kein Nebel');
+  const s2 = R.createGame(9, 4);
+  R.applyWeeklyRule(s2, 'titans');
+  assert.strictEqual(s2.units.filter(u => u.type === 'giant').length, 4);
+  const s3 = R.createGame(9, 4);
+  R.applyWeeklyRule(s3, 'fortress');
+  assert.ok(s3.cities.every(c => c.rewards[3] === 'wall'));
+  const prof = P.emptyProfile();
+  const facts = P.gameFacts(st, 'player_1', { won: false, mode: 'bot', score: 900 });
+  const res = P.recordGame(prof, { ...facts, weekly: '2026-W42' });
+  assert.strictEqual(res.weekly.best, 900);
+  assert.ok(res.achievements.includes('weekly'));
+  R.createGame(1, 4);
+});
+
+test('Kosmetik: Freischaltung über Stufe/Erfolg, gesperrte Wahl fällt auf Standard zurück', () => {
+  const prof = P.emptyProfile();
+  assert.ok(P.cosmeticUnlocked(prof, 'banner', 'standard'));
+  assert.ok(!P.cosmeticUnlocked(prof, 'banner', 'pennant'), 'Stufe 2 nötig');
+  prof.look = { banner: 'pennant', plume: 'gold' };
+  assert.deepStrictEqual(P.lookOf(prof), { banner: 'standard', plume: 'none', decor: 'none' });
+  prof.xp = P.xpFor(4);
+  prof.achievements.warlord = '2026-10-14';
+  assert.deepStrictEqual(P.lookOf(prof), { banner: 'pennant', plume: 'gold', decor: 'none' });
+  assert.ok(P.cosmeticHint('decor', 'statue').includes('Baumeister'));
+});
+
+test('Kampagne: Fortschritt, Sterne nach Runden, Freischaltung, Profil', () => {
+  assert.strictEqual(K.MISSIONS.length, 10);
+  const st = R.createGame(4, 2, { mapSize: 'small' });
+  K.prepareMission(st, K.missionById('m1'));
+  let s = K.missionStatus(st);
+  assert.strictEqual(s.have, 1);
+  assert.ok(!s.done);
+  st.cities.filter(c => !c.owner).slice(0, 2).forEach(c => { c.owner = 'player_1'; });
+  st.round = 4;
+  s = K.missionStatus(st);
+  assert.ok(s.done && s.stars === 3, 'schnell: 3 Sterne');
+  st.round = 7;
+  assert.strictEqual(K.missionStatus(st).stars, 2);
+  st.round = 30;
+  assert.strictEqual(K.missionStatus(st).stars, 1);
+  // Belagerung: eigene Hauptstadt zählt nicht, fremde schon – auch wenn die eigene fällt.
+  const b = R.createGame(4, 2, { mapSize: 'small' });
+  K.prepareMission(b, K.missionById('m7'));
+  assert.strictEqual(K.missionStatus(b).have, 0);
+  const foe = b.cities.find(c => c.isCapital && c.owner === 'player_2');
+  foe.owner = 'player_1';
+  b.cities.find(c => c.isCapital && c.q === b.home.q && c.r === b.home.r).owner = 'player_2';
+  assert.ok(K.missionStatus(b).done);
+  // Freischaltung und Profil
+  const prof = P.emptyProfile();
+  assert.ok(K.missionUnlocked(prof, 0) && !K.missionUnlocked(prof, 1));
+  P.recordGame(prof, { ...P.gameFacts(st, 'player_1', { won: true, mode: 'bot', score: 500 }), mission: 'm1', missionStars: 2 });
+  assert.ok(K.missionUnlocked(prof, 1));
+  assert.strictEqual(K.campaignStars(prof), 2);
+  R.createGame(1, 4);
 });
 
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {

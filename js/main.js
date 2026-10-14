@@ -7,7 +7,8 @@ import { sfx, isMuted, setMuted } from './sound.js';
 import { saveGame, loadGame, saveInfo, clearSave, validState } from './save.js';
 import * as P from './profile.js';
 import { shareResult } from './share.js';
-import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS } from './config.js';
+import * as K from './campaign.js';
+import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS, PERSONAS } from './config.js';
 
 const app = {
   mode: null,
@@ -85,11 +86,13 @@ function refresh() {
   ui.setIdle(idle.length);
   render.setIdleMarkers(idle);
   warnThreats();
+  greetNewFaces();
   announceEliminations();
   announceMonuments();
   showNews();
   turnStartFeedback();
   tutorTick();
+  missionTick();
   render.drawMinimap(app.state, viewer());
   updateSelection();
   checkWinnerUI();
@@ -181,6 +184,31 @@ function showNews() {
   persist();
 }
 
+// KI-Botschaft je Persönlichkeit, z. B. beim ersten Treffen oder bei Krieg.
+function quote(ai, kind) {
+  const st = app.state;
+  const persona = PERSONAS[R.personaOf(st, ai)];
+  if (!persona || !persona.lines[kind]) return;
+  const lines = persona.lines[kind];
+  const line = lines[(st.round + ai.length + kind.length) % lines.length];
+  ui.toast(`„${line}“ – ${needName(st, ai)} (${persona.name})`, 'quote');
+}
+
+// Erste Begegnung mit einer KI: Begrüßung in ihrem Ton.
+function greetNewFaces() {
+  const st = app.state, me = viewer();
+  if (!st || !me || !st.persona) return;
+  if (!app.metSeen || app.metSeen.gen !== app.gen) {
+    app.metSeen = { gen: app.gen, set: new Set(st.players.filter(p => R.hasMet(st, me, p))) };
+    return;
+  }
+  for (const p of st.players) {
+    if (p === me || app.metSeen.set.has(p) || !R.hasMet(st, me, p)) continue;
+    app.metSeen.set.add(p);
+    quote(p, 'meet');
+  }
+}
+
 // Neu besiegte Stämme einmal melden.
 function announceEliminations() {
   const st = app.state;
@@ -196,6 +224,7 @@ function announceEliminations() {
     if (app.elimSeen.set.has(p)) continue;
     app.elimSeen.set.add(p);
     if (p === me) continue;
+    if (e.by === me) quote(p, 'doom');
     const by = e.by === me ? 'dir' : e.by ? needName(st, e.by) : null;
     ui.toast(`${needName(st, p)} wurde besiegt${by ? ` – von ${by}` : ''}!`, e.by === me ? 'good' : '');
     if (e.by === me) sfx('win');
@@ -338,10 +367,67 @@ function recordProfile() {
     app.lastResult = P.recordGame(profile, P.gameFacts(st, me, { won: st.winner === me, mode: app.mode, score }));
     if (gid) profile.seen = [...(profile.seen || []), gid].slice(-50);
     P.saveProfile(profile);
+    syncOnline(profile, st, me, score);
     if (app.lastResult.achievements.length || app.lastResult.levelAfter > app.lastResult.levelBefore) sfx('promote');
   }
   if (app.lastResult) ui.showProfileResult(app.lastResult, P.levelProgress(P.loadProfile().xp), P.ACHIEVEMENTS);
   else ui.showProfileResult(null);
+}
+
+// Mit Namen: Tages-/Wochenwertung einreichen und das Profil auf dem Server
+// sichern (für andere Geräte). Ohne Verbindung bleibt alles lokal.
+async function syncOnline(profile, st, me, score) {
+  if (!profile.name) {
+    if (st.daily || st.weekly) ui.toast('Wähle im Menü einen Namen, dann zählen deine Punkte in der Bestenliste.');
+    return;
+  }
+  const kind = st.daily ? 'daily' : st.weekly ? 'weekly' : null;
+  if (kind) {
+    const res = await net.submitScore(kind, st.daily || st.weekly, score, st.tribes ? st.tribes[me] : null, st.round);
+    if (res.data) ui.toast(`Bestenliste ${kind === 'daily' ? 'heute' : 'diese Woche'}: Platz ${res.data.rank} von ${res.data.total}`, 'good');
+    else if (res.error) ui.toast('Bestenliste: ' + res.error, 'warn');
+  }
+  await net.saveRemoteProfile(profile, P.levelOf(profile.xp));
+}
+
+function chooseName() {
+  const profile = P.loadProfile();
+  ui.askName(profile.name, async name => {
+    const res = await net.claimName(name);
+    if (res.error) return res.error;
+    const fresh = P.loadProfile();
+    fresh.name = res.data.name;
+    P.saveProfile(fresh);
+    await net.saveRemoteProfile(fresh, P.levelOf(fresh.xp));
+    ui.toast(`Willkommen, ${res.data.name}!`, 'good');
+    showMenu();
+    return null;
+  });
+}
+
+function profileCodeDialog() {
+  ui.askName(net.profileCode(), async code => {
+    code = String(code || '').trim();
+    if (code === net.profileCode()) return null;
+    if (!net.useProfileCode(code)) return 'Das ist kein gültiger Profil-Code.';
+    const res = await net.myRemoteProfile();
+    if (res.error || !res.data) return 'Zu diesem Code gibt es kein Profil (oder keine Verbindung).';
+    const loaded = P.sanitizeProfile({ ...(res.data.data || {}), name: res.data.name });
+    P.saveProfile(loaded);
+    ui.toast(`Profil von ${res.data.name} geladen`, 'good');
+    showMenu();
+    return null;
+  }, {
+    title: 'Profil-Code', max: 64, ok: 'Übernehmen',
+    text: 'Das ist dein geheimer Profil-Code. Gib ihn auf einem anderen Gerät hier ein, um Name, Stufe und Erfolge mitzunehmen. Verrate ihn niemandem – wer ihn kennt, spielt als du.'
+  });
+}
+
+async function showBoard(kind) {
+  const period = kind === 'daily' ? P.dateKey() : P.weekKey();
+  ui.renderBoard(null, kind);
+  const res = await net.leaderboard(kind, period);
+  ui.renderBoard(res, kind, P.loadProfile().name);
 }
 
 // Lokale Partien nach jeder Aktion sichern (Neuladen / Tab schließen).
@@ -353,13 +439,20 @@ function persist() {
 
 function showMenu() {
   const profile = P.loadProfile();
-  ui.renderProfile(profile, P.levelProgress(profile.xp), P.dailyChallenge(), P.ACHIEVEMENTS);
+  ui.renderProfile(profile, P.levelProgress(profile.xp), P.dailyChallenge(), P.ACHIEVEMENTS, P.weeklyChallenge());
+  ui.renderLooks(profile, P.COSMETICS, P.cosmeticUnlocked, P.cosmeticHint, P.lookOf(profile));
+  ui.renderCampaign(profile, K.MISSIONS, K.missionUnlocked, K.campaignStars(profile));
   ui.setContinue(saveInfo());
   ui.showMenu();
 }
 
 async function saveOnline() {
   if (!app.online || !app.gameId) return;
+  // Eigenes Aussehen mitschicken (Mitspieler setzen ihres beim ersten Speichern).
+  if (app.myRole) {
+    if (!app.state.looks) app.state.looks = {};
+    app.state.looks[app.myRole] = P.lookOf(P.loadProfile());
+  }
   app.state.rev = (app.state.rev || 0) + 1;
   const { error, rejected } = await net.saveMatch(app.gameId, app.state);
   if (!error) return;
@@ -380,6 +473,7 @@ function announce(events) {
   for (const ev of events) {
     if (ev.kind === 'capture') {
       ui.toast(ev.to ? `Stadt erobert! (${needName(app.state, ev.to)})` : 'Stadt neutralisiert', 'good');
+      if (ev.from && R.isBot(app.state, ev.from) && ev.to === viewer()) quote(ev.from, 'loseCity');
       sfx('capture');
       if (ev.city) render.celebrate(ev.city.q, ev.city.r, R.playerColor(app.state, ev.to), true);
     } else if (ev.kind === 'bounty') {
@@ -436,9 +530,9 @@ function doOfferPeace(to) {
   const res = R.offerPeace(app.state, actAs(), to);
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
   const name = needName(app.state, to);
-  if (res.accepted) { ui.toast(`Frieden mit ${name} geschlossen`, 'good'); sfx('peace'); }
+  if (res.accepted) { ui.toast(`Frieden mit ${name} geschlossen`, 'good'); quote(to, 'peaceYes'); sfx('peace'); }
   else if (res.pending) ui.toast(`Friedensangebot an ${name} gesendet`, 'good');
-  else { ui.toast(`${name} lehnt ab (neuer Versuch in 3 Runden)`, 'warn'); sfx('error'); }
+  else { ui.toast(`${name} lehnt ab (neuer Versuch in 3 Runden)`, 'warn'); quote(to, 'peaceNo'); sfx('error'); }
   ui.showOverview(app.state, ctx());
   afterAction();
 }
@@ -518,6 +612,7 @@ function viewer() {
 
 async function doMove(unit, q, r) {
   app.busy = true;
+  render.setMovePath(unit.id, R.pathTo(app.state, unit, q, r));
   const res = R.moveUnit(app.state, unit, q, r);
   if (!res.ok) { app.busy = false; refresh(); return; }
   if (!res.events.some(e => e.kind === 'embark')) sfx('move');
@@ -530,8 +625,9 @@ async function doAttack(attacker, defender) {
   app.busy = true;
   const { events } = R.attack(app.state, attacker, defender);
   sfx(events.some(e => e.kind === 'kill') ? 'kill' : 'attack');
-  render.syncBoard(app.state, viewer());
+  // Erst der Schlagabtausch (Geschoss, Treffer), dann Umfallen und Nachrücken.
   await render.playCombat(events);
+  await render.syncBoard(app.state, viewer());
   if (R.findUnit(app.state, attacker.id)) app.sel = { kind: 'unit', id: attacker.id };
   else app.sel = null;
   await afterAction(events);
@@ -741,6 +837,7 @@ async function playBotStep(step, player) {
   const human = viewer() || 'player_1';
   const seen = (q, r) => R.isVisible(app.state, human, q, r);
   const visibleBefore = botStepVisible(step);
+  if (step.kind === 'move' && visibleBefore) render.setMovePath(step.unit.id, R.pathTo(app.state, step.unit, step.q, step.r));
   const res = applyStep(app.state, step, player) || {};
   const visible = visibleBefore || botStepVisible(step);
   if (!visible && step.kind !== 'war') {
@@ -751,10 +848,11 @@ async function playBotStep(step, player) {
     if (seen(step.defender.q, step.defender.r) || seen(step.attacker.q, step.attacker.r)) {
       sfx((res.events || []).some(e => e.kind === 'kill') ? 'kill' : 'attack');
     }
-    render.syncBoard(app.state, viewer());
     await render.playCombat(res.events || []);
+    await render.syncBoard(app.state, viewer());
     if ((res.events || []).some(e => e.kind === 'capture' && e.from === human)) {
       ui.toast(`${needName(app.state, player)} hat eine deiner Städte erobert!`, 'warn');
+      quote(player, 'winCity');
     }
     return true;
   }
@@ -762,7 +860,7 @@ async function playBotStep(step, player) {
     ui.toast(`${needName(app.state, player)} hat eine deiner Städte erobert!`, 'warn');
   }
   if (step.kind === 'war' && res.ok) {
-    if (step.target === human) { ui.toast(`${needName(app.state, player)} bricht den Frieden und erklärt dir den Krieg!`, 'warn'); sfx('war'); }
+    if (step.target === human) { ui.toast(`${needName(app.state, player)} bricht den Frieden und erklärt dir den Krieg!`, 'warn'); quote(player, 'war'); sfx('war'); }
   }
   if (step.kind !== 'research' && step.kind !== 'war') await render.syncBoard(app.state, viewer());
   return step.kind !== 'research';
@@ -993,6 +1091,51 @@ function startDaily() {
   ui.toast('Tagesherausforderung: Heute spielen alle dieselbe Karte mit demselben Stamm. Nach 30 Runden zählt die Punktzahl.', 'good');
 }
 
+function startMission(id) {
+  const m = K.missionById(id);
+  if (!m) return;
+  const s = m.setup;
+  let seed = 0;
+  for (const ch of 'mission:' + id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  startLocal('bot', { count: s.count, tribe: s.tribe, mapSize: s.mapSize, mapType: s.mapType, aiLevel: s.aiLevel, turnLimit: null, seed });
+  K.prepareMission(app.state, m);
+  persist();
+  refresh();
+  ui.toast(`Mission „${m.title}“: ${m.goal}`, 'good');
+}
+
+// Missionsleiste und Abschluss: geschafft = Sieg mit Sternen.
+function missionTick() {
+  const st = app.state;
+  if (!st || !st.mission || app.mode !== 'bot') { ui.showMission(null); return; }
+  const s = K.missionStatus(st);
+  if (!s) { ui.showMission(null); return; }
+  const m = s.mission;
+  const par = m.par ? ` · 2 Sterne bis Runde ${m.par[0]}, 3 bis Runde ${m.par[1]}` : ' · Sterne für 3 bzw. 5 Städte am Ende';
+  ui.showMission(`<b>${esc2(m.title)}</b>: ${esc2(m.goal)} (${Math.min(s.have, s.need)}/${s.need})${par}`, s.have / s.need);
+  if (s.done && !st.winner) {
+    st.missionStars = s.stars;
+    st.winner = 'player_1';
+    st.endReason = 'mission';
+    R.recordHistory(st, true);
+  }
+}
+const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function startWeekly() {
+  const ch = P.weeklyChallenge();
+  startLocal('bot', {
+    count: ch.count, tribe: ch.tribe, mapSize: ch.mapSize, mapType: ch.mapType,
+    aiLevel: ch.aiLevel, turnLimit: ch.turnLimit, stars: ch.stars, seed: ch.seed
+  });
+  R.applyWeeklyRule(app.state, ch.rule);
+  app.state.weekly = ch.key;
+  render.syncBoard(app.state, viewer());
+  persist();
+  refresh();
+  ui.toast(`Wochen-Herausforderung „${ch.name}“: ${ch.desc} Nach ${ch.turnLimit} Runden zählt die Punktzahl.`, 'good');
+}
+
 function startTutorial() {
   startLocal('bot', {
     count: 2, tribe: 'imperius', mapSize: 'small', mapType: 'continents', aiLevel: 'easy', turnLimit: null
@@ -1029,6 +1172,8 @@ function startLocal(mode, override = null) {
       }
     : { turnLimit: settings.turnLimit, ...map };
   app.state = R.createGame(override && override.seed != null ? override.seed : Math.floor(Math.random() * 2 ** 31), count, opts);
+  // Eigenes Aussehen (Kosmetik) für den Menschen gegen die KI.
+  if (mode === 'bot') app.state.looks = { player_1: P.lookOf(P.loadProfile()) };
   enterLocal();
   persist();
 }
@@ -1248,6 +1393,23 @@ function boot() {
       refresh();
     },
     onMenu: () => showMenu(),
+    onChooseName: chooseName,
+    onProfileCode: profileCodeDialog,
+    onBoard: showBoard,
+    onLook: (cat, id) => {
+      const profile = P.loadProfile();
+      if (!P.cosmeticUnlocked(profile, cat, id)) return;
+      profile.look = { ...(profile.look || {}), [cat]: id };
+      P.saveProfile(profile);
+      ui.renderLooks(profile, P.COSMETICS, P.cosmeticUnlocked, P.cosmeticHint, P.lookOf(profile));
+      const me = viewer();
+      if (app.state && me && app.mode !== 'hotseat') {
+        app.state.looks = { ...(app.state.looks || {}), [me]: P.lookOf(profile) };
+        render.syncBoard(app.state, viewer());
+        persist();
+      }
+      sfx('select');
+    },
     onRestart: () => { endReview(); ui.hideWinner(); showMenu(); },
     onReview: on => {
       if (!app.state) return;
@@ -1289,7 +1451,7 @@ function boot() {
       if (easier) ui.toast(`Neues Spiel: ${AI_LEVELS[aiLevel].label}, ${count - 1} ${count === 2 ? 'Gegner' : 'Gegner'}`, 'good');
     },
     onContinue: continueGame,
-    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : mode === 'daily' ? startDaily() : startLocal(mode),
+    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : mode === 'daily' ? startDaily() : mode === 'weekly' ? startWeekly() : mode.startsWith('mission:') ? startMission(mode.slice(8)) : startLocal(mode),
     onTutor,
     onCopyLink: copyLink
   });

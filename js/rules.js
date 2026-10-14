@@ -4,7 +4,7 @@ import {
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
-  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY, UPGRADES
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY, UPGRADES, PERSONAS
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -125,7 +125,12 @@ export function canOfferPeace(state, from, to) {
 // nicht kurz vor dem Sieg über ihn steht.
 export function aiAcceptsPeace(state, ai, from) {
   const mine = score(state, ai), theirs = score(state, from);
-  return mine <= theirs * 1.25;
+  const persona = PERSONAS[personaOf(state, ai)];
+  return mine <= theirs * (persona ? persona.peace : 1.25);
+}
+
+export function personaOf(state, player) {
+  return (state.persona && state.persona[player]) || null;
 }
 
 function makePeace(state, a, b) {
@@ -518,6 +523,7 @@ export function unitSight(state, u) {
 
 export function visibleKeys(state, player) {
   const keys = new Set();
+  if (state.noFog) { forEachHex((q, r) => keys.add(hk(q, r))); return keys; }
   const addArea = (q, r, rad) => {
     forEachHex((nq, nr) => {
       if (hexDistance(q, r, nq, nr) <= rad) keys.add(hk(nq, nr));
@@ -601,7 +607,7 @@ export function isExplored(state, player, q, r) {
 // Aktuell sichtbar (nicht nur einmal entdeckt): innerhalb der Sichtweite
 // einer eigenen Einheit oder Stadt.
 export function isVisible(state, player, q, r) {
-  if (!player || !state.explored || !state.explored[player]) return true;
+  if (!player || !state.explored || !state.explored[player] || state.noFog) return true;
   for (const u of state.units) {
     if (u.owner !== player) continue;
     if (hexDistance(u.q, u.r, q, r) <= unitSight(state, u)) return true;
@@ -735,7 +741,23 @@ function occupancy(state) {
   return occ;
 }
 
-export function reachableMap(state, unit) {
+// Weg zu (q, r) als Liste von Feldern (ohne Startfeld) – für die Laufanimation.
+export function pathTo(state, unit, q, r) {
+  const prev = new Map();
+  const reach = reachableMap(state, unit, prev);
+  const goal = hk(q, r);
+  if (!reach.has(goal)) return [];
+  const path = [];
+  let k = goal;
+  const start = hk(unit.q, unit.r);
+  for (let guard = 0; k && k !== start && guard < 64; guard++) {
+    path.unshift(k.split(',').map(Number));
+    k = prev.get(k);
+  }
+  return path;
+}
+
+export function reachableMap(state, unit, prev = null) {
   const out = new Map();
   if (!unit || !UNITS[unit.type] || !(unit.mp > 0)) return out;
   if (unit.acted && !(hasAbility(unit.type, 'escape') || hasAbility(unit.type, 'persist'))) return out;
@@ -771,6 +793,7 @@ export function reachableMap(state, unit) {
         if (nc > budget) continue;
         if (nc < (dist.get(k) ?? Infinity)) {
           dist.set(k, nc);
+          if (prev) prev.set(k, hk(q, r));
           // Kontrollzone: Neben einem Feind endet der Zug; auch nach dem
           // Wechsel zwischen Land und Wasser geht es nicht weiter.
           if (!switching && (flying || !zoc(nq, nr))) (buckets[nc] || (buckets[nc] = [])).push([nq, nr]);
@@ -839,6 +862,13 @@ function provoke(state, human, ai) {
   if (!state.provoked) state.provoked = {};
   state.provoked[ai] = true;
   return { kind: 'provoke', player: ai };
+}
+
+// Zähler je Spieler für die Profil-Statistik (Eroberungen, Ausbildungen).
+function countStat(state, key, player) {
+  if (!player) return;
+  if (!state[key]) state[key] = {};
+  state[key][player] = (state[key][player] || 0) + 1;
 }
 
 // --- Ereignisprotokoll (für den Rückblick zu Beginn des eigenen Zuges) -------
@@ -915,6 +945,7 @@ export function attack(state, attacker, defender) {
           const prev = city.owner;
           city.owner = attacker.owner;
           events.push({ kind: 'capture', city, from: prev, to: attacker.owner });
+          countStat(state, 'capturesBy', attacker.owner);
           logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
           checkWinner(state);
         }
@@ -980,6 +1011,7 @@ export function moveUnit(state, unit, q, r) {
     const prev = city.owner;
     city.owner = unit.owner;
     events.push({ kind: 'capture', city, from: prev, to: unit.owner });
+    countStat(state, 'capturesBy', unit.owner);
     const prov = provoke(state, unit.owner, prev);
     if (prov) events.push(prov);
     logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
@@ -1064,6 +1096,7 @@ export function trainUnit(state, city, type, player) {
   state.stars[player] -= unitCost(state, player, type);
   if (hasAbility(type, 'water')) city.trainedShip = true;
   else city.trained = true;
+  countStat(state, 'trainedBy', player);
   state.units.push({
     id: `${player.replace('_', '')}_${Date.now().toString(36)}_${unitSeq++}`,
     owner: player, type, q: sq, r: sr,
@@ -1667,6 +1700,11 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   for (const p of state.players) {
     const tr = TRIBES[tribes[p]];
     const lvl = state.ai.includes(p) ? AI_LEVELS[state.aiLevel] : null;
+    if (state.ai.includes(p)) {
+      if (!state.persona) state.persona = {};
+      const list = Object.keys(PERSONAS);
+      state.persona[p] = list[Math.floor(rand() * list.length)];
+    }
     state.stars[p] = starStart + (tr ? tr.bonusStars : 0) + (lvl ? lvl.startBonus : 0);
     state.techs[p] = tr ? ['basic', ...tr.startTechs] : ['basic'];
     state.explored[p] = [];
@@ -1994,6 +2032,31 @@ export function monumentReady(state, player, type) {
 
 export function readyMonuments(state, player) {
   return Object.keys(MONUMENTS).filter(t => monumentReady(state, player, t));
+}
+
+// --- Sonderregeln (Wochen-Herausforderung) -----------------------------------
+
+export function applyWeeklyRule(state, rule) {
+  state.weeklyRule = rule;
+  if (rule === 'clearsky') {
+    state.noFog = true;
+    const all = [];
+    forEachHex((q, r) => all.push(hk(q, r)));
+    for (const p of state.players) state.explored[p] = all.slice();
+  } else if (rule === 'fortress') {
+    for (const c of state.cities) c.rewards = { ...(c.rewards || {}), 3: 'wall' };
+  } else if (rule === 'riches') {
+    for (const p of state.players) state.stars[p] = Math.max(state.stars[p], 25);
+  } else if (rule === 'seafarers') {
+    for (const p of state.players) for (const t of ['fishing', 'sailing']) if (!state.techs[p].includes(t)) state.techs[p].push(t);
+  } else if (rule === 'titans') {
+    for (const c of state.cities.filter(c => c.isCapital && c.owner)) {
+      const spot = freeLandNear(state, c.q, c.r, 'giant', c.owner);
+      if (spot) spawnUnitAt(state, c.owner, 'giant', spot[0], spot[1]);
+    }
+  } else if (rule === 'blitz') {
+    state.turnLimit = 20;
+  }
 }
 
 // --- Leuchttürme ---------------------------------------------------------------
