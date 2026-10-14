@@ -758,7 +758,11 @@ function tileEnv(state, key, imp) {
   const [q, r] = key.split(',').map(Number);
   const arms = [];
   if (roadAt(state, q, r)) DIRS.forEach(([dq, dr], d) => { if (onRoadNet(state, q + dq, r + dr)) arms.push(d); });
-  const env = { arms, road: roadAt(state, q, r) };
+  const env = {
+    arms, road: roadAt(state, q, r),
+    terrain: state.terrain[r * MAP_W + q],
+    occupied: state.units.some(u => u.q === q && u.r === r)
+  };
   if (imp === 'port') {
     env.land = [];
     DIRS.forEach(([dq, dr], d) => {
@@ -790,15 +794,19 @@ function onRoadPath(x, z, env, width = 0.13) {
 // Platz für ein Gebäude: Mitte, oder bei Straßen die Ecke mit dem größten
 // Abstand zu allen Straßenarmen.
 function buildingSpot(env) {
-  if (!env.road) return [0, 0, 1];
+  // Mitte nur, wenn dort nichts anderes steht: Straße, Einheit, Bäume, Berggipfel.
+  const crowded = env.road || env.occupied || env.terrain === 'forest' || env.terrain === 'mountain';
+  if (!crowded) return [0, 0, 1];
   let best = null;
   for (let k = 0; k < 6; k++) {
     const ang = Math.PI / 6 + k * Math.PI / 3;
     const vx = Math.cos(ang), vz = Math.sin(ang);
     const gap = Math.min(Math.PI, ...(env.arms || []).map(d => Math.acos(Math.max(-1, Math.min(1, vx * DIR_VEC[d][0] + vz * DIR_VEC[d][1])))));
-    if (!best || gap > best.gap) best = { x: vx * 0.42, z: vz * 0.42, gap };
+    // Auf Bergen außerhalb des Gipfels (Radius 0,52), sonst etwas näher zur Mitte.
+    const rad = env.terrain === 'mountain' ? 0.64 : 0.42;
+    if (!best || gap > best.gap) best = { x: vx * rad, z: vz * rad, gap };
   }
-  return [best.x, best.z, 0.8];
+  return [best.x, best.z, env.terrain === 'mountain' ? 0.75 : 0.85];
 }
 
 // Acker über das ganze Feld: Furchen (Erde) mit Pflanzen, Feldweg wo die
@@ -912,14 +920,17 @@ function portNode(env) {
   return g;
 }
 
+// Größe im Verhältnis zu Städten, Einheiten und Monumenten angleichen.
+const BUILDING_SCALE = { temple: 1.5, market: 1.6, forge: 1.35, sawmill: 1.3, mine: 1.3, mill: 1.2, monastery: 1.35 };
+
 function improvementNode(type, env = {}) {
   if (type === 'farm') return farmNode(env);
   if (type === 'port') return portNode(env);
   const g = buildingNode(type);
-  // Gebäude weichen der Straße aus.
+  // Gebäude weichen Straßen, Einheiten, Bäumen und Gipfeln aus.
   const [x, z, sc] = buildingSpot(env);
   g.position.set(x, 0, z);
-  g.scale.setScalar(sc);
+  g.scale.setScalar(sc * (BUILDING_SCALE[type] || 1));
   const wrap = new THREE.Group();
   wrap.add(g);
   return wrap;
@@ -951,6 +962,104 @@ function buildingNode(type) {
     roof.rotation.y = Math.PI / 4;
     roof.position.set(-0.3, 0.135, 0.14);
     g.add(roof);
+  } else if (type === 'mill') {
+    // Windmühle: gemauerter Turm, Kegeldach, vier Flügel.
+    const tower = new THREE.Mesh(geo('mlTower', () => new THREE.CylinderGeometry(0.1, 0.14, 0.34, 8)), mat(0xe7e2d6));
+    tower.position.y = 0.17;
+    g.add(tower);
+    const roof = new THREE.Mesh(geo('mlRoof', () => new THREE.ConeGeometry(0.13, 0.12, 8)), mat(0x9c6b3a));
+    roof.position.y = 0.4;
+    g.add(roof);
+    const hub = new THREE.Group();
+    hub.position.set(0, 0.32, 0.13);
+    hub.rotation.z = 0.4;
+    g.add(hub);
+    for (let k = 0; k < 4; k++) {
+      const arm = new THREE.Mesh(geo('mlSail', () => new THREE.BoxGeometry(0.05, 0.26, 0.01).translate(0, 0.14, 0)), mat(0xf5f0e6));
+      arm.rotation.z = k * Math.PI / 2;
+      hub.add(arm);
+    }
+    const door = new THREE.Mesh(geo('mlDoor', () => new THREE.BoxGeometry(0.05, 0.08, 0.01)), mat(WOOD_DARK));
+    door.position.set(0, 0.04, 0.135);
+    g.add(door);
+  } else if (type === 'forge') {
+    // Schmelzhütte: Steinofen mit glühender Öffnung, Schornstein, Amboss.
+    const base = new THREE.Mesh(geo('fgBase', () => new THREE.BoxGeometry(0.28, 0.14, 0.22)), mat(0x78716c));
+    base.position.y = 0.07;
+    g.add(base);
+    const roof = new THREE.Mesh(geo('fgRoof', () => new THREE.BoxGeometry(0.3, 0.04, 0.24)), mat(0x57534e));
+    roof.position.y = 0.16;
+    g.add(roof);
+    const chim = new THREE.Mesh(geo('fgChim', () => new THREE.CylinderGeometry(0.035, 0.045, 0.24, 6)), mat(0x57534e));
+    chim.position.set(-0.08, 0.28, -0.05);
+    g.add(chim);
+    const glow = new THREE.Mesh(geo('fgGlow', () => new THREE.BoxGeometry(0.08, 0.06, 0.01)), new THREE.MeshBasicMaterial({ color: 0xff8a1f }));
+    glow.position.set(0.04, 0.06, 0.111);
+    g.add(glow);
+    const anvil = new THREE.Mesh(geo('fgAnvil', () => new THREE.BoxGeometry(0.08, 0.05, 0.04)), mat(0x3f3f46));
+    anvil.position.set(0.12, 0.025, 0.16);
+    g.add(anvil);
+  } else if (type === 'market') {
+    // Markt: drei Stände mit gestreiften Planen und Kisten.
+    const cols = [0xdc2626, 0xf59e0b, 0x2563eb];
+    [[-0.14, -0.06], [0.12, -0.1], [0, 0.12]].forEach(([x, z], i) => {
+      const table = new THREE.Mesh(geo('mkTable', () => new THREE.BoxGeometry(0.14, 0.05, 0.09)), mat(WOOD));
+      table.position.set(x, 0.08, z);
+      g.add(table);
+      for (const dx of [-0.06, 0.06]) {
+        const post = new THREE.Mesh(geo('mkPost', () => new THREE.BoxGeometry(0.012, 0.18, 0.012)), mat(WOOD_DARK));
+        post.position.set(x + dx, 0.09, z - 0.04);
+        g.add(post);
+      }
+      const awning = new THREE.Mesh(geo('mkAwn', () => new THREE.BoxGeometry(0.16, 0.012, 0.12)), mat(cols[i]));
+      awning.position.set(x, 0.185, z);
+      awning.rotation.x = 0.25;
+      g.add(awning);
+      const goods = new THREE.Mesh(geo('mkGood', () => new THREE.BoxGeometry(0.04, 0.03, 0.04)), mat(i === 1 ? 0x65a30d : 0xd97706));
+      goods.position.set(x - 0.03, 0.12, z);
+      g.add(goods);
+    });
+  } else if (type === 'fort') {
+    // Burg: Steinmauer mit Zinnen, vier Ecktürme, Bergfried.
+    const stone = mat(0xa8a29e), dark = mat(0x78716c);
+    for (const [x, z, w, d] of [[0, -0.2, 0.44, 0.06], [0, 0.2, 0.44, 0.06], [-0.2, 0, 0.06, 0.44], [0.2, 0, 0.06, 0.44]]) {
+      const wall = new THREE.Mesh(geo(`ftWall${w}`, () => new THREE.BoxGeometry(w, 0.14, d)), stone);
+      wall.position.set(x, 0.07, z);
+      g.add(wall);
+    }
+    for (const x of [-0.2, 0.2]) for (const z of [-0.2, 0.2]) {
+      const tw = new THREE.Mesh(geo('ftTower', () => new THREE.CylinderGeometry(0.06, 0.07, 0.22, 8)), stone);
+      tw.position.set(x, 0.11, z);
+      g.add(tw);
+      const cap = new THREE.Mesh(geo('ftCap', () => new THREE.ConeGeometry(0.075, 0.08, 8)), dark);
+      cap.position.set(x, 0.26, z);
+      g.add(cap);
+    }
+    const keep = new THREE.Mesh(geo('ftKeep', () => new THREE.BoxGeometry(0.14, 0.26, 0.14)), stone);
+    keep.position.y = 0.13;
+    g.add(keep);
+    const gate = new THREE.Mesh(geo('ftGate', () => new THREE.BoxGeometry(0.08, 0.09, 0.01)), mat(WOOD_DARK));
+    gate.position.set(0, 0.045, 0.231);
+    g.add(gate);
+  } else if (type === 'monastery') {
+    // Kloster: Kirchenschiff, Glockenturm, Kreuzgangmauer.
+    const nave = new THREE.Mesh(geo('moNave', () => new THREE.BoxGeometry(0.3, 0.14, 0.14)), mat(0xf1ece1));
+    nave.position.set(0, 0.07, -0.04);
+    g.add(nave);
+    const roof = new THREE.Mesh(geo('moRoof', () => new THREE.CylinderGeometry(0.0, 0.1, 0.3, 4, 1).rotateZ(Math.PI / 2).rotateX(Math.PI / 4)), mat(0x9c4a3a));
+    roof.position.set(0, 0.17, -0.04);
+    roof.scale.set(1, 0.7, 1);
+    g.add(roof);
+    const bell = new THREE.Mesh(geo('moBell', () => new THREE.BoxGeometry(0.08, 0.3, 0.08)), mat(0xe7e2d6));
+    bell.position.set(0.17, 0.15, -0.04);
+    g.add(bell);
+    const spire = new THREE.Mesh(geo('moSpire', () => new THREE.ConeGeometry(0.06, 0.12, 4)), mat(0x9c4a3a));
+    spire.rotation.y = Math.PI / 4;
+    spire.position.set(0.17, 0.36, -0.04);
+    g.add(spire);
+    const wall = new THREE.Mesh(geo('moWall', () => new THREE.BoxGeometry(0.32, 0.06, 0.02)), mat(0xd6cfc0));
+    wall.position.set(0, 0.03, 0.14);
+    g.add(wall);
   } else if (type === 'sawmill') {
     const base = new THREE.Mesh(geo('swBase', () => new THREE.BoxGeometry(0.3, 0.1, 0.22)), mat(0x6b4a2b));
     base.position.y = 0.05;
@@ -963,22 +1072,32 @@ function buildingNode(type) {
     saw.position.set(0.2, 0.12, 0);
     g.add(saw);
   } else if (type === 'mine') {
-    const stone = mat(0x6b7280);
-    const gA = new THREE.Mesh(geo('mPillarL', () => new THREE.BoxGeometry(0.07, 0.2, 0.07)), stone);
-    gA.position.set(-0.12, 0.1, 0);
-    g.add(gA);
-    const gB = new THREE.Mesh(geo('mPillarR', () => new THREE.BoxGeometry(0.07, 0.2, 0.07)), stone);
-    gB.position.set(0.12, 0.1, 0);
-    g.add(gB);
-    const top = new THREE.Mesh(geo('mTop', () => new THREE.BoxGeometry(0.36, 0.05, 0.12)), stone);
-    top.position.y = 0.215;
-    g.add(top);
-    const ore = new THREE.Mesh(geo('mOre', () => new THREE.OctahedronGeometry(0.06, 0)), mat(0xd9a13b));
-    ore.position.set(0.12, 0.28, 0);
-    g.add(ore);
-    const dark = new THREE.Mesh(geo('mHole', () => new THREE.CylinderGeometry(0.09, 0.11, 0.05, 6)), mat(0x27272a));
-    dark.position.set(0, 0.03, 0);
-    g.add(dark);
+    // Stolleneingang mit Holzrahmen, Schienen und einer Lore voll Erz – hebt sich vom grauen Fels ab.
+    const timber = mat(WOOD), dark = mat(0x1c1917);
+    const hole = new THREE.Mesh(geo('mHole2', () => new THREE.BoxGeometry(0.16, 0.16, 0.04)), dark);
+    hole.position.set(0, 0.08, -0.06);
+    g.add(hole);
+    for (const x of [-0.1, 0.1]) {
+      const post = new THREE.Mesh(geo('mPost', () => new THREE.BoxGeometry(0.04, 0.2, 0.04)), timber);
+      post.position.set(x, 0.1, -0.04);
+      g.add(post);
+    }
+    const beam = new THREE.Mesh(geo('mBeam', () => new THREE.BoxGeometry(0.26, 0.045, 0.05)), timber);
+    beam.position.set(0, 0.215, -0.04);
+    g.add(beam);
+    for (const x of [-0.04, 0.04]) {
+      const rail = new THREE.Mesh(geo('mRail', () => new THREE.BoxGeometry(0.015, 0.012, 0.24)), mat(0x52525b));
+      rail.position.set(x, 0.006, 0.08);
+      g.add(rail);
+    }
+    const cart = new THREE.Mesh(geo('mCart', () => new THREE.BoxGeometry(0.12, 0.07, 0.09)), mat(WOOD_DARK));
+    cart.position.set(0, 0.05, 0.12);
+    g.add(cart);
+    for (const [x, z] of [[-0.03, 0.11], [0.03, 0.13], [0, 0.12]]) {
+      const ore = new THREE.Mesh(geo('mOre2', () => new THREE.OctahedronGeometry(0.035, 0)), mat(0xd9a13b));
+      ore.position.set(x, 0.1, z);
+      g.add(ore);
+    }
   } else if (type === 'temple') {
     const base = new THREE.Mesh(geo('tpBase', () => new THREE.BoxGeometry(0.2, 0.16, 0.2)), mat(0xf1ece1));
     base.position.y = 0.08;
@@ -1106,7 +1225,8 @@ function buildTiles(state) {
         mesh.add(rn);
         decor.push(rn);
       }
-      syncImprovement(tiles.get(hk(q, r)), state.improvements ? state.improvements[hk(q, r)] : null);
+      const imp = state.improvements ? state.improvements[hk(q, r)] : null;
+      syncImprovement(tiles.get(hk(q, r)), imp, imp ? tileEnv(state, hk(q, r), imp) : {});
     }
   }
 }
@@ -1117,7 +1237,7 @@ function buildTiles(state) {
 // der Hafen baut Kaimauern und Stege zum angrenzenden Land.
 function syncImprovement(t, imp, env = {}) {
   if (!t) return;
-  const sig = imp ? `${imp}|${(env.arms || []).join('')}|${imp === 'port' ? (env.land || []).join('') : ''}` : '';
+  const sig = imp ? `${imp}|${env.terrain || ''}|${(env.arms || []).join('')}|${imp === 'port' ? (env.land || []).join('') : ''}|${env.occupied ? 'u' : ''}` : '';
   if ((t.impSig || '') === sig) return;
   if (t.impNode) {
     t.mesh.remove(t.impNode);
@@ -1259,7 +1379,12 @@ const cyl = (rt, rb, h, seg = 6) => geo(`cyl${rt}|${rb}|${h}|${seg}`, () => new 
 const cone = (r, h, seg = 6) => geo(`cone${r}|${h}|${seg}`, () => new THREE.ConeGeometry(r, h, seg));
 const ico = r => geo(`ico${r}`, () => new THREE.IcosahedronGeometry(r, 0));
 
-function unitBody(type, color) {
+// Wer mitfährt: eingeschiffte Landeinheit im Boot oder Fracht im Lastenballon.
+function passengerOf(u) {
+  return u.carry || (u.cargo && u.cargo.type) || null;
+}
+
+function unitBody(type, color, passenger = null) {
   const g = new THREE.Group();
   const teamMats = [];
   const teamMat = () => {
@@ -1321,6 +1446,12 @@ function unitBody(type, color) {
     put(g, box(0.17, 0.08, 0.08), mat(c), 0.3, 0.52, 0);
     put(g, box(0.1, 0.04, 0.04), mat(DARK), -0.25, 0.34, 0).rotation.z = 0.6;
   };
+  // Kleine Mitfahrer-Figur (Rumpf in Teamfarbe, Kopf, Helm) auf Deck oder im Korb.
+  const rider = (y, x) => {
+    put(g, box(0.07, 0.11, 0.08), teamMat(), x, y + 0.055, 0);
+    put(g, ico(0.035), mat(SKIN), x, y + 0.14, 0);
+    put(g, cone(0.04, 0.05, 6), mat(0x9ca3af), x, y + 0.18, 0);
+  };
   const hull = (len, wid, h, c) => {
     put(g, box(len, h, wid), mat(c), 0, h / 2 + 0.02, 0);
     const bow = put(g, cone(wid / 2, wid * 0.8, 4), mat(c), len / 2 + wid * 0.35, h / 2 + 0.02, 0);
@@ -1366,6 +1497,39 @@ function unitBody(type, color) {
     for (const z of [-0.12, 0.12]) put(pp.p, box(0.12, 0.05, 0.08), teamMat(), 0, 0.4, z);
     put(pp.p, box(0.13, 0.12, 0.18), teamMat(), 0.02, 0.26, 0); // Wappenrock
     sword(pp.right, 0.4);
+  } else if (type === 'pikeman') {
+    const pp = person({ armR: 0.2 });
+    put(pp.p, cyl(0.13, 0.13, 0.02, 8), mat(0x9ca3af), 0, pp.headY + 0.06, 0); // Eisenhut mit Krempe
+    put(pp.p, cone(0.08, 0.08, 8), mat(0x9ca3af), 0, pp.headY + 0.1, 0);
+    put(pp.p, box(0.13, 0.16, 0.19), teamMat(), 0.01, 0.27, 0); // Wappenrock
+    // Lange Pike, schräg nach vorn gesenkt.
+    put(pp.right, box(0.025, 1.0, 0.025), mat(WOOD), 0, 0.3, 0);
+    put(pp.right, cone(0.03, 0.12, 4), mat(STEEL), 0, 0.85, 0);
+    pp.right.rotation.z -= 0.55;
+  } else if (type === 'crossbow') {
+    const pp = person({ armL: 1.4, armR: 1.4 });
+    put(pp.p, cone(0.11, 0.1, 6), mat(0x6b4a2b), 0, pp.headY + 0.06, 0); // Kappe
+    put(pp.p, box(0.13, 0.15, 0.19), teamMat(), 0.01, 0.27, 0);
+    // Armbrust waagerecht vor dem Körper: Schaft und quer liegender Bogen.
+    const xb = new THREE.Group();
+    xb.position.set(0.17, 0.36, 0);
+    g.add(xb);
+    put(xb, box(0.26, 0.04, 0.04), mat(WOOD_DARK), 0, 0, 0);
+    put(xb, box(0.03, 0.03, 0.24), mat(STEEL), 0.11, 0, 0);
+    put(xb, box(0.005, 0.005, 0.22), mat(0xeeeeee), 0.02, 0.01, 0);
+    put(pp.p, cyl(0.035, 0.03, 0.18, 6), mat(WOOD_DARK), -0.11, 0.3, 0.06).rotation.z = 0.25; // Bolzenköcher
+  } else if (type === 'paladin') {
+    horse(0xd6d3d1);
+    // Pferdedecke in Teamfarbe, bis fast zum Boden.
+    put(g, box(0.36, 0.14, 0.21), teamMat(), 0, 0.26, 0);
+    const pp = person({ y0: 0.29, legs: false, torso: mat(STEEL) });
+    helmet(pp, STEEL, 0.19);
+    put(pp.p, cone(0.03, 0.1, 4), teamMat(), 0, pp.headY + 0.22, 0); // Helmbusch
+    put(pp.right, box(0.68, 0.035, 0.035), mat(0xf0f3f7), 0.22, 0, 0);
+    put(pp.right, cone(0.04, 0.11, 4), mat(STEEL), 0.6, 0, 0).rotation.z = -Math.PI / 2;
+    put(pp.left, box(0.03, 0.22, 0.17), mat(0xf5f5f4), 0.03, 0, 0); // Schild mit Kreuz
+    put(pp.left, box(0.035, 0.16, 0.035), teamMat(), 0.035, 0, 0);
+    put(pp.left, box(0.035, 0.035, 0.12), teamMat(), 0.035, 0.03, 0);
   } else if (type === 'catapult') {
     put(g, box(0.46, 0.08, 0.3), mat(WOOD), 0, 0.13, 0);
     put(g, box(0.4, 0.02, 0.22), teamMat(), 0, 0.18, 0);
@@ -1405,6 +1569,7 @@ function unitBody(type, color) {
   } else if (type === 'boat') {
     const top = hull(0.42, 0.2, 0.1, WOOD);
     mast(0, top, 0.42, 0.22, 0.26);
+    if (passenger) rider(top, -0.12);
   } else if (type === 'ship') {
     const top = hull(0.56, 0.26, 0.13, 0x6b4a2b);
     put(g, box(0.14, 0.1, 0.2), mat(WOOD), -0.2, top + 0.05, 0);
@@ -1436,6 +1601,7 @@ function unitBody(type, color) {
     put(pp.right, box(0.12, 0.08, 0.015), teamMat(), 0.07, 0.38, 0);
   } else if (hasAbility(type, 'air')) {
     airBody(type, g, put, teamMat);
+    if (passenger) rider(AIR_Y + 0.1, 0);
   } else {
     // Rückfallmodell, damit eine Einheit ohne eigenes Modell nie unsichtbar ist.
     person();
@@ -1663,7 +1829,7 @@ function airBody(type, g, put, teamMat) {
 
 function placeUnitNode(state, unit) {
   const color = ownerColor(unit.owner);
-  const group = unitBody(unit.type, color);
+  const group = unitBody(unit.type, color, passengerOf(unit));
   const p = toWorld(unit.q, unit.r);
   const key = hk(unit.q, unit.r);
   group.position.set(p.x, hexTop(key), p.z);
@@ -1673,7 +1839,7 @@ function placeUnitNode(state, unit) {
   group.add(sprite);
   group.rotation.y = DEFAULT_FACING;
   scene.add(group);
-  const node = { group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
+  const node = { group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, passenger: passengerOf(unit), acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
   unitNodes.set(unit.id, node);
   if (unit.acted) {
     for (const m of node.group.userData.teamMats) m.color.multiplyScalar(0.55);
@@ -1796,7 +1962,7 @@ export function syncBoard(state, viewer = null) {
     alive.add(u.id);
     let node = unitNodes.get(u.id);
     // Ein-/Ausschiffen wechselt den Typ: Modell neu aufbauen.
-    if (node && node.type !== u.type) {
+    if (node && (node.type !== u.type || node.passenger !== passengerOf(u))) {
       removeUnitNode(u.id, node);
       node = null;
     }
