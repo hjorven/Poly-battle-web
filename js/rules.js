@@ -621,7 +621,13 @@ export function startTurn(state) {
   state.stars[p] += incomeFor(state, p);
   checkMonuments(state, p);
   if (!state.peak) state.peak = {};
-  state.peak[p] = Math.max(state.peak[p] || 0, citiesFor(state, p).length);
+  const owned = citiesFor(state, p).length;
+  state.peak[p] = Math.max(state.peak[p] || 0, owned);
+  // Für den Erfolg „Comeback“: von 3+ Städten auf eine geschrumpft.
+  if (owned === 1 && state.peak[p] >= 3) {
+    if (!state.comeback) state.comeback = {};
+    state.comeback[p] = true;
+  }
   updateExplored(state, p);
 }
 

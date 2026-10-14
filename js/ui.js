@@ -237,6 +237,36 @@ export function hideTutor() {
   $('tutor').classList.add('hidden');
 }
 
+// --- Profil ---------------------------------------------------------------------
+
+const fmtDate = key => { const [, m, d] = key.split('-'); return `${d}.${m}.`; };
+
+export function renderProfile(profile, lp, daily, achievements) {
+  const winRate = profile.games ? Math.round(100 * profile.wins / profile.games) : 0;
+  $('profile-card').innerHTML = `<div class="pc-level">${lp.level}</div>
+    <div><span class="pc-title">${esc(lp.title)}</span> <span class="pc-sub">· Stufe ${lp.level} · ${lp.into}/${lp.need} Erfahrung</span></div>
+    <div class="pc-sub">${profile.games} ${profile.games === 1 ? 'Spiel' : 'Spiele'} · ${profile.wins} ${profile.wins === 1 ? 'Sieg' : 'Siege'}${profile.games ? ` (${winRate} %)` : ''}${profile.winStreak > 1 ? ` · ${profile.winStreak} Siege in Folge` : ''}${profile.daily.streak ? ` · Tagesserie ${profile.daily.streak}` : ''}</div>
+    <div class="xp-bar"><div style="width:${Math.round(lp.frac * 100)}%"></div></div>`;
+  const best = profile.daily.best[daily.key];
+  const tribe = TRIBES[daily.tribe] ? TRIBES[daily.tribe].name : daily.tribe;
+  $('dailyBtn').innerHTML = `Tagesherausforderung ${fmtDate(daily.key)}<span class="sub">${esc(tribe)} · ${esc(MAP_TYPES[daily.mapType].label)} · 30 Runden · ${best != null ? `dein Bestwert: ${best} Punkte` : 'heute noch nicht gespielt'}</span>`;
+  const ids = Object.keys(achievements);
+  const got = ids.filter(id => profile.achievements[id]);
+  $('achievements-title').textContent = `Erfolge (${got.length}/${ids.length})`;
+  $('achievements').innerHTML = ids.map(id => `<div class="ach ${profile.achievements[id] ? 'got' : ''}"><b>${esc(achievements[id].name)}</b>${esc(achievements[id].desc)}</div>`).join('');
+}
+
+// Ergebnis für das Profil auf dem Endbildschirm.
+export function showProfileResult(res, lp, achievements) {
+  const box = $('winner-profile');
+  if (!res) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="wp-xp"><span>+${res.gain} Erfahrung</span>
+      <span class="${res.levelAfter > res.levelBefore ? 'wp-up' : ''}">${res.levelAfter > res.levelBefore ? `Aufgestiegen: Stufe ${lp.level} – ${esc(lp.title)}!` : `Stufe ${lp.level} · ${lp.into}/${lp.need}`}</span></div>
+    <div class="xp-bar"><div style="width:${Math.round(lp.frac * 100)}%"></div></div>
+    ${res.achievements.length ? `<div class="wp-ach">${res.achievements.map(id => `<span>Erfolg: ${esc(achievements[id].name)}</span>`).join('')}</div>` : ''}
+    ${res.daily ? `<div class="wp-daily">Tagesherausforderung ${fmtDate(res.daily.key)}: ${res.daily.score} Punkte${res.daily.improved ? ' – neuer Bestwert!' : ` (Bestwert ${res.daily.best})`} · Tagesserie ${res.daily.streak}</div>` : ''}`;
+}
+
 // Rückblick: Liste {text, q?, r?}; antippen springt zum Ort.
 export function showNews(lines) {
   const box = $('news');

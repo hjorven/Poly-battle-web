@@ -7,6 +7,7 @@ import {
 import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
 import { saveGame, loadGame, saveInfo, clearSave } from '../js/save.js';
+import * as P from '../js/profile.js';
 
 let passed = 0;
 let failed = 0;
@@ -320,6 +321,42 @@ test('Schonfrist: KI greift Menschen anfangs nicht an, bis sie angegriffen wird;
   assert.ok(res.events.some(e => e.kind === 'provoke' && e.player === 'player_2'));
   assert.ok(!R.graceProtects(st, 'player_2', 'player_1'), 'angegriffen: Schonfrist dieser KI vorbei');
   assert.strictEqual(st.stars.player_1, stars + BOUNTY, 'Beute');
+});
+
+test('Profil: Stufen, Erfolge, Serie, Speichern', () => {
+  assert.strictEqual(P.levelOf(0), 1);
+  assert.strictEqual(P.levelOf(199), 1);
+  assert.strictEqual(P.levelOf(200), 2);
+  assert.strictEqual(P.levelOf(600), 3);
+  const prof = P.emptyProfile();
+  const st = R.createGame(11, 4, { ai: ['player_2', 'player_3', 'player_4'], aiLevel: 'normal' });
+  st.endReason = 'conquest';
+  st.round = 20;
+  st.killsBy = { player_1: 26 };
+  const facts = P.gameFacts(st, 'player_1', { won: true, mode: 'bot', score: 2000 });
+  const res = P.recordGame(prof, facts);
+  for (const id of ['first_win', 'win_normal', 'blitz', 'warlord']) assert.ok(res.achievements.includes(id), id);
+  assert.ok(!res.achievements.includes('win_hard'));
+  assert.ok(res.gain >= (100 + 150) * 1.5 + 4 * 50 - 1);
+  assert.strictEqual(prof.wins, 1);
+  assert.strictEqual(prof.fastestWin, 20);
+  assert.strictEqual(P.recordGame(prof, facts).achievements.length, 0, 'Erfolge nur einmal');
+  // Tagesserie: gestern, heute -> 2; Lücke -> 1
+  const lost = { ...facts, won: false, daily: '2026-10-13' };
+  assert.strictEqual(P.recordGame(prof, lost).daily.streak, 1);
+  assert.strictEqual(P.recordGame(prof, { ...lost, daily: '2026-10-14', score: 50 }).daily.streak, 2);
+  const again = P.recordGame(prof, { ...lost, daily: '2026-10-14', score: 3000 });
+  assert.strictEqual(again.daily.streak, 2, 'gleicher Tag zählt nicht doppelt');
+  assert.ok(again.daily.improved && again.daily.best === 3000);
+  assert.strictEqual(P.recordGame(prof, { ...lost, daily: '2026-10-17' }).daily.streak, 1, 'Lücke');
+  // Tagesherausforderung ist für ein Datum immer gleich
+  assert.deepStrictEqual(P.dailyChallenge('2026-10-14'), P.dailyChallenge('2026-10-14'));
+  assert.notStrictEqual(P.dailyChallenge('2026-10-14').seed, P.dailyChallenge('2026-10-15').seed);
+  // Speichern/Laden mit Ersatzspeicher
+  const mem = new Map(); const store = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  assert.ok(P.saveProfile(prof, store));
+  assert.deepStrictEqual(P.loadProfile(store), prof);
+  assert.deepStrictEqual(P.loadProfile({ getItem: () => '{kaputt', setItem() {} }), P.emptyProfile());
 });
 
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
