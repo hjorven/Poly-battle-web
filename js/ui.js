@@ -59,6 +59,11 @@ export function initUI(h) {
     handlers.onHotkey(action);
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
+  // Die Karte reicht bis oben; Elemente darunter richten sich nach der Höhe der Kärtchen.
+  const syncTop = () => document.documentElement.style.setProperty('--hud-h', $('topbar').offsetHeight + 'px');
+  syncTop();
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncTop).observe($('topbar'));
+  else window.addEventListener('resize', syncTop);
   $('buildClose').addEventListener('click', closeBuild);
   $('build-overlay').addEventListener('click', e => { if (e.target === $('build-overlay')) closeBuild(); });
   document.addEventListener('keydown', e => { if (build.open && !e.target.closest('input, textarea, select')) buildKey(e); });
@@ -476,8 +481,7 @@ export function showNews(report) {
     const i = flat.push(l) - 1;
     return `<li class="tone-${l.tone || 'info'}"><button data-news="${i}" ${l.q == null ? 'tabindex="-1"' : ''}>${esc(l.text)}${l.q != null ? ' <span class="news-go">zeigen</span>' : ''}</button></li>`;
   }).join('')}</ul></div>`).join('');
-  box.innerHTML = `<h3>Rundenbericht</h3><div class="news-head">${esc(report.head)}</div>${html}
-    <button class="btn small" data-news-close>OK</button>`;
+  box.innerHTML = `<div class="news-top"><h3>Rundenbericht</h3><button class="btn ghost small" data-news-close>Schließen</button></div><div class="news-head">${esc(report.head)}</div>${html}`;
   box.querySelectorAll('[data-news]').forEach(b => b.addEventListener('click', () => {
     const l = flat[Number(b.dataset.news)];
     if (l.q != null) handlers.onJump(l.q, l.r);
@@ -512,10 +516,24 @@ export function hidePanel() {
   $('panel').classList.add('hidden');
 }
 
-function panel(html) {
+function panel(html, mode = '') {
   const p = $('panel');
   p.innerHTML = html;
+  p.className = mode;
   p.classList.remove('hidden');
+}
+
+// Kleine Symbole für Werte (SVG, keine Schriftzeichen). Bedeutung im title.
+const ICON = {
+  heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 7.6a4.2 4.2 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z"/>',
+  sword: '<path d="M19.5 3.5l-.6 3.4-8 8-2.8-2.8 8-8zM6 11.6l1.4-1.4 6.4 6.4-1.4 1.4zM8.6 15.4l1.4 1.4-3.6 3.6a1 1 0 0 1-1.4-1.4z"/>',
+  shield: '<path d="M12 3.5l7 2.6v5.2c0 4.6-3 7.8-7 9.2-4-1.4-7-4.6-7-9.2V6.1z"/>',
+  boot: '<path d="M7 3.5h6v8l5.2 2.4A3 3 0 0 1 20 16.6V18H6.2L7 13.5zM5.8 19.2H20v1.6H5.8z"/>',
+  bow: '<path d="M6.5 4.5c7 1 11.4 6.6 10.6 14.4l-1.6-.2c.7-6.9-3.2-11.7-9.2-12.6zM6.3 5.1l1.1-1.1 11.8 11.8-1.1 1.1zM19.4 18.3l-1.2-3.6-1.6 1.6z"/>'
+};
+const LABEL = { heart: 'Leben', sword: 'Angriff', shield: 'Verteidigung', boot: 'Bewegung', bow: 'Reichweite' };
+function stat(kind, value) {
+  return `<span class="vstat" title="${LABEL[kind]}" aria-label="${LABEL[kind]} ${value}"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true" fill="currentColor">${ICON[kind]}</svg>${value}</span>`;
 }
 
 function abilityChips(type) {
@@ -550,7 +568,8 @@ export function showUnitChip(state, unit, ctx) {
   chip.innerHTML = `
     <span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>
     <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ' + STAR_ICON : ''}</b>
-      <span class="uc-sub">${ctx.hint ? `<b class="uc-hint">${esc(ctx.hint)}</b>` : `Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}`}</span></span>
+      <span class="uc-stats">${stat('heart', `${unit.hp}/${hpCap(unit)}`)}${stat('sword', attackOf(state, unit))}${stat('shield', defenseOf(state, unit))}${stat('boot', `${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}`)}${def.range > 1 ? stat('bow', def.range) : ''}</span>
+      <span class="uc-sub">${ctx.hint ? `<b class="uc-hint">${esc(ctx.hint)}</b>` : esc(status)}</span></span>
     <button class="btn ghost small" data-details>Details</button>`;
   chip.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
   chip.classList.remove('hidden');
@@ -731,7 +750,7 @@ function switchToUnit(state, city, ctx) {
   if (!u) return '';
   const def = UNITS[u.carry || u.type];
   const mine = u.owner === ctx.actAs;
-  return `<div class="action-list"><button class="btn action ghost" data-open-unit="${u.id}"><span>${mine ? 'Einheit auswählen' : 'Einheit ansehen'}: ${def.name}<span class="sub">Steht in der Stadt${mine ? ' – ziehen, angreifen, auflösen' : ''}</span></span></button></div>`;
+  return `<button class="btn small unit-in-city" data-open-unit="${u.id}" title="Steht in der Stadt${mine ? ' – ziehen, angreifen, auflösen' : ''}">${mine ? 'Einheit wählen' : 'Einheit ansehen'}: ${def.name}</button>`;
 }
 
 export function showCityPanel(state, city, ctx) {
@@ -747,7 +766,8 @@ export function showCityPanel(state, city, ctx) {
   const built = tiles.filter(([q, r]) => improvementAt(state, q, r)).length;
   const res = tiles.filter(([q, r]) => resourceAt(state, q, r)).length;
 
-  let actions = '';
+  // Leiste am unteren Rand: Infos | Aktionen | Ausbilden (Karte bleibt frei).
+  let acts = '', train = '';
   if (city.owner && city.owner === ctx.actAs) {
     const unlocked = UNIT_ORDER.filter(t => {
       const u = UNITS[t];
@@ -756,60 +776,58 @@ export function showCityPanel(state, city, ctx) {
       return true;
     });
     const lvl = pendingLevel(city);
-    if (lvl && mine) {
-      actions += `<button class="btn primary city-reward" data-reward-open>Stufe ${lvl} erreicht – Belohnung wählen</button>`;
-    }
+    if (lvl && mine) acts += `<button class="btn primary city-reward" data-reward-open>Stufe ${lvl} erreicht – Belohnung wählen</button>`;
     const can = buildOptionsCount(state, city, ctx);
     const popReason = popReasonFor(state, city, ctx);
-    actions += `<div class="city-actions">
-      <button class="btn city-act" data-build-open>
+    acts += `<button class="btn city-act" data-build-open>
         <b>Ausbauen</b><span class="sub">${can ? `${can} ${can === 1 ? 'Möglichkeit' : 'Möglichkeiten'} jetzt` : 'Stadtgebiet ansehen'}</span>
       </button>
       <button class="btn city-act" data-buypop ${popReason ? 'disabled' : ''} title="${popReason || 'Mehr Sterne pro Runde, neue Stufe mit Belohnung'}">
         <b>Bevölkerung +1</b><span class="sub">${popReason || popCost(city, state) + ' Sterne'}</span>
-      </button>
-    </div>`;
-    actions += `<div class="panel-sub city-sec">Einheiten ausbilden</div><div class="train-grid">`;
+      </button>`;
+    let note = '';
+    if (occupied) note = 'Einheit in der Stadt – zum Ausbilden zuerst wegziehen.';
+    else if (city.trained) note = `Diese Runde schon ausgebildet${cityPorts(state, city).length && !city.trainedShip ? ' – ein Schiff geht noch' : ''}.`;
+    else if (city.trainedShip) note = 'Schiff gebaut – eine Landeinheit geht noch.';
+    train = `<div class="panel-sub city-sec">Einheiten ausbilden</div>${note ? `<div class="cp-note">${note}</div>` : ''}<div class="train-grid">`;
     for (const t of unlocked) {
       const u = UNITS[t];
       const reason = trainReason(state, city, t, ctx);
-      const stats = `Angriff ${attackOf(state, { type: t, owner: city.owner })} · Verteidigung ${u.def} · Bewegung ${maxMove(state, city.owner, t)} · Reichweite ${u.range} · Leben ${u.hp}`;
-      actions += `<button class="btn train-tile" data-train="${t}" ${reason ? 'disabled' : ''} title="${reason ? reason + ' · ' : ''}${stats}">
+      const atk = attackOf(state, { type: t, owner: city.owner });
+      const mv = maxMove(state, city.owner, t);
+      train += `<button class="btn train-tile" data-train="${t}" ${reason ? 'disabled' : ''} title="${reason ? reason + ': ' : ''}${u.name}, Angriff ${atk}, Verteidigung ${u.def}, Bewegung ${mv}, Reichweite ${u.range}, Leben ${u.hp}">
         <span class="tt-name">${u.name}</span><span class="tt-cost">${unitCost(state, city.owner, t)}</span>
-        <span class="tt-stats">${reason && reason !== 'Zu wenig Sterne' ? reason : `A ${attackOf(state, { type: t, owner: city.owner })} · V ${u.def} · B ${maxMove(state, city.owner, t)}${u.range > 1 ? ' · R ' + u.range : ''}`}</span>
+        <span class="tt-stats">${stat('sword', atk)}${stat('shield', u.def)}${stat('boot', mv)}${u.range > 1 ? stat('bow', u.range) : ''}</span>
       </button>`;
     }
-    actions += `</div><div class="hint tt-legend">Zahl rechts = Sterne · A Angriff · V Verteidigung · B Bewegung · R Reichweite</div>`;
-    if (city.trained) actions += `<div class="hint">Diese Stadt hat diese Runde schon eine Landeinheit ausgebildet${cityPorts(state, city).length && !city.trainedShip ? ' – ein Schiff geht noch' : ''}.</div>`;
-    else if (city.trainedShip) actions += `<div class="hint">Schiff gebaut – eine Landeinheit geht diese Runde noch.</div>`;
-    if (occupied) actions += `<div class="hint">Einheit in der Stadt – zum Ausbilden zuerst wegziehen.</div>`;
-  } else if (city.owner) {
-    actions = '';
+    train += '</div>';
   }
+  const other = !city.owner ? 'Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.'
+    : city.owner !== ctx.actAs ? 'Feindliche Stadt – besiege die Verteidiger und rücke ein, um sie zu erobern.'
+    : !ctx.myTurn ? 'Nicht dein Zug.' : '';
 
   panel(`
-    <div class="panel-head">
-      <div>
-        <div class="panel-title">Stadt${city.isCapital ? ' · Hauptstadt' : ''}</div>
-        <div class="panel-sub owner-line">${city.owner ? `<span class="dot" style="background:${hex(playerColor(state, city.owner))}"></span>` : ''}${ownerName}</div>
-      </div>
-      <div class="panel-head-right">
-        <span class="panel-sub">${city.pop >= MAX_POP ? 'max. Bev.' : ''}</span>
+    <div class="cp-info">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">${city.isCapital ? 'Hauptstadt' : 'Stadt'}</div>
+          <div class="panel-sub owner-line">${city.owner ? `<span class="dot" style="background:${hex(playerColor(state, city.owner))}"></span>` : ''}${ownerName}</div>
+        </div>
         <button class="btn icon-btn panel-close" data-close>Schließen</button>
       </div>
+      <div class="stat-row">
+        <div class="stat">Stufe<b>${city.pop}/${MAX_POP}</b></div>
+        <div class="stat">Einkommen<b>+${income}</b></div>
+        <div class="stat">Gebiet<b>${tiles.length}</b></div>
+      </div>
+      <div class="hint city-sum">${built} Gebäude, ${res} ${res === 1 ? 'Rohstoff' : 'Rohstoffe'}${city.owner === ctx.actAs ? '' : ` · <button class="linklike" data-build-open>Gebiet ansehen</button>`}</div>
+      ${levelChips(city)}
+      ${switchToUnit(state, city, ctx)}
+      ${other && !acts ? `<div class="hint">${other}</div>` : ''}
     </div>
-    <div class="stat-row">
-      <div class="stat">Stufe<b>${city.pop}/${MAX_POP}</b></div>
-      <div class="stat">Einkommen<b>${income}/Runde</b></div>
-      <div class="stat">Gebiet<b>${tiles.length} Felder</b></div>
-    </div>
-    <div class="hint city-sum">${built} ${built === 1 ? 'Gebäude' : 'Gebäude'} · ${res} ${res === 1 ? 'Rohstoff' : 'Rohstoffe'} im Stadtgebiet${city.owner === ctx.actAs ? '' : ` · <button class="linklike" data-build-open>Gebiet ansehen</button>`}</div>
-    ${levelChips(city)}
-    ${switchToUnit(state, city, ctx)}
-    ${actions || (!city.owner ? '<div class="hint">Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.</div>'
-      : city.owner !== ctx.actAs ? '<div class="hint">Feindliche Stadt – besiege die Verteidiger und rücke ein, um sie zu erobern.</div>'
-      : '<div class="hint">Nicht dein Zug.</div>')}
-  `);
+    ${acts ? `<div class="cp-acts">${acts}</div>` : ''}
+    ${train ? `<div class="cp-train">${train}</div>` : ''}
+  `, acts ? 'city-bar' : 'city-bar small');
   wirePanel($('panel'));
   $('panel').querySelectorAll('[data-train]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onTrain(city, btn.dataset.train));
@@ -850,7 +868,7 @@ function levelChips(city) {
   const got = Object.entries(city.rewards || {}).sort((a, b) => a[0] - b[0]);
   if (!got.length) return '';
   return `<div class="level-row">${got.map(([lvl, id]) =>
-    `<span class="level-chip" title="${CITY_REWARDS[id].desc}">Stufe ${lvl}: ${CITY_REWARDS[id].name}</span>`).join('')}</div>`;
+    `<span class="level-chip" title="Stufe ${lvl}: ${CITY_REWARDS[id].desc}">${CITY_REWARDS[id].name}</span>`).join('')}</div>`;
 }
 
 // Auswahl-Dialog für die Belohnung einer aufgestiegenen Stadt.
