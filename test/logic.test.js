@@ -476,6 +476,70 @@ test('Aufrüsten: nächste Stufe gegen Preisunterschied, im eigenen Gebiet, Verl
   assert.strictEqual(R.upgradeOption(st, unit('d', 'player_1', 'defender', 5, 5)), null, 'keine höhere Stufe');
 });
 
+test('Neue Gebäude: Windmühle, Schmelzhütte, Markt, Burg, Kloster; Zünfte, Dreifelder, Fischzucht', () => {
+  const st = makeState();
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1, rewards: { 4: 'borders' } };
+  st.cities = [city];
+  st.improvements = { '6,5': 'farm', '6,4': 'farm' };
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'mill', 7, 4), 2, 'Mühle neben zwei Farmen');
+  st.improvements['7,4'] = 'mill';
+  const base = R.cityIncome(st, city);
+  st.terrain[3 * MAP_W + 7] = 'mountain';
+  st.improvements['7,3'] = 'mine';
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'forge', 6, 3), 2 * 1, 'Schmelzhütte: 2 je Mine');
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'market', 6, 3), 2, 'Markt: je Nachbargebäude 1');
+  for (const k of ['5,3', '5,4', '6,2', '7,2']) st.improvements[k] = 'farm';
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'market', 6, 3), 4, 'Markt höchstens 4');
+  for (const k of ['5,3', '5,4', '6,2', '7,2']) delete st.improvements[k];
+  assert.ok(R.cityIncome(st, city) > base, 'Mine zählt');
+  st.techs.player_1.push('farming', 'construction', 'mills', 'planning', 'rotation');
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'farm', 6, 5), 2, 'Fruchtfolge');
+  st.techs.player_1.push('roads', 'trade', 'markets', 'banking', 'guilds');
+  assert.strictEqual(R.improvementCost(st, 'player_1', 'market'), IMPROVEMENTS.market.cost - 2, 'Zünfte');
+  // Burg: 3-fache Verteidigung
+  st.improvements['4,5'] = 'fort';
+  const d = unit('d', 'player_1', 'defender', 4, 5);
+  assert.strictEqual(R.defenceBonus(st, d), 3);
+  // Fischzucht
+  st.resources = { '4,6': 'fish' };
+  st.terrain[6 * MAP_W + 4] = 'water';
+  const before = R.cityIncome(st, city);
+  st.techs.player_1.push('fishing', 'ramming', 'aquatism', 'fishfarming');
+  assert.strictEqual(R.cityIncome(st, city), before + 1);
+  // Kloster: +2 Heilung im Stadtgebiet
+  st.improvements['5,6'] = 'monastery';
+  const hurt = unit('h', 'player_1', 'warrior', 4, 4, { hp: 2 });
+  st.units = [hurt];
+  R.startTurn(st);
+  assert.strictEqual(hurt.hp, 2 + 2 + 2, 'normal 2 + Kloster 2');
+});
+
+test('Neue Einheiten: Pikenier gegen Reiterei, Armbrust, Paladin; Plattenrüstung, Buchdruck, Kartografie', () => {
+  const st = makeState();
+  const pike = unit('p', 'player_1', 'pikeman', 5, 5), sword = unit('s', 'player_1', 'swordsman', 5, 5);
+  const knight = unit('k', 'player_2', 'knight', 6, 5);
+  const vsPike = R.battleResults(st, knight, pike), vsWar = R.battleResults(st, knight, unit('w', 'player_1', 'warrior', 5, 5));
+  assert.ok(vsPike.retaliation > vsWar.retaliation, 'Pikenwall beim Gegenschlag');
+  assert.ok(R.battleResults(st, pike, knight).damage > R.battleResults(st, unit('w2', 'player_1', 'warrior', 5, 5), knight).damage);
+  assert.strictEqual(UNITS.crossbow.range, 2);
+  st.techs.player_1.push('climbing', 'mining', 'smithery', 'smelting', 'steel', 'plate');
+  assert.strictEqual(R.defenseOf(st, sword), UNITS.swordsman.def + 1, 'Plattenrüstung');
+  // Paladin als Aufrüstung des Ritters
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }];
+  const kn = unit('kn', 'player_1', 'knight', 5, 5);
+  st.units = [kn];
+  st.techs.player_1.push('riding', 'freespirit', 'chivalry', 'horseshoes', 'tournaments', 'paladins');
+  st.stars.player_1 = 30;
+  assert.ok(R.upgradeUnit(st, kn, 'player_1').ok && kn.type === 'paladin');
+  // Buchdruck verbilligt Forschung, Kartografie erweitert die Sicht
+  const c0 = R.techCost(st, 'ballooning', 'player_1');
+  st.techs.player_1.push('meditation', 'philosophy', 'scholarship', 'printing');
+  assert.ok(R.techCost(st, 'ballooning', 'player_1') < c0 + 8, 'günstiger trotz 4 weiteren Techs');
+  const sight = R.unitSight(st, kn);
+  st.techs.player_1.push('fishing', 'sailing', 'navigation', 'cartography');
+  assert.strictEqual(R.unitSight(st, kn), sight + 2, 'Segeln +1 und Kartografie +1');
+});
+
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {
   const st = makeState();
   st.explored = { player_1: [], player_2: [] };
@@ -761,7 +825,8 @@ test('Forschung: Voraussetzungen, Kostenskalierung, Philosophie-Rabatt', () => {
   st.cities.push({ q: 5, r: 5, owner: 'player_1', pop: 1, trained: false });
   assert.strictEqual(R.techCost(st, 'hunting', 'player_1'), 3 + 2 * 2, 'Tier1 * (1 + 2 Städte) + 2 je bekannter Technik');
   assert.strictEqual(R.techCost(st, 'smithery', 'player_1'), 4 * 3 + 2 * 2, 'Stufe 3: Faktor 4');
-  assert.strictEqual(R.techCost(st, 'banking', 'player_1'), 6 * 3 + 2 * 2, 'Stufe 4: Faktor 6');
+  assert.strictEqual(R.techCost(st, 'markets', 'player_1'), 6 * 3 + 2 * 2, 'Stufe 4: Faktor 6');
+  assert.strictEqual(R.techCost(st, 'banking', 'player_1'), 8 * 3 + 2 * 2, 'Stufe 5: Faktor 8');
 
   const before = R.techCost(st, 'philosophy', 'player_1');
   st.techs.player_1.push('philosophy');
