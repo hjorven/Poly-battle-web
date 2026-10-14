@@ -50,7 +50,7 @@ function defendStep(state, player) {
   for (const city of R.citiesFor(state, player)) {
     if (R.unitAt(state, city.q, city.r) || !threatTo(state, player, city)) continue;
     const k = hk(city.q, city.r);
-    const guard = state.units.find(u => u.owner === player && u.type !== 'settler' && u.type !== 'spy' &&
+    const guard = state.units.find(u => u.owner === player && u.type !== 'settler' && u.type !== 'spy' && !R.isAir(u.type) &&
       !u.carry && UNITS[u.type].atk > 0 && !R.cityAt(state, u.q, u.r) && R.reachableMap(state, u).has(k));
     if (guard) return { kind: 'move', unit: guard, q: city.q, r: city.r };
     for (const t of ['defender', 'swordsman', 'archer', 'warrior']) {
@@ -61,6 +61,16 @@ function defendStep(state, player) {
 }
 
 // Ein Spion pro KI ab Runde 3, solange noch Land unentdeckt ist.
+// Ein Heißluftballon als Späher, sobald ein Ballonplatz steht.
+function balloonTrainStep(state, player) {
+  if (state.units.some(u => u.owner === player && u.type === 'balloon')) return null;
+  if (state.stars[player] < R.unitCost(state, player, 'balloon') + 6) return null;
+  for (const c of R.citiesFor(state, player)) {
+    if (R.canTrain(state, c, 'balloon', player).ok) return { kind: 'train', city: c, type: 'balloon' };
+  }
+  return null;
+}
+
 function spyTrainStep(state, player) {
   if (state.round < 3 || state.units.some(u => u.owner === player && u.type === 'spy')) return null;
   const explored = (state.explored && state.explored[player]) || [];
@@ -129,6 +139,9 @@ function bestBuilding(state, player) {
   // Ohne Hafen keine Schiffe: mit Segeln den ersten Hafen bevorzugen.
   const needsPort = state.techs[player].includes('sailing') &&
     !R.citiesFor(state, player).some(c => R.cityPorts(state, c).length);
+  // Mit Ballonfahrt den ersten Ballonplatz vorziehen (sonst belegen Farmen alle Felder).
+  const needsAirfield = state.techs[player].includes('ballooning') &&
+    !R.citiesFor(state, player).some(c => R.cityAirfields(state, c).length);
   let best = null;
   for (const city of R.citiesFor(state, player)) {
     if (!needsPort && city.pop < 2 && state.cities.filter(c => c.owner === player).length < 3) continue;
@@ -140,10 +153,12 @@ function bestBuilding(state, player) {
       for (const type of Object.keys(IMPROVEMENTS)) {
         const def = IMPROVEMENTS[type];
         if (def.monument || (def.tech && !state.techs[player].includes(def.tech))) continue;
+        // Ein Ballonplatz pro Stamm reicht.
+        if (type === 'airfield' && state.cities.some(c => c.owner === player && R.cityAirfields(state, c).length)) continue;
         if (type === 'port' && hasPort) continue;
         if (stars < def.cost + 2) continue;
         if (!R.canImprove(state, city, type, q, r).ok) continue;
-        const score = def.pop / def.cost + (type === 'port' && needsPort ? 1 : 0);
+        const score = def.pop / def.cost + (type === 'port' && needsPort ? 1 : 0) + (type === 'airfield' && needsAirfield ? 1 : 0);
         if (!best || score > best.score) best = { kind: 'improve', city, type, q, r, score };
       }
     }
@@ -349,12 +364,14 @@ export function botStep(state, player) {
 
   const spyTrain = spyTrainStep(state, player);
   if (spyTrain) return spyTrain;
+  const balloonTrain = balloonTrainStep(state, player);
+  if (balloonTrain) return balloonTrain;
 
   for (const c of R.citiesFor(state, player)) {
     const unlocked = R.unlockedUnits(state, player);
     const stars = state.stars[player];
     const order = [
-      'giant', 'knight', 'battleship', 'ship', 'swordsman', 'catapult',
+      'giant', 'knight', 'battleship', 'airship', 'ship', 'swordsman', 'catapult', 'fireballoon',
       'boat', 'mindbender', 'archer', 'defender', 'rider', 'warrior'
     ];
     // Bestes Wunschziel, das hier gerade möglich ist (Land- und Schiffsplatz getrennt).
@@ -383,7 +400,7 @@ export function botStep(state, player) {
 
   for (const u of mine) {
     if (u.acted && u.mp <= 0) continue;
-    if (u.type === 'spy') {
+    if (u.type === 'spy' || u.type === 'balloon') {
       const mv = spyMove(state, u);
       if (mv) return mv;
       continue;
@@ -415,7 +432,7 @@ export function botStep(state, player) {
     'philosophy', 'smithery', 'construction', 'freespirit', 'chivalry',
     'trade', 'spiritualism', 'fishing', 'sailing', 'ramming', 'navigation', 'aquatism', 'diplomacy',
     'banking', 'steel', 'scholarship', 'planning', 'medicine', 'horseshoes', 'engineering', 'seapower',
-    'harbors', 'espionage'
+    'harbors', 'espionage', 'ballooning', 'airships'
   ];
   if (R.citiesFor(state, player).some(c => R.coastal(state, c))) {
     techOrder.splice(techOrder.indexOf('roads') + 1, 0, ...techOrder.splice(techOrder.indexOf('fishing'), 2));

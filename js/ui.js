@@ -8,8 +8,9 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, loadOptions, unloadOptions, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
+import { DIRS } from './hex.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
@@ -436,6 +437,21 @@ export function showUnitPanel(state, unit, ctx) {
           <span class="cost">${ROAD.cost} Sterne</span></button></div>`;
       }
     }
+    // Lastenballon: Fracht aufnehmen oder absetzen.
+    const dirTo = (q, r) => DIRS.findIndex(([dq, dr]) => unit.q + dq === q && unit.r + dr === r);
+    if (unit.cargo) {
+      extra += `<div class="hint">Fracht: ${esc(UNITS[unit.cargo.type].name)}</div>`;
+      const spots = unloadOptions(state, unit);
+      if (spots.length) {
+        extra += `<div class="action-list">${spots.map(([q, r]) => `<button class="btn action" data-unload="${q},${r}">
+          <span>Absetzen nach ${DIR_NAMES[dirTo(q, r)]}<span class="sub">Fracht steigt aus · verbraucht den Zug</span></span></button>`).join('')}</div>`;
+      } else if (!unit.acted) extra += `<div class="hint">Zum Absetzen neben ein freies Landfeld fliegen.</div>`;
+    }
+    const loads = loadOptions(state, unit);
+    if (loads.length) {
+      extra += `<div class="action-list">${loads.map(u => `<button class="btn action" data-load="${u.id}">
+        <span>Aufnehmen: ${esc(UNITS[u.type].name)} (${DIR_NAMES[dirTo(u.q, u.r)]})<span class="sub">Die Einheit fliegt mit</span></span></button>`).join('')}</div>`;
+    }
     const breakable = destroyableBridges(state, unit);
     if (breakable.length) {
       extra += `<div class="action-list">${breakable.map(([q, r]) =>
@@ -485,6 +501,11 @@ export function showUnitPanel(state, unit, ctx) {
     <div class="hint">${hint}</div>
   `);
   wirePanel($('panel'));
+  $('panel').querySelectorAll('[data-load]').forEach(btn => btn.addEventListener('click', () => handlers.onLoadCargo(unit, btn.dataset.load)));
+  $('panel').querySelectorAll('[data-unload]').forEach(btn => btn.addEventListener('click', () => {
+    const [q, r] = btn.dataset.unload.split(',').map(Number);
+    handlers.onUnloadCargo(unit, q, r);
+  }));
   const roadBtn = $('panel').querySelector('[data-road]');
   if (roadBtn) roadBtn.addEventListener('click', () => handlers.onBuildRoad(unit.q, unit.r, unit));
   const foundBtn = $('panel').querySelector('[data-found]');
@@ -857,37 +878,36 @@ function layoutTechs(portrait) {
   if (!portrait) {
     const rowY = [TREE_PAD + HEX_H / 2];
     rowY.push(rowY[0] + HEX_H * 0.75 + 6);
-    rowY.push(rowY[1] + HEX_H + 12);
-    rowY.push(rowY[2] + HEX_H + 12);
+    for (let k = 2; k < 6; k++) rowY.push(rowY[k - 1] + HEX_H + 12);
     const colX = c => TREE_PAD + (c + 0.5) * COL_W;
+    let depth = 1;
+    // Ab Stufe 2 läuft jeder Ast in seiner Spalte nach unten (auch Stufe 5/6).
+    const down = (id, col, row) => {
+      pos[id] = { x: colX(col), y: rowY[row] };
+      depth = Math.max(depth, row);
+      for (const c of CHILDREN[id] || []) down(c, col, row + 1);
+    };
     ROOTS.forEach((root, i) => {
       pos[root] = { x: TREE_PAD + (2 * i + 1) * COL_W, y: rowY[0] };
-      (CHILDREN[root] || []).forEach((child, j) => {
-        pos[child] = { x: colX(2 * i + j), y: rowY[1] };
-        for (const leaf of CHILDREN[child] || []) {
-          pos[leaf] = { x: colX(2 * i + j), y: rowY[2] };
-          for (const top of CHILDREN[leaf] || []) pos[top] = { x: colX(2 * i + j), y: rowY[3] };
-        }
-      });
+      (CHILDREN[root] || []).forEach((child, j) => down(child, 2 * i + j, 1));
     });
-    return { pos, w: TREE_PAD * 2 + ROOTS.length * 2 * COL_W, h: rowY[3] + HEX_H / 2 + TREE_PAD };
+    return { pos, w: TREE_PAD * 2 + ROOTS.length * 2 * COL_W, h: rowY[depth] + HEX_H / 2 + TREE_PAD };
   }
   const colX = [TREE_PAD + HEX_W / 2];
   colX.push(colX[0] + COL_W * 0.86);
-  colX.push(colX[1] + COL_W + 6);
-  colX.push(colX[2] + COL_W + 6);
+  for (let k = 2; k < 6; k++) colX.push(colX[k - 1] + COL_W + 6);
   const rowY = r => TREE_PAD + (r + 0.5) * ROW_H;
+  let depth = 1;
+  const right = (id, row, col) => {
+    pos[id] = { x: colX[col], y: rowY(row) };
+    depth = Math.max(depth, col);
+    for (const c of CHILDREN[id] || []) right(c, row, col + 1);
+  };
   ROOTS.forEach((root, i) => {
     pos[root] = { x: colX[0], y: TREE_PAD + (2 * i + 1) * ROW_H };
-    (CHILDREN[root] || []).forEach((child, j) => {
-      pos[child] = { x: colX[1], y: rowY(2 * i + j) };
-      for (const leaf of CHILDREN[child] || []) {
-        pos[leaf] = { x: colX[2], y: rowY(2 * i + j) };
-        for (const top of CHILDREN[leaf] || []) pos[top] = { x: colX[3], y: rowY(2 * i + j) };
-      }
-    });
+    (CHILDREN[root] || []).forEach((child, j) => right(child, 2 * i + j, 1));
   });
-  return { pos, w: colX[3] + HEX_W / 2 + TREE_PAD, h: TREE_PAD * 2 + ROOTS.length * 2 * ROW_H };
+  return { pos, w: colX[depth] + HEX_W / 2 + TREE_PAD, h: TREE_PAD * 2 + ROOTS.length * 2 * ROW_H };
 }
 
 // Was eine Technologie freischaltet (Einheiten, Gebäude) – für die Details.

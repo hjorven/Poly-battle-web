@@ -324,9 +324,18 @@ function hasTech(state, owner, tech) {
 }
 
 // q/r sind optional: Nur mit Koordinaten werden Brücken berücksichtigt.
+export function isAir(type) {
+  return hasAbility(type, 'air');
+}
+
 export function canEnter(state, unit, tile, q, r) {
   const t = TERRAIN[tile];
   if (!t) return false;
+  // Luft-Einheiten fliegen überall hin, nur nicht in fremde Städte.
+  if (isAir(unit.type)) {
+    const c = q != null ? cityAt(state, q, r) : null;
+    return !c || c.owner === unit.owner;
+  }
   if (hasAbility(unit.type, 'water')) {
     if (tile === 'water' || tile === 'ocean') return true;
     // Eingeschiffte Landeinheiten dürfen wieder an Land gehen.
@@ -346,6 +355,7 @@ export function canEnter(state, unit, tile, q, r) {
 // für Landeinheiten wie ebenes Land 1.
 export function moveCost(state, unit, q, r) {
   const tile = terrainAt(state, q, r);
+  if (isAir(unit.type)) return 1;
   if (hasAbility(unit.type, 'water') && isWet(tile)) return 1;
   if (bridgeAt(state, q, r)) return 1;
   // Wege: im eigenen Gebiet kostet jedes Landfeld nur 1 Bewegung.
@@ -365,6 +375,7 @@ export function ownPort(state, owner, q, r) {
 // Wechselt die Einheit mit diesem Schritt zwischen Land und Wasser?
 // (Für Schiffe ist ein Brückenfeld Wasser, für Landeinheiten Land.)
 export function switchesDomain(state, unit, q, r) {
+  if (isAir(unit.type)) return false;
   const wet = isWet(terrainAt(state, q, r));
   if (hasAbility(unit.type, 'water')) return !wet;
   return wet && !bridgeAt(state, q, r);
@@ -416,6 +427,7 @@ export function buildRoad(state, player, q, r, unit = null) {
 }
 
 export function defenceBonus(state, defender) {
+  if (isAir(defender.type)) return DEF_BONUS.none;
   const tile = terrainAt(state, defender.q, defender.r);
   const t = TERRAIN[tile];
   let b = t.def;
@@ -436,8 +448,20 @@ export function battleResults(state, attacker, defender) {
   const df = D.def * (defender.hp / hpCap(defender)) * defenceBonus(state, defender);
   const total = af + df;
   if (total <= 0) return { damage: 0, retaliation: 0 };
-  const damage = Math.round((af / total) * atk * ACCELERATOR);
-  const retaliation = Math.round((df / total) * D.def * ACCELERATOR);
+  let damage = Math.round((af / total) * atk * ACCELERATOR);
+  let retaliation = Math.round((df / total) * D.def * ACCELERATOR);
+  const ranged = u => UNITS[u.type].range >= 2;
+  // Fernkämpfer gegen Luft: Zerbrechliches fällt sofort, große Hüllen leiden doppelt.
+  if (isAir(defender.type) && ranged(attacker)) {
+    if (hasAbility(defender.type, 'fragile')) damage = defender.hp;
+    else if (hasAbility(defender.type, 'flak')) damage *= 2;
+  }
+  if (isAir(attacker.type)) {
+    // Nahkämpfer können nicht nach oben zurückschlagen.
+    if (!ranged(defender)) retaliation = 0;
+    else if (retaliation > 0 && hasAbility(attacker.type, 'fragile')) retaliation = attacker.hp;
+    else if (hasAbility(attacker.type, 'flak')) retaliation *= 2;
+  }
   return { damage, retaliation };
 }
 
@@ -583,6 +607,7 @@ export function threatenedCities(state, player) {
 // Gegner steht – auch wenn sie sich bewegt hat.
 export function canRegenerate(state, u) {
   if (u.hp >= hpCap(u) || u.acted) return false;
+  if (isAir(u.type) && !ownLand(state, u.owner, u.q, u.r)) return false;
   if (hasAbility(u.type, 'fortify') && !u.hasMoved) return true;
   return !threatened(state, u);
 }
@@ -677,7 +702,8 @@ export function reachableMap(state, unit) {
   if (unit.acted && !(hasAbility(unit.type, 'escape') || hasAbility(unit.type, 'persist'))) return out;
   // Intern in halben Schritten rechnen (Straße zu Straße = 1 halber Schritt).
   const budget = Math.round(unit.mp * 2);
-  const land = !hasAbility(unit.type, 'water');
+  const land = !hasAbility(unit.type, 'water') && !isAir(unit.type);
+  const flying = isAir(unit.type);
   const occ = occupancy(state);
   const zocCache = new Map();
   const zoc = (q, r) => {
@@ -708,7 +734,7 @@ export function reachableMap(state, unit) {
           dist.set(k, nc);
           // Kontrollzone: Neben einem Feind endet der Zug; auch nach dem
           // Wechsel zwischen Land und Wasser geht es nicht weiter.
-          if (!switching && !zoc(nq, nr)) (buckets[nc] || (buckets[nc] = [])).push([nq, nr]);
+          if (!switching && (flying || !zoc(nq, nr))) (buckets[nc] || (buckets[nc] = [])).push([nq, nr]);
         }
       }
     }
@@ -738,6 +764,8 @@ export function attackTargets(state, unit) {
   const range = UNITS[unit.type].range;
   return state.units.filter(u =>
     hostile(state, unit.owner, u.owner) &&
+    // Luft-Einheiten erreichen nur Fernkämpfer (Reichweite ab 2).
+    !(isAir(u.type) && range < 2) &&
     hexDistance(unit.q, unit.r, u.q, u.r) <= range &&
     isVisible(state, unit.owner, u.q, u.r)
   );
@@ -832,7 +860,7 @@ export function attack(state, attacker, defender) {
     events.push({ kind: 'bounty', player: attacker.owner, stars: BOUNTY });
     const promo = addKill(attacker);
     if (promo) events.push(promo);
-    if (UNITS[attacker.type].range === 1 && !switchesDomain(state, attacker, defender.q, defender.r)) {
+    if (UNITS[attacker.type].range === 1 && !isAir(attacker.type) && !switchesDomain(state, attacker, defender.q, defender.r)) {
       const tile = terrainAt(state, defender.q, defender.r);
       if (canEnter(state, attacker, tile, defender.q, defender.r) && !unitAt(state, defender.q, defender.r)) {
         attacker.q = defender.q;
@@ -900,7 +928,7 @@ export function moveUnit(state, unit, q, r) {
     unit.mp = 0;
   }
   const city = cityAt(state, q, r);
-  if (city && city.owner !== unit.owner) {
+  if (city && city.owner !== unit.owner && !isAir(unit.type)) {
     const prev = city.owner;
     city.owner = unit.owner;
     events.push({ kind: 'capture', city, from: prev, to: unit.owner });
@@ -943,7 +971,12 @@ export function cityPorts(state, city) {
   return cityTiles(state, city).filter(([q, r]) => improvementAt(state, q, r) === 'port');
 }
 
+export function cityAirfields(state, city) {
+  return cityTiles(state, city).filter(([q, r]) => improvementAt(state, q, r) === 'airfield');
+}
+
 export function spawnSpot(state, city, type) {
+  if (isAir(type)) return cityAirfields(state, city).find(([q, r]) => !unitAt(state, q, r)) || null;
   if (!hasAbility(type, 'water')) return unitAt(state, city.q, city.r) ? null : [city.q, city.r];
   return cityPorts(state, city).find(([q, r]) => !unitAt(state, q, r)) || null;
 }
@@ -964,6 +997,9 @@ export function canTrain(state, city, type, player) {
   if (hasAbility(type, 'water')) {
     if (!cityPorts(state, city).length) return { ok: false, reason: 'Hafen nötig' };
     if (!spawnSpot(state, city, type)) return { ok: false, reason: 'Hafen besetzt' };
+  } else if (isAir(type)) {
+    if (!cityAirfields(state, city).length) return { ok: false, reason: 'Ballonplatz nötig' };
+    if (!spawnSpot(state, city, type)) return { ok: false, reason: 'Ballonplatz besetzt' };
   } else if (unitAt(state, city.q, city.r)) return { ok: false, reason: 'Stadt besetzt' };
   if (state.stars[player] < unitCost(state, player, type)) return { ok: false, reason: 'Zu wenig Sterne' };
   return { ok: true };
@@ -1160,12 +1196,59 @@ export function disbandUnit(state, unit, player) {
 // --- Bereite Einheiten (Tipps) ---------------------------------------------
 
 // Was eine Einheit in diesem Zug noch sinnvoll tun kann (leer = nichts).
+// --- Lastenballon ----------------------------------------------------------------
+// Nimmt eine benachbarte eigene Landeinheit auf (sie verschwindet von der Karte)
+// und setzt sie später auf ein freies Nachbarfeld ab. Fällt der Ballon, ist
+// auch die Fracht verloren.
+
+const isLandType = t => !hasAbility(t, 'water') && !isAir(t);
+
+export function loadOptions(state, balloon) {
+  if (!hasAbility(balloon.type, 'cargo') || balloon.cargo || balloon.acted) return [];
+  return state.units.filter(u => u.owner === balloon.owner && u !== balloon && isLandType(u.type) &&
+    !u.acted && hexDistance(u.q, u.r, balloon.q, balloon.r) === 1);
+}
+
+export function loadCargo(state, balloon, unit) {
+  if (!loadOptions(state, balloon).includes(unit)) return { ok: false, reason: 'Kann diese Einheit nicht aufnehmen' };
+  state.units = state.units.filter(u => u !== unit);
+  balloon.cargo = { ...unit };
+  return { ok: true };
+}
+
+export function unloadOptions(state, balloon) {
+  if (!balloon.cargo || balloon.acted) return [];
+  const cargo = { ...balloon.cargo, owner: balloon.owner };
+  return neighbors(balloon.q, balloon.r).filter(([q, r]) => {
+    if (unitAt(state, q, r)) return false;
+    const c = cityAt(state, q, r);
+    if (c && c.owner !== balloon.owner) return false;
+    return canEnter(state, cargo, terrainAt(state, q, r), q, r) && !isWet(terrainAt(state, q, r));
+  });
+}
+
+export function unloadCargo(state, balloon, q, r) {
+  if (!unloadOptions(state, balloon).some(([a, b]) => a === q && b === r)) return { ok: false, reason: 'Hier kann nicht abgesetzt werden' };
+  const u = { ...balloon.cargo, q, r, mp: 0, acted: true, hasMoved: true };
+  delete balloon.cargo;
+  state.units.push(u);
+  balloon.acted = true;
+  balloon.mp = 0;
+  const events = [];
+  const ruin = claimRuin(state, u);
+  if (ruin) events.push(ruin);
+  updateExplored(state, u.owner);
+  return { ok: true, unit: u, events };
+}
+
 export function unitOptions(state, unit) {
   if (unit.acted && unit.mp <= 0) return [];
   const out = [];
   if (attackTargets(state, unit).length) out.push(hasAbility(unit.type, 'convert') ? 'bekehren' : 'angreifen');
   if (unit.mp > 0 && reachableMap(state, unit).size) out.push('ziehen');
   if (!unit.acted && unit.type === 'settler' && canFound(state, unit, unit.owner).ok) out.push('Stadt gründen');
+  if (loadOptions(state, unit).length) out.push('aufnehmen');
+  if (unloadOptions(state, unit).length) out.push('absetzen');
   return out;
 }
 
