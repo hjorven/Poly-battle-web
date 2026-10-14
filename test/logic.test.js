@@ -9,6 +9,7 @@ import { botStep, applyStep } from '../js/ai.js';
 import { saveGame, loadGame, saveInfo, clearSave, validState } from '../js/save.js';
 import * as P from '../js/profile.js';
 import * as K from '../js/campaign.js';
+import * as A from '../js/admin.js';
 
 let passed = 0;
 let failed = 0;
@@ -1963,6 +1964,174 @@ test('KI besetzt eine leere, bedrohte Stadt', () => {
   const step = botStep(st, 'player_1');
   assert.strictEqual(step.kind, 'move');
   assert.deepStrictEqual([step.q, step.r], [5, 5]);
+});
+
+// --- Admin-/Kreativ-Panel ---------------------------------------------------------
+
+const adminGame = () => R.createGame(4242, 3, { ai: ['player_2', 'player_3'], aiLevel: 'easy' });
+const freeHex = (st, wantWet) => {
+  let hit = null;
+  forEachHex((q, r) => {
+    if (hit) return;
+    const t = R.terrainAt(st, q, r);
+    const wet = t === 'water' || t === 'ocean';
+    if (wet === wantWet && TERRAIN[t] && (wantWet || TERRAIN[t].walkable) && !R.unitAt(st, q, r) && !R.cityAt(st, q, r)) hit = [q, r];
+  });
+  return hit;
+};
+
+test('Admin: falscher Code wird abgelehnt, Hash hat 64 Zeichen', async () => {
+  assert.strictEqual(A.ADMIN_HASH.length, 64);
+  assert.strictEqual(await A.checkCode('falsch'), false);
+});
+
+test('Admin: Sterne, Technik mit Voraussetzungen, Markierung', () => {
+  const st = adminGame();
+  assert.ok(!st.admin);
+  A.setStars(st, 'player_1', 500);
+  assert.strictEqual(st.stars.player_1, 500);
+  assert.ok(st.admin);
+  A.setStars(st, 'player_1', -5);
+  assert.strictEqual(st.stars.player_1, 0);
+  const deep = Object.keys(TECHS).find(t => TECHS[t].req && TECHS[TECHS[t].req].req);
+  A.grantTech(st, 'player_1', deep);
+  for (let t = deep; t; t = TECHS[t].req) assert.ok(st.techs.player_1.includes(t), t);
+  A.grantTech(st, 'player_1', 'all');
+  assert.strictEqual(new Set(st.techs.player_1).size, st.techs.player_1.length);
+  for (const t of Object.keys(TECHS)) assert.ok(st.techs.player_1.includes(t));
+});
+
+test('Admin: Einheit setzen prüft Gelände, Belegung und Karte', () => {
+  const st = adminGame();
+  const [lq, lr] = freeHex(st, false);
+  const [wq, wr] = freeHex(st, true);
+  assert.ok(A.spawnUnit(st, 'player_1', 'knight', lq, lr).ok);
+  assert.strictEqual(A.spawnUnit(st, 'player_1', 'warrior', lq, lr).ok, false);
+  assert.strictEqual(A.spawnUnit(st, 'player_1', 'warrior', wq, wr).ok, false);
+  assert.ok(A.spawnUnit(st, 'player_2', 'battleship', wq, wr).ok);
+  assert.strictEqual(A.spawnUnit(st, 'player_1', 'warrior', -1, 3).ok, false);
+  assert.strictEqual(A.spawnUnit(st, 'player_9', 'warrior', lq, lr + 1).ok, false);
+  assert.strictEqual(A.spawnUnit(st, 'player_1', 'drache', lq, lr + 1).ok, false);
+  const k = R.unitAt(st, lq, lr);
+  assert.strictEqual(k.hp, UNITS.knight.hp);
+  assert.ok(k.mp > 0 && !k.acted);
+});
+
+test('Admin: Einheit heilen, verletzen, Veteran, entfernen', () => {
+  const st = adminGame();
+  const u = st.units.find(x => x.owner === 'player_1');
+  A.hurtUnit(st, u);
+  assert.ok(u.hp < R.hpCap(u) && u.hp >= 1);
+  A.makeVeteran(st, u);
+  assert.ok(u.vet);
+  assert.strictEqual(u.hp, R.hpCap(u));
+  A.killUnit(st, u);
+  assert.ok(!st.units.includes(u));
+});
+
+test('Admin: Stadt wachsen lässt Belohnungen offen, Besitzer wechseln', () => {
+  const st = adminGame();
+  const c = st.cities.find(x => x.owner === 'player_1');
+  A.setCityPop(st, c, 5);
+  assert.strictEqual(c.pop, 5);
+  assert.deepStrictEqual(c.pending, [2, 3, 4, 5]);
+  A.setCityPop(st, c, 2);
+  assert.strictEqual(c.pop, 2);
+  assert.deepStrictEqual(c.pending, [2]);
+  const foe = st.cities.find(x => x.owner === 'player_2');
+  assert.ok(A.setCityOwner(st, foe, 'player_1').ok);
+  assert.strictEqual(foe.owner, 'player_1');
+  assert.strictEqual(A.setCityOwner(st, foe, 'player_7').ok, false);
+  A.toggleWall(st, c);
+  assert.strictEqual(c.rewards[3], 'wall');
+  A.toggleWall(st, c);
+  assert.ok(!c.rewards[3]);
+});
+
+test('Admin: Gelände malen räumt Unpassendes ab und schützt Einheiten/Städte', () => {
+  const st = adminGame();
+  const [q, r] = freeHex(st, false);
+  st.improvements[hk(q, r)] = 'farm';
+  st.terrain[r * st.mapW + q] = 'field';
+  assert.ok(A.paintTerrain(st, q, r, 'forest').ok);
+  assert.strictEqual(R.terrainAt(st, q, r), 'forest');
+  assert.ok(!st.improvements[hk(q, r)]);
+  const c = st.cities[0];
+  assert.strictEqual(A.paintTerrain(st, c.q, c.r, 'ocean').ok, false);
+  const u = st.units.find(x => !R.cityAt(st, x.q, x.r)) || st.units[0];
+  assert.strictEqual(A.paintTerrain(st, u.q, u.r, 'water').ok, false);
+  assert.strictEqual(A.paintTerrain(st, 99, 99, 'field').ok, false);
+});
+
+test('Admin: Gebäude, Weg, Brücke, Rohstoff, Ruine, neue Stadt', () => {
+  const st = adminGame();
+  const [q, r] = freeHex(st, false);
+  st.terrain[r * st.mapW + q] = 'field';
+  assert.strictEqual(A.placeImprovement(st, q, r, 'mine').ok, false);
+  assert.ok(A.placeImprovement(st, q, r, 'farm').ok);
+  assert.strictEqual(st.improvements[hk(q, r)], 'farm');
+  assert.ok(A.placeImprovement(st, q, r, 'none').ok);
+  assert.ok(A.toggleRoad(st, q, r).ok && R.roadAt(st, q, r));
+  assert.ok(A.toggleRoad(st, q, r).ok && !R.roadAt(st, q, r));
+  assert.ok(A.setResource(st, q, r, 'fruit').ok);
+  assert.strictEqual(A.setResource(st, q, r, 'fish').ok, false);
+  assert.ok(A.toggleRuin(st, q, r).ok && st.ruins[hk(q, r)]);
+  assert.ok(A.toggleRuin(st, q, r).ok);
+  assert.ok(A.foundCity(st, q, r, 'player_1').ok);
+  assert.strictEqual(R.cityAt(st, q, r).owner, 'player_1');
+  assert.strictEqual(A.foundCity(st, q, r, null).ok, false);
+  forEachHex((bq, br) => { if (R.terrainAt(st, bq, br) === 'water') st.bridgeTest = st.bridgeTest || [bq, br]; });
+  const [bq, br] = st.bridgeTest;
+  assert.ok(A.toggleBridge(st, bq, br).ok && R.bridgeAt(st, bq, br));
+  assert.ok(A.toggleBridge(st, bq, br).ok && !R.bridgeAt(st, bq, br));
+  assert.strictEqual(A.toggleBridge(st, q, r).ok, false);
+});
+
+test('Admin: Runden vorspulen mit KI endet am Zug des Menschen', () => {
+  const st = adminGame();
+  A.advanceRounds(st, 5, { botStep, applyStep });
+  assert.ok(st.round >= 6 || st.winner);
+  if (!st.winner) assert.strictEqual(st.turn, 'player_1');
+  const st2 = adminGame();
+  A.advanceRounds(st2, 3);
+  assert.strictEqual(st2.round, 4);
+  assert.strictEqual(st2.turn, 'player_1');
+});
+
+test('Admin: sofort gewinnen und verlieren', () => {
+  const st = adminGame();
+  A.winNow(st, 'player_1');
+  assert.strictEqual(st.winner, 'player_1');
+  const st2 = adminGame();
+  A.loseNow(st2, 'player_1');
+  assert.ok(!R.alive(st2, 'player_1'));
+});
+
+test('Admin: Spielstand exportieren und wieder laden', () => {
+  const st = adminGame();
+  A.revealAll(st, 'player_1');
+  const back = A.importState(A.exportState(st), validState);
+  assert.ok(back.ok);
+  assert.strictEqual(back.state.admin, true);
+  assert.strictEqual(back.state.terrain.length, st.terrain.length);
+  assert.strictEqual(A.importState('{kaputt', validState).ok, false);
+  assert.strictEqual(A.importState('{"terrain":[]}', validState).ok, false);
+});
+
+test('Admin: Profilwerte setzen bleibt gültig', () => {
+  const p = P.emptyProfile();
+  A.setProfileLevel(p, 7, P.xpFor);
+  assert.strictEqual(P.levelOf(p.xp), 7);
+  A.unlockAchievements(p, Object.keys(P.ACHIEVEMENTS), '2026-10-14');
+  for (const cat of Object.keys(P.COSMETICS)) for (const id of Object.keys(P.COSMETICS[cat].items)) {
+    assert.ok(P.cosmeticUnlocked(p, cat, id), cat + ':' + id);
+  }
+  A.setCampaign(p, K.MISSIONS, 3);
+  assert.strictEqual(K.campaignStars(p), K.MISSIONS.length * 3);
+  A.setDailyStreak(p, 4, '2026-10-14');
+  const clean = P.sanitizeProfile(JSON.parse(JSON.stringify(p)));
+  assert.strictEqual(clean.daily.streak, 4);
+  assert.strictEqual(K.campaignStars(clean), K.MISSIONS.length * 3);
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
