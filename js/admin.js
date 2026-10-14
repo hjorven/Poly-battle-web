@@ -12,7 +12,7 @@ import { hk, forEachHex, inBounds } from './hex.js';
 // Aus dem Prüfwert lässt sich der Schlüssel nicht zurückrechnen, die
 // Freischaltung also nicht aus dem Quelltext abschreiben. Neues Passwort:
 //   npm run admin-passwort -- "dein Passwort"
-export const ADMIN_CHECK = '85baf7b05f06b522a71f0e99733e93de294e95fef24958eb7c9cc0394abc1ca1';
+export const ADMIN_CHECK = 'bb5f3a11c3a31872ff6e9eab6f22e98bf68cbf7282592f0539deff43fcdb2d5a';
 
 export async function sha256Hex(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
