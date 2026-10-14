@@ -20,6 +20,7 @@ const cityNodes = new Map();
 let highlightGroup;
 let idleGroup;
 let selectedMesh = null;
+let targetMesh = null;
 let selectedKey = null;
 let tweens = [];
 let effects = [];
@@ -158,6 +159,10 @@ export function initRender(canvas, opts = {}) {
     if (selectedMesh) {
       const s = 1 + Math.sin(now / 220) * 0.06;
       selectedMesh.scale.set(s, 1, s);
+    }
+    if (targetMesh) {
+      const s = 0.82 + Math.sin(now / 140) * 0.1;
+      targetMesh.scale.set(s, 1, s);
     }
     stepFog(now, dt);
     stepIdleMarkers(now);
@@ -2142,7 +2147,8 @@ const HL = {
   move: { color: 0xffffff, opacity: 0.34 },
   attack: { color: 0xff4d4d, opacity: 0.5 },
   city: { color: 0xffe14d, opacity: 0.34 },
-  bridge: { color: 0x60a5fa, opacity: 0.45 }
+  bridge: { color: 0x60a5fa, opacity: 0.45 },
+  target: { color: 0xfacc15, opacity: 0.7 }
 };
 
 const discGeo = () => geo('disc', () => new THREE.CylinderGeometry(0.8, 0.8, 0.07, 6));
@@ -2157,7 +2163,7 @@ function discMat(kind) {
   return discMats.get(kind);
 }
 
-export function setHighlights({ selected = null, move = null, attack = null, city = null, bridge = null } = {}) {
+export function setHighlights({ selected = null, move = null, attack = null, city = null, bridge = null, target = null } = {}) {
   if (!initialized) return;
   while (highlightGroup.children.length) highlightGroup.remove(highlightGroup.children[0]);
   selectedMesh = null;
@@ -2184,6 +2190,12 @@ export function setHighlights({ selected = null, move = null, attack = null, cit
   if (attack) for (const u of attack) addDisc(u.q, u.r, 'attack');
   if (city) addDisc(city.q, city.r, 'city');
   if (bridge) for (const [q, r] of bridge) addDisc(q, r, 'bridge');
+  targetMesh = null;
+  if (target) {
+    const [q, r] = target.split(',').map(Number);
+    addDisc(q, r, 'target', 0.07);
+    targetMesh = highlightGroup.children[highlightGroup.children.length - 1];
+  }
   fogClear = clear;
   applyFogClear();
 }
