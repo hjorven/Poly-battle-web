@@ -1,0 +1,53 @@
+# Technik
+
+Poly Battle ist reines HTML, CSS und JavaScript (ES-Module) ohne Build-Schritt. Die 3D-Ansicht nutzt [Three.js](https://threejs.org/) 0.160 über eine Importmap; der Online-Modus nutzt [Supabase](https://supabase.com/).
+
+## Starten
+
+```bash
+npm run serve   # statischer Server auf http://localhost:8080
+npm test        # Logiktests
+npm run wiki    # Datenseiten des Wikis neu erzeugen
+```
+
+## Aufbau
+
+| Datei | Aufgabe |
+|---|---|
+| `index.html` | Einstieg, Importmap, alle Dialoge |
+| `css/style.css` | Gestaltung |
+| `js/config.js` | Spieldaten und Balancing: Einheiten, Stämme, Technologien, Gebäude |
+| `js/hex.js` | Hex-Koordinaten (axial) |
+| `js/rules.js` | Spielregeln als reine Funktionen auf dem Spielstand |
+| `js/ai.js` | KI: `botStep` wählt einen Schritt, `applyStep` führt ihn aus |
+| `js/render.js` | Three.js-Szene: Gelände, Einheiten, Städte, Animationen |
+| `js/ui.js` | Menüs, Stadtmenü, Bau-Fenster, Forschungsbaum, Rundenbericht |
+| `js/main.js` | Verkabelung: Eingaben, Zugablauf, KI-Schleife, Speichern |
+| `js/net.js` | Online-Partien, Profile und Bestenliste über Supabase |
+| `js/save.js` | Lokaler Spielstand mit Plausibilitätsprüfung |
+| `js/profile.js` | Profil, Stufen, Erfolge, Aussehen, Tages-/Wochen-Herausforderung |
+| `js/campaign.js` | Kampagnen-Missionen |
+| `js/share.js` | Ergebnisbild zum Teilen |
+| `js/sound.js` | Soundeffekte (Web Audio) |
+| `test/logic.test.js` | Tests für Regeln, KI, Spielstand, Profil |
+| `scripts/gen-wiki.mjs` | erzeugt die Datenseiten dieses Wikis |
+| `supabase/migrations/` | Datenbank-Schema und Server-Funktionen |
+
+## Grundsätze
+
+- **Regeln sind rein.** `rules.js` kennt weder DOM noch Three.js; alles, was den Spielstand ändert, steht dort und ist testbar.
+- **Der Spielstand ist ein JSON-Objekt.** Er wird lokal gespeichert, online übertragen und beim Laden mit `validState` geprüft.
+- **Robust gegen alles.** Beschädigte Spielstände oder Profile dürfen das Spiel nie lahmlegen; Fehler in der KI oder in Nebeneffekten der Darstellung werden abgefangen.
+
+## Online-Server
+
+Alle Tabellen sind für Clients gesperrt (Row Level Security ohne Freigaben). Gelesen und geschrieben wird nur über Datenbank-Funktionen, die Eingaben prüfen:
+
+- Partien: `create_match`, `join_match`, `save_match` – nur wer mitspielt und am Zug ist, darf speichern.
+- Profile und Bestenliste: `pb_claim_name`, `pb_my_profile`, `pb_save_profile`, `pb_submit_score`, `pb_leaderboard` – Namen werden geprüft, Punkte auf Plausibilität begrenzt.
+
+Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Grenze: Der Server rechnet die Spielregeln nicht nach.
+
+## Tests
+
+`npm test` prüft Regeln, Kampf, KI-Partien, Spielstand, Profil und Admin-Werkzeuge, inklusive eines Zufalls-Tests (Fuzzing) der Regeln. Oberflächenänderungen sollten zusätzlich im Browser auf PC und Tablet ausprobiert werden.

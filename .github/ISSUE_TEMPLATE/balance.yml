@@ -1,0 +1,41 @@
+name: Balance
+description: Etwas ist zu stark, zu schwach oder unfair.
+title: "Balance: "
+labels: ["balance"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Die aktuellen Werte stehen im [Wiki](https://github.com/hjorven/Poly-battle-web/wiki) (Einheiten, Stämme, Technologien, Gebäude).
+  - type: input
+    id: was
+    attributes:
+      label: Was betrifft es?
+      placeholder: Ritter, Stamm Xin-Xi, Technologie Wege, KI auf Schwer …
+    validations:
+      required: true
+  - type: dropdown
+    id: richtung
+    attributes:
+      label: Dein Eindruck
+      options:
+        - zu stark
+        - zu schwach
+        - zu teuer
+        - zu billig
+        - unfair (Startplatz, KI, Karte)
+    validations:
+      required: true
+  - type: textarea
+    id: begruendung
+    attributes:
+      label: Woran machst du das fest?
+      description: Wie viele Partien, welche Einstellungen, was ist passiert?
+      placeholder: In 5 Partien auf Normal hat die KI mit Rittern jedes Mal bis Runde 15 zwei Städte erobert.
+    validations:
+      required: true
+  - type: textarea
+    id: vorschlag
+    attributes:
+      label: Vorschlag
+      placeholder: Ritter-Kosten von 8 auf 9 Sterne.
