@@ -362,6 +362,12 @@ export function botStep(state, player) {
   const settle = settleStep(state, player);
   if (settle) return settle;
 
+  // Aufrüsten, wenn genug Sterne übrig sind (Einheit steht noch im eigenen Gebiet).
+  for (const u of mine) {
+    const up = R.upgradeOption(state, u);
+    if (up && up.ok && state.stars[player] >= up.cost + 8) return { kind: 'upgrade', unit: u };
+  }
+
   const spyTrain = spyTrainStep(state, player);
   if (spyTrain) return spyTrain;
   const balloonTrain = balloonTrainStep(state, player);
@@ -463,6 +469,7 @@ export function applyStep(state, step, player) {
     case 'research': return R.research(state, step.tech, player);
     case 'reward': return R.chooseReward(state, step.city, step.choice, player);
     case 'war': return R.declareWar(state, player, step.target);
+    case 'upgrade': return R.upgradeUnit(state, step.unit, player);
     case 'road': {
       const res = R.buildRoad(state, player, step.q, step.r);
       if (res.ok) { if (!state.aiRoadRound) state.aiRoadRound = {}; state.aiRoadRound[player] = state.round; }
