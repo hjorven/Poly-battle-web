@@ -69,7 +69,7 @@ function statusText() {
   }
   if (app.mode === 'online') {
     if (!app.myRole) return `Zuschauer · Am Zug: ${needName(st, st.turn)}`;
-    if (!app.hasOpponent) return `Warte auf Mitspieler (${app.seated || 1}/${app.humanSeats || 2} da) – teile den Link (Menü → Link kopieren).`;
+    if (!app.hasOpponent) return `Warte auf Mitspieler (${app.seated || 1}/${app.humanSeats || 2} da) – teile den Link (im Menü auf „Link zum Spiel kopieren“).`;
     if (myTurn()) return `Du bist am Zug (${needName(st, app.myRole)})`;
     if (R.isBot(st, st.turn)) return `KI zieht (${needName(st, st.turn)}) …`;
     return `Gegner ist am Zug (${needName(st, st.turn)})`;
@@ -84,7 +84,7 @@ function refresh() {
   ui.setStatus(statusText());
   ui.setEndTurn(myTurn());
   const idle = myTurn() ? R.idleUnits(app.state, actAs()) : [];
-  ui.setIdle(idle.length);
+  ui.setTasks(openTasks());
   render.setIdleMarkers(idle);
   warnThreats();
   greetNewFaces();
@@ -193,7 +193,7 @@ function quote(ai, kind) {
   if (!persona || !persona.lines[kind]) return;
   const lines = persona.lines[kind];
   const line = lines[(st.round + ai.length + kind.length) % lines.length];
-  ui.toast(`„${line}“ – ${needName(st, ai)} (${persona.name})`, 'quote');
+  ui.speak(ai, line, `${needName(st, ai)}, ${persona.name}`);
 }
 
 // Erste Begegnung mit einer KI: Begrüßung in ihrem Ton.
@@ -226,10 +226,11 @@ function announceEliminations() {
     if (app.elimSeen.set.has(p)) continue;
     app.elimSeen.set.add(p);
     if (p === me) continue;
-    if (e.by === me) quote(p, 'doom');
-    const by = e.by === me ? 'dir' : e.by ? needName(st, e.by) : null;
-    ui.toast(`${needName(st, p)} wurde besiegt${by ? ` – von ${by}` : ''}!`, e.by === me ? 'good' : '');
-    if (e.by === me) sfx('win');
+    // Fremde Niederlagen stehen im Rundenbericht; sofort gemeldet wird nur dein eigener Sieg.
+    if (e.by !== me) continue;
+    quote(p, 'doom');
+    ui.toast(`Du hast ${needName(st, p)} besiegt`, 'good');
+    sfx('win');
   }
 }
 
@@ -251,26 +252,38 @@ function announceMonuments() {
 function warnThreats() {
   const mine = myTurn() && !app.state.winner;
   const threats = mine ? R.threatenedCities(app.state, actAs()) : [];
+  // Roter Ring an der Stadt; dazu ein Eintrag im Zugende-Assistenten (kein Extra-Hinweis).
   render.setThreatMarkers(threats);
-  if (!threats.length) return;
-  const key = `${app.state.round}:${actAs()}`;
-  if (app.threatWarned === key) return;
-  app.threatWarned = key;
-  ui.toast(threats.length === 1
-    ? 'Achtung: Eine deiner Städte ist bedroht (rot markiert)'
-    : `Achtung: ${threats.length} deiner Städte sind bedroht (rot markiert)`, 'warn');
 }
 
-// Reihum zur nächsten Einheit springen, die noch etwas tun kann.
+// Offene Aufgaben dieses Zuges: Einheiten, die handeln können, Städte, die
+// ausbilden können, offene Belohnungen und bedrohte Städte.
+function openTasks() {
+  if (!myTurn() || app.state.winner) return [];
+  const st = app.state, p = actAs();
+  const tasks = R.idleUnits(st, p).map(u => ({ kind: 'unit', id: u.id, q: u.q, r: u.r }));
+  for (const c of R.citiesFor(st, p)) {
+    if (R.pendingLevel(c)) tasks.push({ kind: 'reward', q: c.q, r: c.r });
+    else if (Object.keys(UNITS).some(t => !UNITS[t].reward && R.canTrain(st, c, t, p).ok)) tasks.push({ kind: 'train', q: c.q, r: c.r });
+  }
+  for (const c of R.threatenedCities(st, p)) tasks.push({ kind: 'threat', q: c.q, r: c.r });
+  return tasks;
+}
+
+// Reihum zur nächsten offenen Aufgabe springen (Einheit, Stadt, Hinweis).
 function nextIdle() {
   if (!myTurn()) return;
-  const idle = R.idleUnits(app.state, actAs());
-  if (!idle.length) return;
-  const cur = app.sel && app.sel.kind === 'unit' ? idle.findIndex(u => u.id === app.sel.id) : -1;
-  const u = idle[(cur + 1) % idle.length];
-  selectUnit(u.id);
-  render.cameraTo(u.q, u.r, true);
+  const tasks = openTasks();
+  if (!tasks.length) return;
+  const same = t => app.sel && (t.kind === 'unit' ? app.sel.kind === 'unit' && app.sel.id === t.id : app.sel.kind === 'city' && app.sel.q === t.q && app.sel.r === t.r);
+  const cur = tasks.findIndex(same);
+  const t = tasks[(cur + 1) % tasks.length];
+  if (t.kind === 'unit') selectUnit(t.id);
+  else { app.pending = null; app.sel = { kind: 'city', q: t.q, r: t.r }; }
+  render.cameraTo(t.q, t.r, true);
+  if (t.kind === 'threat') ui.toast('Diese Stadt ist bedroht: Ein Gegner kann sie im nächsten Zug angreifen', 'warn');
   refresh();
+  if (t.kind === 'reward') offerReward();
 }
 
 function updateSelection() {
@@ -685,7 +698,7 @@ async function doBuildRoad(q, r, unit) {
   const res = R.buildRoad(app.state, actAs(), q, r, unit);
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
   app.busy = true;
-  ui.toast('Straße gebaut', 'good');
+  ui.toast('Weg gebaut', 'good');
   sfx('build');
   await render.syncBoard(app.state, viewer());
   await afterAction();
@@ -812,8 +825,12 @@ function doEndTurnNow() {
 async function doEndTurn() {
   if (!myTurn()) return;
   const idle = R.idleUnits(app.state, actAs());
-  if (app.mode !== 'hotseat' && idle.length) {
-    ui.showConfirm(`Noch bereit: ${ui.describeUnits(idle)}. Zug trotzdem beenden?`, doEndTurnNow);
+  const train = openTasks().filter(t => t.kind === 'train').length;
+  if (app.mode !== 'hotseat' && (idle.length || train)) {
+    const parts = [];
+    if (idle.length) parts.push(`${ui.describeUnits(idle)} ${idle.length === 1 ? 'kann' : 'können'} noch handeln`);
+    if (train) parts.push(`${train === 1 ? 'eine Stadt kann' : train + ' Städte können'} noch ausbilden`);
+    ui.showConfirm(`Noch offen: ${parts.join(', ')}. Zug trotzdem beenden?`, doEndTurnNow);
     return;
   }
   await doEndTurnNow();
@@ -1060,7 +1077,7 @@ const TUTOR = [
     done: (st, base) => st.techs.player_1.length > base.techs },
   { text: 'Städte wachsen durch Gebäude (Farm, Mine, Hafen …) im Stadtmenü und bringen dann mehr Sterne. Ein roter Ring warnt dich, wenn eine Stadt bedroht ist.',
     next: 'Weiter' },
-  { text: 'Ziel: Nimm die Hauptstadt des Gegners ein. Mehr steht im Menü unter Hilfe, z. B. zu Brücken, Straßen, Leuchttürmen und Monumenten. Viel Erfolg!',
+  { text: 'Ziel: Nimm die Hauptstadt des Gegners ein. Mehr steht im Menü unter Hilfe, z. B. zu Brücken, Wegen, Leuchttürmen und Monumenten. Viel Erfolg!',
     next: 'Fertig' }
 ];
 
