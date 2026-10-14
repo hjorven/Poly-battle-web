@@ -17,20 +17,24 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" defer></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;0,800;1,400&family=IM+Fell+English&display=swap">
 </head>
 <body>
 
-  <header id="topbar">
-    <div class="brand">Poly Battle</div>
-    <div id="player-strip"></div>
-    <div id="status">Lade Spiel…</div>
-    <div class="top-actions">
+  <header id="topbar" class="hud">
+    <div id="treasury" class="treasury" title="Deine Sterne und was nächste Runde dazukommt"></div>
+    <div class="round-box">
       <span id="round-label">Runde 1</span>
+      <span id="status" aria-live="polite">Lade Spiel</span>
+    </div>
+    <div id="player-strip" role="list" aria-label="Stämme"></div>
+    <div class="top-actions">
       <button id="techBtn" class="btn ghost">Forschung</button>
       <button id="overviewBtn" class="btn ghost">Übersicht</button>
-      <button id="idleBtn" class="btn ghost idle-btn hidden" title="Zur nächsten Einheit, die noch handeln kann">Bereit</button>
-      <button id="endTurnBtn" class="btn primary" disabled>Zug beenden</button>
+      <div class="turn-box">
+        <button id="idleBtn" class="btn next-btn hidden" title="Zur nächsten offenen Aufgabe (Leertaste)"></button>
+        <button id="endTurnBtn" class="btn primary" disabled>Zug beenden</button>
+      </div>
     </div>
   </header>
 
@@ -205,9 +209,9 @@
           <li><b>Forschung</b> im Wabenbaum: sechs Stufen in jedem Ast. Neues gibt es schon früh – Pikeniere, Armbrustschützen, Windmühle, Schmelzhütte, Markt –, späte Stufen bringen Boni und Spezialbauten wie Burg und Kloster. Kosten steigen mit der Zahl deiner Städte, mit der Stufe und mit jeder bereits erforschten Technologie.</li>
           <li><b>Marine</b>: Mit <b>Segeln</b> baust du einen <b>Hafen</b> auf ein Wasserfeld im Stadtgebiet. Boote und Schiffe entstehen dann im Hafen (er muss frei sein); eine Stadt mit Hafen bildet pro Runde eine Landeinheit und zusätzlich ein Schiff aus, mit <b>Navigation</b> auch Kriegsschiffe. Schiffe und Kriegsschiffe schießen wie Bogenschützen 2 Felder weit. Landeinheiten, die auf einen eigenen Hafen ziehen, schiffen sich ein.</li>
           <li><b>Neue Gebäude</b>: <b>Windmühle</b> (+1 je angrenzender Farm), <b>Schmelzhütte</b> (+2 je angrenzender Mine), <b>Markt</b> (+1 je angrenzendem Gebäude, bis 4), <b>Burg</b> (Einheiten darauf 3-fache Verteidigung), <b>Kloster</b> (+2 Sterne, Einheiten im Stadtgebiet heilen 2 mehr). <b>Pikeniere</b> machen anderthalbfachen Schaden gegen Reiter, Ritter und Paladine – auch beim Gegenschlag.</li>
-          <li><b>Aufrüsten</b>: Steht eine Einheit zu Zugbeginn im eigenen Gebiet, kannst du sie gegen den Preisunterschied auf die nächste Stufe heben – Krieger → Schwertkämpfer, Bogenschütze → Armbrustschütze, Reiter → Ritter → Paladin, Boot → Schiff → Kriegsschiff, Heißluftballon → Brandballon → Kriegsluftschiff (Technologie nötig). Verletzungen bleiben anteilig, Veteranen bleiben Veteranen; es verbraucht den Zug.</li>
+          <li><b>Aufrüsten</b>: Steht eine Einheit zu Zugbeginn im eigenen Gebiet, kannst du sie gegen den Preisunterschied auf die nächste Stufe heben – Krieger zum Schwertkämpfer, Bogenschütze zum Armbrustschützen, Reiter zum Ritter und weiter zum Paladin, Boot zum Schiff und weiter zum Kriegsschiff, Heißluftballon zum Brandballon und weiter zum Kriegsluftschiff (Technologie nötig). Verletzungen bleiben anteilig, Veteranen bleiben Veteranen; es verbraucht den Zug.</li>
           <li><b>Luftwaffe</b>: Hinter Ingenieurwesen folgen <b>Ballonfahrt</b> (Ballonplatz auf einem Feld, Heißluftballon als Späher, Lastenballon für eine Landeinheit) und <b>Luftschiffbau</b> (Brandballon, Kriegsluftschiff). Luft-Einheiten fliegen über alles, Nahkämpfer erreichen sie nicht, sie erobern aber keine Städte. Bogenschützen, Katapulte und Schiffe holen Ballone mit einem Treffer herunter; das Kriegsluftschiff nimmt doppelten Schaden. Sie nutzen den Land-Bauplatz der Stadt und heilen nur im eigenen Gebiet.</li>
-          <li><b>Straßen</b>: Mit <b>Wege</b> baust du Straßen für 3 Sterne – im eigenen Gebiet über das Stadtmenü, anderswo mit einer Landeinheit auf dem Feld (verbraucht ihre Bewegung, nicht in fremdem Gebiet). Ein Schritt von Straße zu Straße kostet nur eine halbe Bewegung; Städte und Brücken zählen als Straße. Straßen nutzen alle Stämme.</li>
+          <li><b>Wege</b>: Mit der Technologie <b>Wege</b> baust du Wege für 3 Sterne – im eigenen Gebiet über das Stadtmenü (Ausbauen), anderswo mit einer Landeinheit auf dem Feld (verbraucht ihre Bewegung, nicht in fremdem Gebiet). Ein Schritt von Weg zu Weg kostet nur eine halbe Bewegung; Städte und Brücken zählen als Weg. Wege nutzen alle Stämme.</li>
           <li><b>Brücken</b>: Erforsche <b>Wege</b>, stelle eine Landeinheit ans Ufer und tippe sie an. Liegt hinter 1–2 Feldern <b>Flachwasser</b> wieder Land, erscheint „Brücke nach …“ (5 Sterne pro Feld, blau markiert, kostet den Zug der Einheit). Über Ozean geht es nicht. Schiffe fahren unter Brücken durch oder reißen sie ein.</li>
           <li><b>Siedler</b>: In der Hauptstadt ausbildbar; gründet auf freiem Feld (mind. 2 Felder von anderen Städten) eine neue Stadt.</li>
           <li><b>Stadtstufen</b>: Wächst eine Stadt (Bevölkerung 2 bis 5), wählst du eine Belohnung – Werkstatt oder Erkunder, Stadtmauer oder Vorräte, Wachstum oder Grenzerweiterung, Park oder Riese.</li>
