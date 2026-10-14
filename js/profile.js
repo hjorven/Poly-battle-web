@@ -18,7 +18,8 @@ export function emptyProfile() {
     daily: { last: null, streak: 0, bestStreak: 0, best: {} },
     weekly: { best: {} },
     look: {},
-    campaign: {}
+    campaign: {},
+    name: null
   };
 }
 
@@ -57,8 +58,14 @@ function sanitize(p) {
     },
     weekly: { best: obj(obj(p.weekly).best) },
     look: Object.fromEntries(Object.entries(obj(p.look)).filter(([k, v]) => typeof v === 'string' && COSMETICS[k] && COSMETICS[k].items[v])),
-    campaign: Object.fromEntries(Object.entries(obj(p.campaign)).map(([k, v]) => [k, Math.min(3, num(v))]))
+    campaign: Object.fromEntries(Object.entries(obj(p.campaign)).map(([k, v]) => [k, Math.min(3, num(v))])),
+    name: typeof p.name === 'string' && p.name.length <= 16 ? p.name : null
   };
+}
+
+// Von außen (z. B. vom Server) geladenes Profil prüfen und übernehmen.
+export function sanitizeProfile(p) {
+  return sanitize(p && typeof p === 'object' ? { ...p, v: 1 } : {});
 }
 
 export function saveProfile(profile, store) {

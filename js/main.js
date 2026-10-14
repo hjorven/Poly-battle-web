@@ -367,10 +367,67 @@ function recordProfile() {
     app.lastResult = P.recordGame(profile, P.gameFacts(st, me, { won: st.winner === me, mode: app.mode, score }));
     if (gid) profile.seen = [...(profile.seen || []), gid].slice(-50);
     P.saveProfile(profile);
+    syncOnline(profile, st, me, score);
     if (app.lastResult.achievements.length || app.lastResult.levelAfter > app.lastResult.levelBefore) sfx('promote');
   }
   if (app.lastResult) ui.showProfileResult(app.lastResult, P.levelProgress(P.loadProfile().xp), P.ACHIEVEMENTS);
   else ui.showProfileResult(null);
+}
+
+// Mit Namen: Tages-/Wochenwertung einreichen und das Profil auf dem Server
+// sichern (für andere Geräte). Ohne Verbindung bleibt alles lokal.
+async function syncOnline(profile, st, me, score) {
+  if (!profile.name) {
+    if (st.daily || st.weekly) ui.toast('Wähle im Menü einen Namen, dann zählen deine Punkte in der Bestenliste.');
+    return;
+  }
+  const kind = st.daily ? 'daily' : st.weekly ? 'weekly' : null;
+  if (kind) {
+    const res = await net.submitScore(kind, st.daily || st.weekly, score, st.tribes ? st.tribes[me] : null, st.round);
+    if (res.data) ui.toast(`Bestenliste ${kind === 'daily' ? 'heute' : 'diese Woche'}: Platz ${res.data.rank} von ${res.data.total}`, 'good');
+    else if (res.error) ui.toast('Bestenliste: ' + res.error, 'warn');
+  }
+  await net.saveRemoteProfile(profile, P.levelOf(profile.xp));
+}
+
+function chooseName() {
+  const profile = P.loadProfile();
+  ui.askName(profile.name, async name => {
+    const res = await net.claimName(name);
+    if (res.error) return res.error;
+    const fresh = P.loadProfile();
+    fresh.name = res.data.name;
+    P.saveProfile(fresh);
+    await net.saveRemoteProfile(fresh, P.levelOf(fresh.xp));
+    ui.toast(`Willkommen, ${res.data.name}!`, 'good');
+    showMenu();
+    return null;
+  });
+}
+
+function profileCodeDialog() {
+  ui.askName(net.profileCode(), async code => {
+    code = String(code || '').trim();
+    if (code === net.profileCode()) return null;
+    if (!net.useProfileCode(code)) return 'Das ist kein gültiger Profil-Code.';
+    const res = await net.myRemoteProfile();
+    if (res.error || !res.data) return 'Zu diesem Code gibt es kein Profil (oder keine Verbindung).';
+    const loaded = P.sanitizeProfile({ ...(res.data.data || {}), name: res.data.name });
+    P.saveProfile(loaded);
+    ui.toast(`Profil von ${res.data.name} geladen`, 'good');
+    showMenu();
+    return null;
+  }, {
+    title: 'Profil-Code', max: 64, ok: 'Übernehmen',
+    text: 'Das ist dein geheimer Profil-Code. Gib ihn auf einem anderen Gerät hier ein, um Name, Stufe und Erfolge mitzunehmen. Verrate ihn niemandem – wer ihn kennt, spielt als du.'
+  });
+}
+
+async function showBoard(kind) {
+  const period = kind === 'daily' ? P.dateKey() : P.weekKey();
+  ui.renderBoard(null, kind);
+  const res = await net.leaderboard(kind, period);
+  ui.renderBoard(res, kind, P.loadProfile().name);
 }
 
 // Lokale Partien nach jeder Aktion sichern (Neuladen / Tab schließen).
@@ -1336,6 +1393,9 @@ function boot() {
       refresh();
     },
     onMenu: () => showMenu(),
+    onChooseName: chooseName,
+    onProfileCode: profileCodeDialog,
+    onBoard: showBoard,
     onLook: (cat, id) => {
       const profile = P.loadProfile();
       if (!P.cosmeticUnlocked(profile, cat, id)) return;
