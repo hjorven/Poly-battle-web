@@ -6,7 +6,7 @@ import {
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
 import { botStep, applyStep } from '../js/ai.js';
-import { saveGame, loadGame, saveInfo, clearSave } from '../js/save.js';
+import { saveGame, loadGame, saveInfo, clearSave, validState } from '../js/save.js';
 import * as P from '../js/profile.js';
 
 let passed = 0;
@@ -538,6 +538,57 @@ test('Neue Einheiten: Pikenier gegen Reiterei, Armbrust, Paladin; Plattenrüstun
   const sight = R.unitSight(st, kn);
   st.techs.player_1.push('fishing', 'sailing', 'navigation', 'cartography');
   assert.strictEqual(R.unitSight(st, kn), sight + 2, 'Segeln +1 und Kartografie +1');
+});
+
+test('Härtetest: zufällige und unsinnige Aufrufe brechen nichts', () => {
+  let seed = 4242; const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const pick = a => a[Math.floor(rnd() * a.length)];
+  const junk = () => pick([undefined, null, NaN, -1, 9999, 0.5, '3', {}, 'player_9']);
+  const coord = () => rnd() < 0.2 ? junk() : Math.floor(rnd() * 30) - 2;
+  for (let g = 0; g < 6; g++) {
+    const st = R.createGame(700 + g, 2 + (g % 4), { mapType: pick(['continents', 'pangaea', 'archipelago']) });
+    const acts = [
+      () => R.moveUnit(st, pick(st.units), coord(), coord()),
+      () => R.attack(st, pick(st.units), rnd() < 0.2 ? junk() : pick(st.units)),
+      () => R.trainUnit(st, pick(st.cities), rnd() < 0.2 ? junk() : pick(Object.keys(UNITS)), pick(st.players)),
+      () => R.research(st, rnd() < 0.2 ? junk() : pick(Object.keys(TECHS)), pick(st.players)),
+      () => R.improve(st, pick(st.cities), pick(Object.keys(IMPROVEMENTS)), coord(), coord(), pick(st.players)),
+      () => R.buildRoad(st, pick(st.players), coord(), coord(), rnd() < 0.5 ? pick(st.units) : null),
+      () => R.upgradeUnit(st, rnd() < 0.2 ? junk() : pick(st.units), pick(st.players)),
+      () => R.loadCargo(st, pick(st.units), rnd() < 0.2 ? junk() : pick(st.units)),
+      () => R.disbandUnit(st, pick(st.units), pick(st.players)),
+      () => R.endTurn(st),
+      () => { const s = botStep(st, st.turn); if (s) applyStep(st, s, st.turn); }
+    ];
+    for (let i = 0; i < 500 && !st.winner; i++) {
+      pick(acts)();
+      const seen = new Set();
+      for (const u of st.units) {
+        const k = u.q + ',' + u.r;
+        assert.ok(!seen.has(k), 'zwei Einheiten auf einem Feld');
+        seen.add(k);
+        assert.ok(u.hp > 0 && R.terrainAt(st, u.q, u.r), 'Einheit gültig');
+      }
+      for (const p of st.players) assert.ok(Number.isFinite(st.stars[p]) && st.stars[p] >= 0, 'Sterne gültig');
+    }
+  }
+  R.createGame(1, 4);
+});
+
+test('Beschädigte Spielstände und Profile werden abgewiesen bzw. bereinigt', () => {
+  const st = R.createGame(3, 2);
+  assert.ok(validState(st));
+  assert.ok(!validState({ ...st, terrain: [] }), 'Karte fehlt');
+  assert.ok(!validState({ ...st, units: [{ q: 999, r: 0 }] }), 'Einheit außerhalb');
+  assert.ok(!validState({ ...st, turn: 'player_9' }), 'unbekannter Zug');
+  assert.ok(!validState(null) && !validState('x'));
+  const mem = new Map(); const store = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  mem.set('pb_save_v1', JSON.stringify({ v: 1, mode: 'bot', state: { terrain: [] } }));
+  assert.strictEqual(loadGame(store), null);
+  mem.set('pb_profile_v1', JSON.stringify({ v: 1, xp: 1e308, games: -3, achievements: null, daily: 5, seen: 'x' }));
+  const prof = P.loadProfile(store);
+  assert.ok(prof.xp <= 1e7 && prof.games === 0 && typeof prof.achievements === 'object' && prof.daily.streak === 0);
+  assert.ok(P.levelOf(1e308) > 1 && P.levelOf(NaN) === 1, 'Stufe ohne Endlosschleife');
 });
 
 test('Bedrohte Städte: nur sichtbare Feinde in Bewegung + Reichweite', () => {

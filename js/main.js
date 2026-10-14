@@ -4,7 +4,7 @@ import * as ui from './ui.js';
 import * as net from './net.js';
 import { botStep, applyStep } from './ai.js';
 import { sfx, isMuted, setMuted } from './sound.js';
-import { saveGame, loadGame, saveInfo, clearSave } from './save.js';
+import { saveGame, loadGame, saveInfo, clearSave, validState } from './save.js';
 import * as P from './profile.js';
 import { shareResult } from './share.js';
 import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS } from './config.js';
@@ -113,23 +113,71 @@ function turnStartFeedback() {
   else if (st.round === grace) ui.toast('Letzte Runde der Schonfrist – ab der nächsten Runde kann die KI angreifen.', 'warn');
 }
 
-// Rückblick auf die Züge der anderen seit dem eigenen letzten Zug.
+// Rundenbericht zu Beginn des eigenen Zuges: was dir passiert ist (gruppiert
+// nach Gegner), was in der Welt geschah, und wie du dastehst.
 function showNews() {
   if (!myTurn()) return;
-  const p = actAs();
-  const news = R.takeNews(app.state, p);
-  if (!news.length) return;
-  const name = pl => needName(app.state, pl);
-  // „deinen Krieger“, aber „dein Schiff“.
+  const st = app.state, p = actAs();
+  const all = R.takeReport(st, p);
+  const key = `${app.gen}:${st.round}:${p}`;
+  if (app.reportShown === key) return;
+  app.reportShown = key;
+  if (st.round <= 1 || !R.alive(st, p)) return;
+  const name = pl => needName(st, pl);
   const ACC = { archer: 'Bogenschützen', giant: 'Riesen' };
-  const your = t => (['catapult', 'boat', 'ship', 'battleship'].includes(t) ? 'dein ' : 'deinen ') + (ACC[t] || UNITS[t].name);
-  const lines = [];
-  for (const e of news.filter(e => e.kind === 'war')) lines.push({ text: `${name(e.by)} hat dir den Krieg erklärt` });
-  for (const e of news.filter(e => e.kind === 'cityLost')) lines.push({ text: `${name(e.by)} hat eine deiner Städte erobert`, q: e.q, r: e.r });
-  for (const e of news.filter(e => e.kind === 'unitLost')) lines.push({ text: `${name(e.by)} hat ${your(e.unit)} besiegt`, q: e.q, r: e.r });
-  for (const e of news.filter(e => e.kind === 'converted')) lines.push({ text: `${name(e.by)} hat ${your(e.unit)} bekehrt`, q: e.q, r: e.r });
-  for (const e of news.filter(e => e.kind === 'hit')) lines.push({ text: `${name(e.by)} hat ${your(e.unit)} angegriffen (−${e.dmg} Leben)`, q: e.q, r: e.r });
-  ui.showNews(lines);
+  const unitName = t => ACC[t] || UNITS[t].name;
+  const mine = all.filter(e => e.victim === p);
+  const sections = [];
+
+  // Gegen dich: je Gegner zusammengefasst.
+  const against = [];
+  for (const e of mine.filter(e => e.kind === 'war')) against.push({ tone: 'bad', text: `${name(e.by)} hat dir den Krieg erklärt` });
+  for (const e of mine.filter(e => e.kind === 'cityLost')) against.push({ tone: 'bad', text: `${name(e.by)} hat eine deiner Städte erobert`, q: e.q, r: e.r });
+  const byFoe = new Map();
+  for (const e of mine.filter(e => ['unitLost', 'hit', 'converted'].includes(e.kind))) {
+    const f = byFoe.get(e.by) || { lost: [], conv: [], hits: 0, dmg: 0, at: null };
+    if (e.kind === 'unitLost') f.lost.push(unitName(e.unit));
+    else if (e.kind === 'converted') f.conv.push(unitName(e.unit));
+    else { f.hits++; f.dmg += e.dmg || 0; }
+    f.at = f.at || [e.q, e.r];
+    byFoe.set(e.by, f);
+  }
+  for (const [foe, f] of byFoe) {
+    const parts = [];
+    if (f.lost.length) parts.push(`${f.lost.length === 1 ? 'eine Einheit' : f.lost.length + ' Einheiten'} besiegt (${f.lost.join(', ')})`);
+    if (f.conv.length) parts.push(`${f.conv.join(', ')} bekehrt`);
+    if (f.hits) parts.push(`${f.hits === 1 ? 'einmal' : f.hits + '-mal'} angegriffen (−${f.dmg} Leben)`);
+    against.push({ tone: f.lost.length || f.conv.length ? 'bad' : 'warn', text: `${name(foe)}: ${parts.join(', ')}`, q: f.at[0], r: f.at[1] });
+  }
+  if (against.length) sections.push({ title: 'Gegen dich', lines: against });
+
+  // Weltgeschehen: Eroberungen und Niederlagen anderer, soweit du sie kennst.
+  const known = new Set((st.explored && st.explored[p]) || []);
+  const world = [];
+  for (const e of all.filter(e => e.victim !== p)) {
+    if (e.kind === 'eliminated') world.push({ tone: 'info', text: `${name(e.victim)} wurde von ${name(e.by)} besiegt` });
+    else if (e.kind === 'cityLost' && known.has(e.q + ',' + e.r)) {
+      world.push({ tone: 'info', text: `${name(e.by)} hat eine Stadt von ${e.victim ? name(e.victim) : 'neutral'} erobert`, q: e.q, r: e.r });
+    } else if (e.kind === 'war' && e.victim) world.push({ tone: 'info', text: `${name(e.by)} hat ${name(e.victim)} den Krieg erklärt` });
+  }
+  if (world.length) sections.push({ title: 'In der Welt', lines: world.slice(0, 4) });
+
+  // Deine Lage: Einkommen, Rang, Bedrohungen, offene Aufgaben.
+  const rank = R.ranking(st).filter(x => R.alive(st, x.player));
+  const place = rank.findIndex(x => x.player === p) + 1;
+  const status = [];
+  const threats = R.threatenedCities(st, p);
+  if (threats.length) status.push({ tone: 'warn', text: `${threats.length === 1 ? 'Eine Stadt ist' : threats.length + ' Städte sind'} bedroht`, q: threats[0].q, r: threats[0].r });
+  const pending = R.citiesFor(st, p).find(c => R.pendingLevel(c));
+  if (pending) status.push({ tone: 'good', text: 'Eine Stadt ist aufgestiegen – Belohnung wählen', q: pending.q, r: pending.r });
+  const ready = R.readyMonuments(st, p);
+  if (ready.length) status.push({ tone: 'good', text: `Monument bereit: ${IMPROVEMENTS[ready[0]].name}` });
+  if (!against.length && !world.length && !status.length) return;
+  app.lastReport = {
+    head: `Runde ${st.round} · +${R.incomeFor(st, p)} Sterne · Platz ${place} von ${rank.length}${rank[0] && rank[0].player !== p ? ` · vorn: ${name(rank[0].player)}` : ''}`,
+    sections: status.length ? [...sections, { title: 'Bei dir', lines: status }] : sections
+  };
+  ui.showNews(app.lastReport);
   persist();
 }
 
@@ -211,18 +259,31 @@ function updateSelection() {
     const u = R.findUnit(st, app.sel.id);
     const canCommand = myTurn() && u.owner === ctx().actAs && !u.acted;
     const canBridge = myTurn() && u.owner === ctx().actAs && !u.acted;
+    const pend = app.pending && app.pending.unitId === u.id && !app.pending.until ? app.pending : null;
     render.setHighlights({
       selected: u.q + ',' + u.r,
+      target: pend ? pend.key : null,
       move: canCommand && u.mp > 0 ? R.reachableMap(st, u) : null,
       attack: canCommand ? R.attackTargets(st, u) : null,
       bridge: canBridge ? R.bridgeOptions(st, u).flatMap(o => o.tiles) : null
     });
+    let hint = null;
+    if (pend) {
+      const [tq, tr] = pend.key.split(',').map(Number);
+      const foe = R.unitAt(st, tq, tr);
+      if (pend.kind === 'attack' && foe) {
+        const res = R.battleResults(st, u, foe);
+        const range = Math.max(...[u.q - tq, u.r - tr, u.q - tq + u.r - tr].map(Math.abs));
+        const back = res.damage >= foe.hp ? 0 : (UNITS[foe.type].range >= range ? res.retaliation : 0);
+        hint = `Nochmal tippen zum Angreifen · ${res.damage >= foe.hp ? 'besiegt ' + UNITS[foe.type].name : res.damage + ' Schaden'}${back ? ' · Gegenschlag ' + back : ''}`;
+      } else hint = 'Ziel gewählt – nochmal tippen zum Ziehen';
+    }
     if (app.panelOpen) {
       ui.hideUnitChip();
       ui.showUnitPanel(st, u, ctx());
     } else {
       ui.hidePanel();
-      ui.showUnitChip(st, u, ctx());
+      ui.showUnitChip(st, u, { ...ctx(), hint });
     }
   } else {
     const city = R.cityAt(st, app.sel.q, app.sel.r);
@@ -236,6 +297,7 @@ function updateSelection() {
 // `open` öffnet direkt das Info-Menü.
 function selectUnit(id, open = false) {
   const same = app.sel && app.sel.kind === 'unit' && app.sel.id === id;
+  if (!same) app.pending = null;
   app.sel = { kind: 'unit', id };
   app.panelOpen = open || (same && app.panelOpen);
 }
@@ -305,7 +367,7 @@ async function saveOnline() {
   // Server hat den Zug abgelehnt: auf den gültigen Stand der Datenbank zurück.
   if (rejected) {
     const { match } = await net.fetchMatch(app.gameId);
-    if (match && match.game_state) {
+    if (match && validState(match.game_state)) {
       adopt(match.game_state);
       app.sel = null;
       render.syncBoard(app.state, viewer());
@@ -346,6 +408,7 @@ function announce(events) {
 }
 
 async function afterAction(events = []) {
+  app.pending = null;
   announce(events);
   app.busy = false;
   refresh();
@@ -621,6 +684,7 @@ function anyIdle(owner) {
 
 function doEndTurnNow() {
   ui.hideNews();
+  app.pending = null;
   app.busy = true;
   app.sel = null;
   R.endTurn(app.state);
@@ -803,17 +867,47 @@ async function onHexPick(key) {
     return;
   }
 
+  // Zweiter Tipp auf ein vorgemerktes Ziel: ausführen (auch nach Wechsel ins Stadtmenü).
+  const pend = app.pending;
+  if (pend && pend.key === key && (!pend.until || performance.now() < pend.until)) {
+    const me = R.findUnit(st, pend.unitId);
+    app.pending = null;
+    if (me && me.owner === actAs()) {
+      if (pend.kind === 'attack' && unit && R.attackTargets(st, me).some(t => t.id === unit.id)) return doAttack(me, unit);
+      if (pend.kind === 'move' && !unit && R.reachableMap(st, me).has(key)) return doMove(me, q, r);
+    }
+  }
+
   const sel = app.sel;
   if (sel && sel.kind === 'unit') {
     const me = R.findUnit(st, sel.id);
     if (me && me.owner === actAs() && !me.acted) {
       if (unit && unit.owner !== me.owner) {
-        if (R.attackTargets(st, me).some(t => t.id === unit.id)) return doAttack(me, unit);
+        // Erster Tipp auf einen Gegner: nur vormerken und Vorschau zeigen.
+        if (R.attackTargets(st, me).some(t => t.id === unit.id)) {
+          app.pending = { unitId: me.id, key, kind: 'attack' };
+          app.panelOpen = false;
+          sfx('select');
+        }
         refresh();
         return;
       } else if (!unit) {
         const reach = R.reachableMap(st, me);
-        if (reach.has(key)) return doMove(me, q, r);
+        if (reach.has(key)) {
+          if (city && city.owner === actAs()) {
+            // Eigene Stadt: Antippen öffnet das Stadtmenü; nur ein schneller
+            // Doppeltipp zieht die Einheit hinein.
+            app.pending = { unitId: me.id, key, kind: 'move', until: performance.now() + 450 };
+            app.sel = { kind: 'city', q, r };
+            refresh();
+            return;
+          }
+          app.pending = { unitId: me.id, key, kind: 'move' };
+          app.panelOpen = false;
+          sfx('select');
+          refresh();
+          return;
+        }
       } else if (unit.owner === me.owner) {
         selectUnit(unit.id);
         refresh();
@@ -841,7 +935,7 @@ async function onHexPick(key) {
 const TUTOR = [
   { text: 'Willkommen! Das ist deine Hauptstadt mit einem Krieger. Tippe den Krieger an (oder drücke die Leertaste).',
     done: () => app.sel && app.sel.kind === 'unit' },
-  { text: 'Die hellen Felder zeigen, wohin er ziehen kann. Tippe ein helles Feld an, um zu ziehen. Der Nebel lichtet sich, wo deine Einheiten sind.',
+  { text: 'Die hellen Felder zeigen, wohin er ziehen kann. Tippe ein helles Feld an – es leuchtet gelb – und tippe es zum Bestätigen noch einmal an. So ziehst du nie aus Versehen. Der Nebel lichtet sich, wo deine Einheiten sind.',
     done: st => st.units.some(u => u.owner === 'player_1' && u.hasMoved) },
   { text: 'Gut! Graue Städte sind neutrale Dörfer: Ziehe hinein, um sie einzunehmen. Ruinen (Steinsäulen) bringen Belohnungen. Wenn deine Einheiten fertig sind, tippe oben auf „Zug beenden“.',
     done: (st, base) => st.round > base.round },
@@ -1001,6 +1095,7 @@ async function startOnline() {
     app.gameId = hashId;
     const { match, role, error } = await net.joinMatch(hashId);
     if (error) { ui.toast(error, 'warn'); showMenu(); return; }
+    if (!validState(match.game_state)) { ui.toast('Dieses Spiel ist beschädigt und kann nicht geladen werden.', 'warn'); showMenu(); return; }
     adopt(match.game_state);
     app.myRole = role;
     app.hasOpponent = allSeated(match);
@@ -1043,6 +1138,7 @@ async function startOnline() {
     // Nur echte Neuerungen übernehmen. Das Echo des eigenen Zuges (gleiche
     // rev) würde den Stand durch eine identische Kopie ersetzen und offene
     // Panels/Dialoge auf verwaiste Objekte zeigen lassen.
+    if (!validState(match.game_state)) return;
     if ((match.game_state.rev || 0) > (app.state?.rev || 0)) {
       adopt(match.game_state);
       app.busy = false;
@@ -1119,6 +1215,7 @@ function boot() {
       else if (key === 'overview') ui.showOverview(app.state, ctx());
       else if (key === 'details') { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = !app.panelOpen; refresh(); } }
       else if (key === 'home') focusHome();
+      else if (key === 'report') { if (app.lastReport) ui.showNews(app.lastReport); else ui.toast('Noch kein Rundenbericht in diesem Spiel'); }
       else if (key === 'sound') { setMuted(!isMuted()); ui.setSoundIcon(isMuted()); }
       else if (key === 'deselect') { app.sel = null; refresh(); }
       else if (key === 'panL') render.panCamera(-1, 0);
@@ -1133,7 +1230,8 @@ function boot() {
     onDeclareWar: doDeclareWar,
     onChooseReward: doChooseReward,
     onClosePanel: () => { app.sel = null; refresh(); },
-    onOpenOverview: () => { if (app.state) ui.showOverview(app.state, ctx()); },
+    onOpenOverview: () => { if (app.state) ui.showOverview(app.state, { ...ctx(), hasReport: !!app.lastReport }); },
+    onShowReport: () => { ui.hideOverview(); if (app.lastReport) ui.showNews(app.lastReport); },
     onCloseOverview: () => ui.hideOverview(),
     onFocusUnit: id => {
       const u = R.findUnit(app.state, id);
