@@ -1,6 +1,6 @@
 import {
   UNITS, UNIT_ORDER, TECHS, NAMES, MAX_POP,
-  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS, MONUMENTS, ROAD,
+  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS, MONUMENTS, ROAD, PERSONAS,
   CITY_REWARDS, GAME_MODES, BRIDGE, MAP_SIZES, MAP_TYPES
 } from './config.js';
 import {
@@ -60,6 +60,8 @@ export function initUI(h) {
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
   $('winnerEasier').addEventListener('click', () => handlers.onRetry(true));
+  document.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => handlers.onBoard(b.dataset.board)));
+  $('board-box').addEventListener('toggle', () => { if ($('board-box').open) handlers.onBoard('daily'); });
   $('winnerMap').addEventListener('click', () => handlers.onReview(true));
   $('reviewBack').addEventListener('click', () => handlers.onReview(false));
   $('winnerShare').addEventListener('click', () => handlers.onShare());
@@ -257,19 +259,127 @@ export function hideTutor() {
 
 const fmtDate = key => { const [, m, d] = key.split('-'); return `${d}.${m}.`; };
 
-export function renderProfile(profile, lp, daily, achievements) {
+export function renderProfile(profile, lp, daily, achievements, weekly = null) {
+  if (weekly) {
+    const wb = profile.weekly && profile.weekly.best[weekly.key];
+    const wt = TRIBES[weekly.tribe] ? TRIBES[weekly.tribe].name : weekly.tribe;
+    $('weeklyBtn').innerHTML = `Wochen-Herausforderung ${esc(weekly.key.split('-W')[1])}. Woche: ${esc(weekly.name)}<span class="sub">${esc(weekly.desc)} · ${esc(wt)} · ${weekly.turnLimit} Runden · ${wb != null ? `dein Bestwert: ${wb} Punkte` : 'diese Woche noch nicht gespielt'}</span>`;
+  }
   const winRate = profile.games ? Math.round(100 * profile.wins / profile.games) : 0;
   $('profile-card').innerHTML = `<div class="pc-level">${lp.level}</div>
     <div><span class="pc-title">${esc(lp.title)}</span> <span class="pc-sub">· Stufe ${lp.level} · ${lp.into}/${lp.need} Erfahrung</span></div>
     <div class="pc-sub">${profile.games} ${profile.games === 1 ? 'Spiel' : 'Spiele'} · ${profile.wins} ${profile.wins === 1 ? 'Sieg' : 'Siege'}${profile.games ? ` (${winRate} %)` : ''}${profile.winStreak > 1 ? ` · ${profile.winStreak} Siege in Folge` : ''}${profile.daily.streak ? ` · Tagesserie ${profile.daily.streak}` : ''}</div>
-    <div class="xp-bar"><div style="width:${Math.round(lp.frac * 100)}%"></div></div>`;
+    <div class="xp-bar"><div style="width:${Math.round(lp.frac * 100)}%"></div></div>
+    <div class="profile-name">${profile.name ? `Name: <b>${esc(profile.name)}</b>` : 'Noch kein Name für die Bestenliste'}
+      <button class="btn ghost" data-pname>${profile.name ? 'Ändern' : 'Namen wählen'}</button>
+      <button class="btn ghost" data-pcode>Profil-Code</button></div>`;
+  $('profile-card').querySelector('[data-pname]').addEventListener('click', () => handlers.onChooseName());
+  $('profile-card').querySelector('[data-pcode]').addEventListener('click', () => handlers.onProfileCode());
   const best = profile.daily.best[daily.key];
   const tribe = TRIBES[daily.tribe] ? TRIBES[daily.tribe].name : daily.tribe;
   $('dailyBtn').innerHTML = `Tagesherausforderung ${fmtDate(daily.key)}<span class="sub">${esc(tribe)} · ${esc(MAP_TYPES[daily.mapType].label)} · 30 Runden · ${best != null ? `dein Bestwert: ${best} Punkte` : 'heute noch nicht gespielt'}</span>`;
+  renderStats(profile);
   const ids = Object.keys(achievements);
   const got = ids.filter(id => profile.achievements[id]);
   $('achievements-title').textContent = `Erfolge (${got.length}/${ids.length})`;
   $('achievements').innerHTML = ids.map(id => `<div class="ach ${profile.achievements[id] ? 'got' : ''}"><b>${esc(achievements[id].name)}</b>${esc(achievements[id].desc)}</div>`).join('');
+}
+
+const MODE_NAMES = { bot: 'Gegen KI', online: 'Online', daily: 'Tag', weekly: 'Woche', campaign: 'Kampagne' };
+function renderStats(profile) {
+  const t = profile.totals || {};
+  const tribeName = id => (TRIBES[id] ? TRIBES[id].name : '–');
+  const top = o => { const e = Object.entries(o || {}).sort((a, b) => b[1] - a[1])[0]; return e ? `${tribeName(e[0])} (${e[1]})` : '–'; };
+  const cell = (label, v) => `<div class="stat">${esc(label)}<b>${esc(String(v))}</b></div>`;
+  // Tagesherausforderung: Bestwerte der letzten 14 Tage als Balken.
+  const days = Object.entries((profile.daily && profile.daily.best) || {}).sort().slice(-14);
+  const max = Math.max(1, ...days.map(d => d[1]));
+  const bars = days.length ? `<div class="stat-bars">${days.map(([k, v]) => `<div title="${esc(k)}: ${v} Punkte"><span style="height:${Math.round(v / max * 100)}%"></span><em>${esc(k.slice(8))}</em></div>`).join('')}</div>` : '<div class="hint">Noch keine Tagesherausforderung gespielt.</div>';
+  const recent = (profile.recent || []).slice().reverse().map(r => `<li class="${r.won ? 'won' : ''}"><div><b>${r.won ? 'Sieg' : 'Niederlage'}</b> · ${esc(MODE_NAMES[r.mode] || r.mode || '')} · ${esc(tribeName(r.tribe))} · Runde ${r.round} · ${r.score} Punkte</div><span>${esc((r.date || '').split('-').reverse().join('.'))}</span></li>`).join('');
+  $('stats').innerHTML = `<div class="stat-row">
+      ${cell('Spiele', profile.games)}${cell('Siege', profile.wins)}${cell('Siegquote', profile.games ? Math.round(100 * profile.wins / profile.games) + ' %' : '–')}
+      ${cell('Beste Serie', profile.bestWinStreak)}${cell('Bestwert', profile.bestScore)}${cell('Schnellster Sieg', profile.fastestWin ? 'Runde ' + profile.fastestWin : '–')}
+      ${cell('Besiegte Einheiten', t.kills || 0)}${cell('Eroberte Städte', t.captures || 0)}${cell('Ausgebildet', t.trained || 0)}
+      ${cell('Gespielte Runden', t.rounds || 0)}${cell('Lieblingsstamm', top(profile.tribeGames))}${cell('Meiste Siege', top(profile.tribeWins))}
+    </div>
+    <div class="panel-sub" style="margin-top:10px">Tagesherausforderung (Bestwerte)</div>${bars}
+    <div class="panel-sub" style="margin-top:10px">Letzte Partien</div>
+    ${recent ? `<ul class="recent">${recent}</ul>` : '<div class="hint">Noch keine Partie beendet.</div>'}`;
+}
+
+// Namensdialog; `onSave(name)` liefert eine Fehlermeldung oder null.
+const NAME_TEXT = 'Mit diesem Namen erscheinst du in der Bestenliste. 3–16 Zeichen, Buchstaben, Ziffern, Leerzeichen, _ und -.';
+export function askName(current, onSave, { title = 'Wähle deinen Namen', text = NAME_TEXT, max = 16, ok = 'Speichern' } = {}) {
+  $('name-title').textContent = title;
+  $('name-text').textContent = text;
+  $('nameOk').textContent = ok;
+  const input = $('name-input');
+  input.maxLength = max;
+  input.value = current || '';
+  $('name-error').textContent = '';
+  $('name-overlay').classList.remove('hidden');
+  input.focus();
+  const close = () => { $('name-overlay').classList.add('hidden'); $('nameOk').onclick = null; input.onkeydown = null; };
+  const save = async () => {
+    $('nameOk').disabled = true;
+    const err = await onSave(input.value);
+    $('nameOk').disabled = false;
+    if (err) $('name-error').textContent = err;
+    else close();
+  };
+  $('nameOk').onclick = save;
+  input.onkeydown = e => { if (e.key === 'Enter') save(); };
+  $('nameCancel').onclick = close;
+}
+
+// Bestenliste anzeigen (oder Hinweis bei Fehler/ohne Einträge).
+export function renderBoard(res, kind, myName) {
+  const box = $('board');
+  document.querySelectorAll('[data-board]').forEach(b => b.classList.toggle('active', b.dataset.board === kind));
+  if (!res) { box.innerHTML = '<div class="hint">Lädt …</div>'; return; }
+  if (res.error) { box.innerHTML = `<div class="hint">${esc(res.error)}</div>`; return; }
+  const d = res.data || {};
+  const top = d.top || [];
+  const tribe = id => (TRIBES[id] ? TRIBES[id].name : '');
+  const rows = top.map(r => `<li class="${myName && r.name === myName ? 'me' : ''}"><span>${r.rank}.</span><span>${esc(r.name)} <span class="b-sub">Stufe ${r.level} · ${esc(tribe(r.tribe))} · Runde ${r.round}</span></span><b>${r.score}</b></li>`).join('');
+  const me = d.me && !top.some(r => r.name === d.me.name) ? `<li class="me"><span>${d.me.rank}.</span><span>${esc(d.me.name)}</span><b>${d.me.score}</b></li>` : '';
+  box.innerHTML = top.length ? `<ol class="board-list">${rows}${me}</ol><div class="hint">${d.total} ${d.total === 1 ? 'Spieler' : 'Spieler'} ${kind === 'daily' ? 'heute' : 'diese Woche'}</div>`
+    : `<div class="hint">Noch keine Einträge ${kind === 'daily' ? 'heute' : 'diese Woche'} – spiel die ${kind === 'daily' ? 'Tages' : 'Wochen'}-Herausforderung und sei die Nummer 1!</div>`;
+  if (!myName) box.innerHTML += '<div class="hint">Wähle oben im Profil einen Namen, damit deine Punkte hier erscheinen.</div>';
+}
+
+// Kampagne im Menü: Missionen mit Sternen, gesperrte mit Hinweis.
+export function renderCampaign(profile, missions, unlocked, total) {
+  $('campaign-title').textContent = `Kampagne (${total}/${missions.length * 3} Sterne)`;
+  $('campaign').innerHTML = `<div class="mission-list">${missions.map((m, i) => {
+    const stars = (profile.campaign && profile.campaign[m.id]) || 0;
+    const ok = unlocked(profile, i);
+    return `<button class="btn action" data-mission="${m.id}" ${ok ? '' : 'disabled'}>
+      <span>${i + 1}. ${esc(m.title)}<span class="sub">${ok ? esc(m.goal) + ' – ' + esc(m.story) : 'Gesperrt: erst Mission ' + i + ' schaffen'}</span></span>
+      <span class="m-stars">${stars ? stars + ' von 3 Sternen' : ''}</span></button>`;
+  }).join('')}</div>`;
+  $('campaign').querySelectorAll('[data-mission]').forEach(b => b.addEventListener('click', () => handlers.onMode('mission:' + b.dataset.mission)));
+}
+
+export function showMission(text, frac) {
+  const bar = $('mission-bar');
+  if (!text) { bar.classList.add('hidden'); return; }
+  bar.innerHTML = `${text}<div class="mb-bar"><div style="width:${Math.round(Math.min(1, frac) * 100)}%"></div></div>`;
+  bar.classList.remove('hidden');
+}
+
+// Kosmetik-Auswahl: freigeschaltete Teile wählbar, gesperrte mit Hinweis.
+export function renderLooks(profile, cosmetics, unlocked, hint, current) {
+  $('looks').innerHTML = Object.entries(cosmetics).map(([cat, c]) => `<div class="setting-row">
+      <span class="setting-label">${esc(c.label)}</span>
+      <div class="seg">${Object.entries(c.items).map(([id, it]) => {
+        const ok = unlocked(profile, cat, id);
+        return `<button class="chip-btn ${current[cat] === id ? 'active' : ''}" data-look="${cat}:${id}" ${ok ? '' : 'disabled'} title="${esc(ok ? it.name : 'Gesperrt: ' + hint(cat, id))}">${esc(it.name)}${ok ? '' : ' · ' + esc(hint(cat, id))}</button>`;
+      }).join('')}</div></div>`).join('') + '<div class="hint">Gilt für deine Städte und Einheiten. Mehr schaltest du mit Stufen und Erfolgen frei.</div>';
+  $('looks').querySelectorAll('[data-look]').forEach(b => b.addEventListener('click', () => {
+    const [cat, id] = b.dataset.look.split(':');
+    handlers.onLook(cat, id);
+  }));
 }
 
 // Ergebnis für das Profil auf dem Endbildschirm.
@@ -280,6 +390,8 @@ export function showProfileResult(res, lp, achievements) {
       <span class="${res.levelAfter > res.levelBefore ? 'wp-up' : ''}">${res.levelAfter > res.levelBefore ? `Aufgestiegen: Stufe ${lp.level} – ${esc(lp.title)}!` : `Stufe ${lp.level} · ${lp.into}/${lp.need}`}</span></div>
     <div class="xp-bar"><div style="width:${Math.round(lp.frac * 100)}%"></div></div>
     ${res.achievements.length ? `<div class="wp-ach">${res.achievements.map(id => `<span>Erfolg: ${esc(achievements[id].name)}</span>`).join('')}</div>` : ''}
+    ${res.mission ? `<div class="wp-daily">Mission: ${res.mission.stars} von 3 Sternen${res.mission.improved ? ' – neuer Bestwert!' : ''}</div>` : ''}
+    ${res.weekly ? `<div class="wp-daily">Wochen-Herausforderung: ${res.weekly.score} Punkte${res.weekly.improved ? ' – neuer Wochenbestwert!' : ` (Bestwert ${res.weekly.best})`}</div>` : ''}
     ${res.daily ? `<div class="wp-daily">Tagesherausforderung ${fmtDate(res.daily.key)}: ${res.daily.score} Punkte${res.daily.improved ? ' – neuer Bestwert!' : ` (Bestwert ${res.daily.best})`} · Tagesserie ${res.daily.streak}</div>` : ''}`;
 }
 
@@ -1055,7 +1167,8 @@ export function hideMenu() {
 export function showWinner(state, ctx) {
   const winner = state.winner;
   $('winner-title').textContent = (tribeName(state, winner) || NAMES[winner]) + ' gewinnt!';
-  let text = state.endReason === 'score' ? 'Höchste Punktzahl nach ' + state.turnLimit + ' Runden.' : 'Alle anderen Städte wurden erobert.';
+  let text = state.endReason === 'score' ? 'Höchste Punktzahl nach ' + state.turnLimit + ' Runden.'
+    : state.endReason === 'mission' ? `Mission geschafft – ${state.missionStars} von 3 Sternen.` : 'Alle anderen Städte wurden erobert.';
   if (ctx.mode === 'bot') text = (winner === 'player_1' ? 'Du hast gewonnen. ' : 'Die KI hat gewonnen. ') + text;
   else if (ctx.mode === 'online') text = (winner === ctx.myRole ? 'Du hast gewonnen. ' : 'Dein Gegner hat gewonnen. ') + text;
   $('winner-text').textContent = text + ` · Runde ${state.round}`;
@@ -1287,6 +1400,8 @@ export function showOverview(state, ctx) {
       const peace = atPeace(state, actAs, p);
       const name = met ? (tribeName(state, p) || NAMES[p]) : 'Unbekannter Stamm';
       let status = !met ? 'noch nicht begegnet' : peace ? 'Frieden' : 'Krieg';
+      const persona = met && state.persona && state.persona[p] && PERSONAS[state.persona[p]];
+      if (persona) status = `${persona.name} · ${status}`;
       if (pendingOffer(state, actAs, p)) status += ' · Angebot gesendet';
       let action = '';
       if (met && ctx.myTurn) {

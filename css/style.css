@@ -786,3 +786,43 @@ button:focus-visible {
 #news li.tone-good { border-left-color: #16a34a; }
 #news li.tone-info { border-left-color: #60a5fa; }
 #news .news-go { font-size: 11px; color: #a16207; font-weight: 700; margin-left: 4px; }
+
+/* Profil-Statistik */
+#stats .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stat-bars { display: flex; align-items: flex-end; gap: 4px; height: 80px; margin: 6px 0; }
+.stat-bars div { flex: 1; max-width: 32px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.stat-bars span { width: 100%; background: #facc15; border-radius: 3px 3px 0 0; min-height: 2px; }
+.stat-bars em { font-style: normal; font-size: 10px; color: #71717a; }
+.recent { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; font-size: 13px; }
+.recent li { border-left: 3px solid #a1a1aa; padding: 3px 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.recent li.won { border-left-color: #16a34a; }
+.recent li span { color: #a1a1aa; font-size: 12px; }
+
+/* KI-Botschaft */
+.toast.quote { font-style: italic; border-left: 4px solid #7c3aed; }
+
+/* Kampagne */
+.mission-list { display: grid; gap: 6px; }
+.mission-list button { text-align: left; }
+.mission-list .m-stars { font-weight: 700; color: #a16207; white-space: nowrap; }
+#mission-bar {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px; z-index: 29;
+  background: #18181b; color: #fafafa; border-radius: 10px; padding: 8px 14px; font-size: 13px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); max-width: calc(100% - 24px); text-align: center;
+}
+#mission-bar b { color: #facc15; }
+#mission-bar .mb-bar { height: 4px; background: #3f3f46; border-radius: 2px; margin-top: 5px; overflow: hidden; }
+#mission-bar .mb-bar div { height: 100%; background: #facc15; }
+@media (max-width: 760px) { #mission-bar { bottom: 96px; } }
+
+/* Namenswahl und Bestenliste */
+.name-input { width: 100%; box-sizing: border-box; font-size: 18px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin: 6px 0; }
+#name-error { color: #b91c1c; min-height: 18px; }
+.board-tabs { margin-bottom: 8px; }
+.board-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 3px; font-size: 14px; }
+.board-list li { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; padding: 4px 8px; border-radius: 6px; background: #fafafa; }
+.board-list li.me { background: #fef3c7; font-weight: 700; }
+.board-list .b-sub { color: #71717a; font-size: 12px; }
+.profile-name { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; grid-column: 1 / -1; font-size: 13px; }
+.profile-name .btn { padding: 3px 8px; font-size: 12px; }
+.menu-section .menu-body .board-list li::before, .menu-section .menu-body .recent li::before { content: none; }

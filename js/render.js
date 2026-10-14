@@ -10,7 +10,7 @@ function ownerColor(owner) {
 }
 
 const TILE_GAP = 0.94;
-const DIESE_DUR = 260;
+const DIESE_DUR = 620;
 
 let renderer, scene, camera, controls, raycaster;
 let tileMeshes = [];
@@ -1470,7 +1470,9 @@ function passengerOf(u) {
   return u.carry || (u.cargo && u.cargo.type) || null;
 }
 
-function unitBody(type, color, passenger = null) {
+const PLUME = { red: 0xdc2626, white: 0xf5f5f4, gold: 0xeab308 };
+
+function unitBody(type, color, passenger = null, plume = null) {
   const g = new THREE.Group();
   const teamMats = [];
   const teamMat = () => {
@@ -1499,6 +1501,8 @@ function unitBody(type, color, passenger = null) {
     if (robe) put(p, cone(0.17, 0.42, 7), torso || teamMat(), 0, 0.21, 0);
     else put(p, cyl(0.1, 0.12, 0.24), torso || teamMat(), 0, 0.29, 0);
     put(p, ico(0.085), mat(SKIN), 0, 0.49, 0);
+    // Helmbusch (Kosmetik) über dem Kopf.
+    if (plume && PLUME[plume]) put(p, cone(0.035, 0.14, 4), mat(PLUME[plume]), -0.02, 0.7, 0).rotation.z = 0.35;
     const hand = (side, swing) => {
       const shoulder = new THREE.Group();
       shoulder.position.set(0, 0.38, 0.15 * side);
@@ -1714,7 +1718,7 @@ function unitBody(type, color, passenger = null) {
 // isCapital. Jede Stufe (Bevölkerung 1–5) hat eigene Gebäude; Dächer und
 // Fahnen tragen die Teamfarbe.
 
-function buildCity(city, color) {
+function buildCity(city, color, look = null) {
   const g = new THREE.Group();
   const team = city.owner ? mat(color) : mat(0x8f939c);
   const stone = mat(0xd6d3cb), stoneDark = mat(0x9ca3af), plaster = mat(0xe8e2d2);
@@ -1756,7 +1760,21 @@ function buildCity(city, color) {
   const flag = (x, z, top, big = false) => {
     if (!city.owner) return;
     put(cyl(0.012, 0.012, 0.3, 5), mat(0x52525b), x, top + 0.15, z);
-    put(box(big ? 0.2 : 0.15, big ? 0.12 : 0.09, 0.015), team, x + (big ? 0.1 : 0.075), top + 0.24, z);
+    const w = big ? 0.2 : 0.15, h = big ? 0.12 : 0.09;
+    const style = look ? look.banner : 'standard';
+    if (style === 'pennant') {
+      // Wimpel: spitzes Dreieck.
+      const pen = put(cone(h / 2, w * 1.2, 3), team, x + w * 0.6, top + 0.24, z);
+      pen.rotation.z = -Math.PI / 2;
+      pen.scale.z = 0.15;
+    } else if (style === 'swallow') {
+      // Schwalbenschwanz: zwei Zipfel.
+      put(box(w * 0.6, h, 0.015), team, x + w * 0.3, top + 0.24, z);
+      for (const dy of [-h * 0.28, h * 0.28]) put(box(w * 0.45, h * 0.4, 0.015), team, x + w * 0.8, top + 0.24 + dy, z);
+    } else {
+      if (style === 'gold') put(box(w + 0.03, h + 0.03, 0.01), gold, x + w / 2, top + 0.24, z);
+      put(box(w, h, 0.015), team, x + w / 2, top + 0.24, z);
+    }
   };
   const crown = top => {
     put(cyl(0.07, 0.07, 0.04, 8), gold, 0, top + 0.03, 0);
@@ -1814,6 +1832,23 @@ function buildCity(city, color) {
   }
   if (city.isCapital && city.owner) crown(top + (lvl === 1 ? 0.0 : 0.02));
 
+  // Stadtschmuck (Kosmetik) vorn am Stadtplatz der Hauptstadt.
+  const decor = city.isCapital && look ? look.decor : 'none';
+  if (decor === 'fountain') {
+    put(cyl(0.09, 0.1, 0.05, 10), stone, 0, Y + 0.025, 0.46);
+    put(cyl(0.075, 0.075, 0.01, 10), mat(0x60a5fa), 0, Y + 0.05, 0.46);
+    put(cyl(0.015, 0.02, 0.1, 6), stone, 0, Y + 0.08, 0.46);
+  } else if (decor === 'statue') {
+    put(box(0.08, 0.08, 0.08), stone, 0, Y + 0.04, 0.46);
+    put(cyl(0.025, 0.03, 0.1, 6), gold, 0, Y + 0.13, 0.46);
+    put(ico(0.03), gold, 0, Y + 0.2, 0.46);
+  } else if (decor === 'garden') {
+    for (const [x, z] of [[-0.12, 0.46], [0.12, 0.46], [0, 0.5]]) {
+      put(ico(0.05), mat(0x3e9140), x, Y + 0.05, z);
+      put(ico(0.02), mat(0xf472b6), x + 0.02, Y + 0.09, z);
+    }
+  }
+
   // Belohnungen sichtbar machen.
   if (city.park) {
     for (const [x, z] of [[-0.45, 0.05], [-0.4, 0.2]]) {
@@ -1836,23 +1871,35 @@ function buildCity(city, color) {
   return g;
 }
 
-function cityKey(city) {
-  return [city.owner, city.pop, city.wall, city.park, city.workshop, city.isCapital].join('|');
+function cityKey(city, look = null) {
+  return [city.owner, city.pop, city.wall, city.park, city.workshop, city.isCapital, look ? look.banner + look.decor : ''].join('|');
+}
+
+// Aussehen (Kosmetik) des Besitzers aus dem Spielstand.
+function lookFor(state, owner) {
+  return (owner && state.looks && state.looks[owner]) || null;
 }
 
 function placeCityNode(state, city) {
   const key = hk(city.q, city.r);
   const existing = cityNodes.get(key);
-  if (existing && existing.sig === cityKey(city)) return;
+  const look = lookFor(state, city.owner);
+  if (existing && existing.sig === cityKey(city, look)) return;
+  // Wachstum oder Besitzerwechsel: neue Stadt kurz „aufploppen“ lassen.
+  const changed = existing && (existing.pop !== city.pop || existing.owner !== city.owner);
   if (existing) {
     scene.remove(existing.group);
     cityNodes.delete(key);
   }
-  const group = buildCity(city, city.owner ? ownerColor(city.owner) : 0xb9bdc6);
+  const group = buildCity(city, city.owner ? ownerColor(city.owner) : 0xb9bdc6, look);
   const p = toWorld(city.q, city.r);
   group.position.set(p.x, hexTop(key), p.z);
   scene.add(group);
-  cityNodes.set(key, { group, owner: city.owner, pop: city.pop, sig: cityKey(city) });
+  if (changed) {
+    group.scale.setScalar(0.7);
+    addTween({ dur: 520, ease: easeOutBack, update: t => group.scale.setScalar(0.7 + 0.3 * t) });
+  }
+  cityNodes.set(key, { group, owner: city.owner, pop: city.pop, sig: cityKey(city, look) });
 }
 
 // Luft-Einheiten: schweben über dem Feld, Schatten am Boden. Weidenkorb oder
@@ -1927,7 +1974,8 @@ function airBody(type, g, put, teamMat) {
 
 function placeUnitNode(state, unit) {
   const color = ownerColor(unit.owner);
-  const group = unitBody(unit.type, color, passengerOf(unit));
+  const look = lookFor(state, unit.owner);
+  const group = unitBody(unit.type, color, passengerOf(unit), look && look.plume);
   const p = toWorld(unit.q, unit.r);
   const key = hk(unit.q, unit.r);
   group.position.set(p.x, unitTop(key, unit.type), p.z);
@@ -1938,7 +1986,7 @@ function placeUnitNode(state, unit) {
   group.rotation.y = DEFAULT_FACING;
   scene.add(group);
   const bt = tiles.get(key);
-  const node = { underBridge: !!(bt && bt.bridgeNode && hasAbility(unit.type, 'water')), group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, passenger: passengerOf(unit), acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
+  const node = { plume: look && look.plume, underBridge: !!(bt && bt.bridgeNode && hasAbility(unit.type, 'water')), group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, passenger: passengerOf(unit), acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
   unitNodes.set(unit.id, node);
   if (unit.acted) {
     for (const m of node.group.userData.teamMats) m.color.multiplyScalar(0.55);
@@ -1976,6 +2024,13 @@ function removeUnitNode(id, node) {
 }
 
 function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+
+// Weg für die nächste Bewegung einer Einheit (von der Spielsteuerung gesetzt).
+const movePaths = new Map();
+export function setMovePath(unitId, path) {
+  if (path && path.length) movePaths.set(unitId, path);
+}
 function easeOutBack(t) { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); }
 
 function addTween(tw) {
@@ -1988,7 +2043,8 @@ function stepTweens(now) {
   if (!tweens.length) return;
   const keep = [];
   for (const tw of tweens) {
-    const raw = Math.min((now - tw.start) / tw.dur, 1);
+    // Der Bildzeitstempel kann knapp vor dem Start liegen: nie negativ.
+    const raw = Math.max(0, Math.min((now - tw.start) / tw.dur, 1));
     tw.t = tw.ease ? tw.ease(raw) : raw;
     tw.update(tw.t, raw);
     if (raw < 1) keep.push(tw);
@@ -2074,7 +2130,8 @@ export function syncBoard(state, viewer = null) {
     alive.add(u.id);
     let node = unitNodes.get(u.id);
     // Ein-/Ausschiffen wechselt den Typ: Modell neu aufbauen.
-    if (node && (node.type !== u.type || node.passenger !== passengerOf(u))) {
+    const lk = lookFor(state, u.owner);
+    if (node && (node.type !== u.type || node.passenger !== passengerOf(u) || node.plume !== (lk && lk.plume))) {
       removeUnitNode(u.id, node);
       node = null;
     }
@@ -2110,14 +2167,33 @@ export function syncBoard(state, viewer = null) {
     if (pos.distanceToSquared(target) > 0.0004 && !node.moving) {
       node.moving = true;
       const from = pos.clone();
-      turnNode(node, target.x - from.x, target.z - from.z);
+      // Mit bekanntem Weg Feld für Feld laufen, sonst direkt springen.
+      const path = movePaths.get(u.id);
+      movePaths.delete(u.id);
+      const pts = [from];
+      if (path && path.length > 1) {
+        for (const [q, r] of path.slice(0, -1)) {
+          const w = toWorld(q, r);
+          pts.push(new THREE.Vector3(w.x, unitTop(hk(q, r), u.type), w.z));
+        }
+      }
+      pts.push(target);
+      const n = pts.length - 1;
+      const air = hasAbility(u.type, 'air'), water = hasAbility(u.type, 'water');
+      let seg = -1;
       promises.push(new Promise(resolve => {
         addTween({
-          dur: 320,
-          ease: easeOut,
+          dur: n > 1 ? 190 * n : 320,
+          ease: n > 1 ? (t => t) : easeOut,
           update: t => {
-            pos.lerpVectors(from, target, t);
-            pos.y += Math.sin(Math.PI * Math.min(t, 1)) * 0.45 * (1 - t * 0.3);
+            const f = Math.max(0, Math.min(t, 1)) * n;
+            const i = Math.max(0, Math.min(Math.floor(f), n - 1));
+            const k = n > 1 ? easeInOut(f - i) : f - i;
+            if (i !== seg) { seg = i; turnNode(node, pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z, 110); }
+            pos.lerpVectors(pts[i], pts[i + 1], k);
+            // Landeinheiten hüpfen je Schritt, Schiffe schaukeln, Ballone gleiten.
+            const hop = air ? 0.04 : water ? 0.03 : (n > 1 ? 0.12 : 0.45 * (1 - t * 0.3));
+            pos.y += Math.sin(Math.PI * k) * hop;
           },
           resolve: () => { node.moving = false; resolve(); }
         });
@@ -2141,9 +2217,19 @@ export function syncBoard(state, viewer = null) {
     if (alive.has(id) || node.dying) continue;
     node.dying = true;
     const g = node.group;
+    const y0 = g.position.y;
     addTween({
       dur: DIESE_DUR,
-      update: t => g.scale.setScalar(Math.max(1 - t, 0.01)),
+      // Erst umkippen, dann versinken.
+      update: t => {
+        const tip = Math.min(1, t / 0.55);
+        g.rotation.x = 1.45 * tip * tip;
+        if (t > 0.55) {
+          const k = (t - 0.55) / 0.45;
+          g.scale.setScalar(Math.max(1 - k, 0.01));
+          g.position.y = y0 - 0.25 * k;
+        }
+      },
       resolve: () => {
         scene.remove(g);
         node.sprite.userData.texture.dispose();
@@ -2225,31 +2311,92 @@ function nodePos(id) {
   return n ? n.group.position.clone() : new THREE.Vector3();
 }
 
+// Geschoss je Angreifer: Pfeil, Bolzen, Stein, Brandtopf.
+const RANGED = new Set(['archer', 'crossbow', 'catapult', 'ship', 'battleship', 'airship', 'fireballoon']);
+function projectileMesh(type) {
+  const g = new THREE.Group();
+  if (type === 'catapult') {
+    g.add(new THREE.Mesh(geo('pjStone', () => new THREE.IcosahedronGeometry(0.07, 0)), mat(0x9b9b94)));
+  } else if (type === 'fireballoon') {
+    g.add(new THREE.Mesh(geo('pjPot', () => new THREE.IcosahedronGeometry(0.06, 0)), mat(0xb45309)));
+    const fire = new THREE.Mesh(geo('pjFire', () => new THREE.ConeGeometry(0.04, 0.1, 5)), new THREE.MeshBasicMaterial({ color: 0xff8a1f }));
+    fire.position.y = 0.07;
+    g.add(fire);
+  } else {
+    const shaft = new THREE.Mesh(geo('pjShaft', () => new THREE.BoxGeometry(0.3, 0.015, 0.015)), mat(0x5c3d22));
+    g.add(shaft);
+    const tip = new THREE.Mesh(geo('pjTip', () => new THREE.ConeGeometry(0.022, 0.06, 4)), mat(0xd9dee5));
+    tip.rotation.z = -Math.PI / 2;
+    tip.position.x = 0.17;
+    g.add(tip);
+  }
+  return g;
+}
+
+// Ein Schlag von `from` auf `to`: Geschoss oder Ausfallschritt, danach Treffer.
+function strike(fromId, toId, dmg, color) {
+  const a = unitNodes.get(fromId), d = unitNodes.get(toId);
+  const impact = () => {
+    if (d) {
+      d.flashUntil = performance.now() + 280;
+      // Rückstoß vom Angreifer weg und zurück.
+      if (a && !d.moving) {
+        const dp = d.group.position, base = dp.clone();
+        const away = new THREE.Vector3(dp.x - a.group.position.x, 0, dp.z - a.group.position.z).normalize().multiplyScalar(0.14);
+        addTween({ dur: 220, update: t => { if (!d.moving && !d.dying) dp.copy(base).addScaledVector(away, Math.sin(Math.PI * t)); } });
+      }
+    }
+    floatText(nodePos(toId), '-' + dmg, color);
+  };
+  if (!a || !d) { impact(); return 0; }
+  const ap = a.group.position, dp = d.group.position;
+  turnNode(a, dp.x - ap.x, dp.z - ap.z);
+  const dist = Math.hypot(dp.x - ap.x, dp.z - ap.z);
+  if (RANGED.has(a.type) && (dist > 1.9 || a.type === 'fireballoon' || a.type === 'airship')) {
+    const pj = projectileMesh(a.type);
+    const from = ap.clone().add(new THREE.Vector3(0, hasAbility(a.type, 'air') ? 0.75 : 0.4, 0));
+    const to = dp.clone().add(new THREE.Vector3(0, 0.3, 0));
+    const peak = a.type === 'fireballoon' ? 0 : 0.5 + dist * 0.18;
+    scene.add(pj);
+    const dur = 300 + dist * 40;
+    addTween({
+      dur,
+      update: t => {
+        pj.position.lerpVectors(from, to, t);
+        pj.position.y += Math.sin(Math.PI * t) * peak;
+        // Spitze zeigt in Flugrichtung (Ableitung der Bahn).
+        const vy = (to.y - from.y) + Math.cos(Math.PI * t) * Math.PI * peak;
+        pj.rotation.y = -Math.atan2(to.z - from.z, to.x - from.x);
+        pj.rotation.z = Math.atan2(vy, dist);
+      },
+      resolve: () => { scene.remove(pj); impact(); }
+    });
+    return dur;
+  }
+  // Nahkampf: kurzer Ausfallschritt zum Ziel und zurück.
+  const base = ap.clone();
+  const dir = new THREE.Vector3(dp.x - ap.x, 0, dp.z - ap.z).normalize().multiplyScalar(0.28);
+  addTween({ dur: 260, update: t => { if (!a.moving) ap.copy(base).addScaledVector(dir, Math.sin(Math.PI * t)); } });
+  setTimeout(impact, 130);
+  return 140;
+}
+
 export function playCombat(events) {
   if (!initialized) return Promise.resolve();
-  let flashCount = 0;
   const hit = events.find(ev => ev.kind === 'damage');
-  if (hit) {
-    const a = unitNodes.get(hit.from), d = unitNodes.get(hit.to);
-    if (a && d) {
-      const ap = a.group.position, dp = d.group.position;
-      turnNode(a, dp.x - ap.x, dp.z - ap.z);
-      turnNode(d, ap.x - dp.x, ap.z - dp.z);
-      // Kurzer Ausfallschritt des Angreifers zum Ziel und zurück.
-      const base = ap.clone();
-      const dir = new THREE.Vector3(dp.x - ap.x, 0, dp.z - ap.z).normalize().multiplyScalar(0.28);
-      addTween({ dur: 260, update: t => { if (!a.moving) ap.copy(base).addScaledVector(dir, Math.sin(Math.PI * t)); } });
-    }
+  const back = events.find(ev => ev.kind === 'retaliate');
+  if (!hit && !back) return Promise.resolve();
+  const d = hit ? unitNodes.get(hit.to) : null;
+  const a = hit ? unitNodes.get(hit.from) : null;
+  if (a && d) turnNode(d, a.group.position.x - d.group.position.x, a.group.position.z - d.group.position.z);
+  const t1 = hit ? strike(hit.from, hit.to, hit.dmg, '#ff8080') : 0;
+  let total = t1 + 420;
+  if (back) {
+    const delay = t1 + 260;
+    setTimeout(() => strike(back.from, back.to, back.dmg, '#ffd24d'), delay);
+    total = delay + 520;
   }
-  for (const ev of events) {
-    if (ev.kind === 'damage' || ev.kind === 'retaliate') {
-      const node = unitNodes.get(ev.to);
-      if (node) node.flashUntil = performance.now() + 280;
-      floatText(nodePos(ev.to), '-' + ev.dmg, ev.kind === 'retaliate' ? '#ffd24d' : '#ff8080');
-      flashCount++;
-    }
-  }
-  return new Promise(resolve => setTimeout(resolve, flashCount ? 620 : 0));
+  return new Promise(resolve => setTimeout(resolve, total));
 }
 
 const HL = {
