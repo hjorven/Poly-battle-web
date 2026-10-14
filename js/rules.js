@@ -439,7 +439,7 @@ export function canBuildRoad(state, player, q, r, byUnit = false) {
   if (!inBounds(q, r)) return { ok: false, reason: 'Außerhalb der Karte' };
   const t = TERRAIN[terrainAt(state, q, r)];
   if (!t.walkable) return { ok: false, reason: 'Nur auf Land' };
-  if (roadAt(state, q, r)) return { ok: false, reason: 'Hier ist schon ein Weg' };
+  if (roadAt(state, q, r)) return { ok: false, reason: 'Hier ist schon eine Straße' };
   if (cityAt(state, q, r)) return { ok: false, reason: 'Städte sind schon angebunden' };
   const owner = tileCity(state, q, r);
   if (owner && owner.owner && owner.owner !== player) return { ok: false, reason: 'Fremdes Gebiet' };
