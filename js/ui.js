@@ -1,6 +1,6 @@
 import {
   UNITS, UNIT_ORDER, TECHS, NAMES, MAX_POP,
-  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS, MONUMENTS, ROAD,
+  TRIBES, TRIBE_POOL, ABILITY_INFO, TERRAIN, RESOURCES, IMPROVEMENTS, STARS_OPTIONS, MONUMENTS, ROAD, PERSONAS,
   CITY_REWARDS, GAME_MODES, BRIDGE, MAP_SIZES, MAP_TYPES
 } from './config.js';
 import {
@@ -1316,6 +1316,8 @@ export function showOverview(state, ctx) {
       const peace = atPeace(state, actAs, p);
       const name = met ? (tribeName(state, p) || NAMES[p]) : 'Unbekannter Stamm';
       let status = !met ? 'noch nicht begegnet' : peace ? 'Frieden' : 'Krieg';
+      const persona = met && state.persona && state.persona[p] && PERSONAS[state.persona[p]];
+      if (persona) status = `${persona.name} · ${status}`;
       if (pendingOffer(state, actAs, p)) status += ' · Angebot gesendet';
       let action = '';
       if (met && ctx.myTurn) {

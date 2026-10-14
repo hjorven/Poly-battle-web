@@ -797,3 +797,6 @@ button:focus-visible {
 .recent li { border-left: 3px solid #a1a1aa; padding: 3px 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .recent li.won { border-left-color: #16a34a; }
 .recent li span { color: #a1a1aa; font-size: 12px; }
+
+/* KI-Botschaft */
+.toast.quote { font-style: italic; border-left: 4px solid #7c3aed; }
