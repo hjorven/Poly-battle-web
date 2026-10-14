@@ -735,7 +735,23 @@ function occupancy(state) {
   return occ;
 }
 
-export function reachableMap(state, unit) {
+// Weg zu (q, r) als Liste von Feldern (ohne Startfeld) – für die Laufanimation.
+export function pathTo(state, unit, q, r) {
+  const prev = new Map();
+  const reach = reachableMap(state, unit, prev);
+  const goal = hk(q, r);
+  if (!reach.has(goal)) return [];
+  const path = [];
+  let k = goal;
+  const start = hk(unit.q, unit.r);
+  for (let guard = 0; k && k !== start && guard < 64; guard++) {
+    path.unshift(k.split(',').map(Number));
+    k = prev.get(k);
+  }
+  return path;
+}
+
+export function reachableMap(state, unit, prev = null) {
   const out = new Map();
   if (!unit || !UNITS[unit.type] || !(unit.mp > 0)) return out;
   if (unit.acted && !(hasAbility(unit.type, 'escape') || hasAbility(unit.type, 'persist'))) return out;
@@ -771,6 +787,7 @@ export function reachableMap(state, unit) {
         if (nc > budget) continue;
         if (nc < (dist.get(k) ?? Infinity)) {
           dist.set(k, nc);
+          if (prev) prev.set(k, hk(q, r));
           // Kontrollzone: Neben einem Feind endet der Zug; auch nach dem
           // Wechsel zwischen Land und Wasser geht es nicht weiter.
           if (!switching && (flying || !zoc(nq, nr))) (buckets[nc] || (buckets[nc] = [])).push([nq, nr]);
