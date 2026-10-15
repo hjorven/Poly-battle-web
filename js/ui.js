@@ -635,13 +635,26 @@ export function showUnitChip(state, unit, ctx) {
     : !ctx.myTurn ? 'Nicht am Zug'
     : opts.length ? 'Kann noch ' + esc(opts.join(', ')) : 'Hat in diesem Zug gehandelt';
   const acts = live ? quickActions(state, unit, ctx) : [];
+  if (live && ctx.expanded) acts.push({ label: 'Auflösen', cost: '+' + disbandRefund(unit), danger: true, run: () => handlers.onDisband(unit) });
+  let more = '';
+  if (ctx.expanded) {
+    const tile = TERRAIN[terrainAt(state, unit.q, unit.r)];
+    const info = [`Gelände: ${tile.name}, Verteidigung ${defenceBonus(state, unit)}-fach`];
+    if (!unit.vet && !UNITS[unit.type].reward) info.push(`Siege ${unit.kills || 0} von 3 bis zum Veteranen (+5 Leben)`);
+    if (unit.hp < cap) info.push(canRegenerate(state, unit) ? 'Heilt zu Beginn des nächsten Zuges' : 'Heilt nicht: hat angegriffen oder ein Gegner ist in Reichweite');
+    if (unit.cargo) info.push(`Fracht: ${UNITS[unit.cargo.type].name}`);
+    if (unit.carry) info.push('Fährt als Boot; an Land gehen beendet die Bewegung.');
+    more = `<div class="tb-more"><div class="ability-row">${abilityChips(unit.type)}</div><div class="tb-info">${info.map(esc).join('<br>')}</div></div>`;
+  }
   bar.innerHTML = `
+    ${more}
     <div class="tb-cap">${status}</div>
     <div class="tb-row">
-      ${acts.map((a, i) => `<button class="btn tool-tile${a.reason ? ' off' : ''}" data-act="${i}" ${a.reason ? 'aria-disabled="true"' : ''} title="${esc(a.reason || a.label)}"><b>${esc(a.label)}</b><span class="tt-foot">${a.cost != null ? `<span class="tt-cost">${a.cost}</span>` : ''}${a.reason ? `<span class="tt-why">${esc(a.reason)}</span>` : ''}</span></button>`).join('')}
-      <button class="btn tool-tile ghost" data-details><b>Details</b><span class="tt-foot"><span class="tt-why">Alle Werte und Aktionen</span></span></button>
+      ${acts.map((a, i) => `<button class="btn tool-tile${a.reason ? ' off' : ''}${a.danger ? ' danger' : ''}" data-act="${i}" ${a.reason ? 'aria-disabled="true"' : ''} title="${esc(a.reason || a.label)}"><b>${esc(a.label)}</b><span class="tt-foot">${a.cost != null ? `<span class="tt-cost">${a.cost}</span>` : ''}${a.reason ? `<span class="tt-why">${esc(a.reason)}</span>` : ''}</span></button>`).join('')}
+      <button class="btn tool-tile ghost" data-details aria-expanded="${!!ctx.expanded}"><b>${ctx.expanded ? 'Weniger' : 'Details'}</b><span class="tt-foot"><span class="tt-why">${ctx.expanded ? 'Details zuklappen (Taste I)' : 'Fähigkeiten, Gelände, Auflösen (Taste I)'}</span></span></button>
     </div>`;
   bar.querySelectorAll('.tb-row').forEach(wheelSideways);
+  wirePanel(bar);
   bar.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
   bar.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
     const a = acts[Number(b.dataset.act)];

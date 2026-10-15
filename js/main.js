@@ -312,13 +312,9 @@ function updateSelection() {
         duel = { q: tq, r: tr, foe, damage: Math.min(res.damage, foe.hp), back };
       } else hint = 'Ziel gewählt – nochmal tippen zum Ziehen';
     }
-    if (app.panelOpen) {
-      ui.hideUnitChip();
-      ui.showUnitPanel(st, u, ctx());
-    } else {
-      ui.hidePanel();
-      ui.showUnitChip(st, u, { ...ctx(), hint, duel });
-    }
+    // Details klappen die Werkzeugreihe auf (statt eines eigenen Fensters).
+    ui.hidePanel();
+    ui.showUnitChip(st, u, { ...ctx(), hint, duel, expanded: app.panelOpen });
   } else {
     const city = R.cityAt(st, app.sel.q, app.sel.r);
     render.setHighlights({ selected: city.q + ',' + city.r });
@@ -1385,7 +1381,7 @@ function boot() {
     onNextIdle: nextIdle,
     onSelectCity: (q, r) => { app.sel = { kind: 'city', q, r }; sfx('select'); refresh(); },
     onSelectUnit: id => { if (R.findUnit(app.state, id)) { selectUnit(id, true); sfx('select'); refresh(); } },
-    onUnitDetails: () => { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = true; refresh(); } },
+    onUnitDetails: () => { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = !app.panelOpen; refresh(); } },
     onCamera: cmd => {
       if (cmd === 'rotL') render.rotateCamera(-1);
       else if (cmd === 'rotR') render.rotateCamera(1);
