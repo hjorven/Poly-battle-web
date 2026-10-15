@@ -2182,5 +2182,17 @@ test('Bau-Vorschau: Monument zählt die Bevölkerung mit', () => {
 });
 
 
+test('Monument-Fortschritt passt zur Freischaltung', () => {
+  const st = makeState();
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 5 }, { q: 9, r: 5, owner: 'player_1', pop: 5 }];
+  assert.deepStrictEqual(R.monumentProgress(st, 'player_1', 'm_park'), [2, 3]);
+  assert.deepStrictEqual(R.monumentProgress(st, 'player_1', 'm_palace'), [2, 8]);
+  st.stars.player_1 = 120;
+  assert.deepStrictEqual(R.monumentProgress(st, 'player_1', 'm_treasury'), [120, 100]);
+  assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), ['m_treasury']);
+  st.cities.push({ q: 13, r: 5, owner: 'player_1', pop: 5 });
+  assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), ['m_park']);
+});
+
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
 if (failed) process.exit(1);
