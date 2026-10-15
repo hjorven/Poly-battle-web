@@ -272,6 +272,23 @@ await test('Kampfvorschau: erster Tipp zeigt beide Einheiten, zweiter greift an'
   }
 });
 
+await test('Einheit: Details klappen die Werkzeugreihe auf und wieder zu', async () => {
+  const page = await open('ipadQuer');
+  await startGame(page);
+  await page.keyboard.press(' ');
+  await page.waitForTimeout(300);
+  await page.click('#unit-chip [data-details]');
+  await page.waitForTimeout(200);
+  assert.ok(await page.isVisible('#unit-chip .tb-more'), 'Details sichtbar');
+  assert.ok(await page.isVisible('#unit-chip .tool-tile.danger'), 'Auflösen angeboten');
+  assert.ok(!(await page.isVisible('#panel')), 'kein altes Seitenfenster');
+  await page.keyboard.press('i');
+  await page.waitForTimeout(200);
+  assert.ok(!(await page.isVisible('#unit-chip .tb-more')), 'Taste I klappt zu');
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
