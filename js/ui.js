@@ -292,7 +292,7 @@ export function updateStrip(state, ctx) {
   const tr = $('treasury');
   if (me && state.stars[me] != null) {
     const inc = incomeFor(state, me);
-    tr.innerHTML = `<span class="tr-num">${state.stars[me]}</span><span class="tr-txt"><span class="tr-lbl">${state.stars[me] === 1 ? 'Stern' : 'Sterne'}</span><span class="tr-inc">+${inc} nächste Runde</span></span>`;
+    tr.innerHTML = `<span class="tr-hex" aria-hidden="true"></span><span class="tr-num">${state.stars[me]}</span><span class="tr-txt"><span class="tr-lbl">${state.stars[me] === 1 ? 'Stern' : 'Sterne'}</span><span class="tr-inc">+${inc} nächste Runde</span></span>`;
     tr.title = `${state.stars[me]} Sterne, nächste Runde kommen ${inc} dazu`;
   } else tr.innerHTML = '';
   $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' / ' + state.turnLimit : '');
@@ -856,7 +856,7 @@ export function showCityPanel(state, city, ctx) {
   const rewards = Object.entries(city.rewards || {}).sort((a, b) => a[0] - b[0]).map(([, id]) => CITY_REWARDS[id].name);
   setAnchor('city', city.q, city.r, `
     <div class="at-head">${city.owner ? `<span class="dot" style="background:${hex(playerColor(state, city.owner))}"></span>` : ''}<b>${name}</b><span class="at-lvl">Stufe ${city.pop}</span></div>
-    ${hpBar(city.pop, MAX_POP, 'pop')}
+    <span class="at-hexes" aria-label="Stufe ${city.pop} von ${MAX_POP}">${Array.from({ length: MAX_POP }, (_, i) => `<span class="${i < city.pop ? 'on' : ''}"></span>`).join('')}</span>
     <div class="at-stats">${city.owner ? `<span class="at-inc">+${income} pro Runde</span>` : `<span>${esc(ownerName)}</span>`}<span>${tiles.length} Felder</span></div>
     ${rewards.length ? `<div class="at-sub">${rewards.map(esc).join(', ')}</div>` : ''}`);
   const tiles2 = [];
