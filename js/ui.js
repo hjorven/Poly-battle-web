@@ -59,6 +59,7 @@ export function initUI(h) {
     handlers.onHotkey(action);
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
+  $('coachBtn').addEventListener('click', () => handlers.onCoach && handlers.onCoach());
   // Die Karte reicht bis oben; Elemente darunter richten sich nach der Höhe der Kärtchen.
   const syncTop = () => document.documentElement.style.setProperty('--hud-h', $('topbar').offsetHeight + 'px');
   syncTop();
@@ -1728,6 +1729,17 @@ const TIPS = [
   'Wähle bei Stufe 3 die Stadtmauer, wenn Gegner in der Nähe sind: Verteidiger bekommen dann 4-fache Verteidigung.',
   'Greif nicht an, wenn die Vorschau mehr Gegenschlag als Schaden zeigt – warte lieber auf Verstärkung.'
 ];
+
+// KI-Lehrling: Vorschlag mit Erklärung, Ausführen oder Schließen.
+export function showCoach(hint, onRun, onClose) {
+  const box = $('coach');
+  if (!hint) { box.classList.add('hidden'); return; }
+  box.innerHTML = `<div class="co-head">Tipp der KI</div><div class="co-text">${esc(hint.text)}</div>${hint.why ? `<div class="co-why">${esc(hint.why)}</div>` : ''}
+    <div class="co-acts">${hint.runnable ? '<button class="btn primary small" data-co-run>Ausführen</button>' : ''}<button class="btn ghost small" data-co-close>Schließen</button></div>`;
+  box.classList.remove('hidden');
+  box.querySelector('[data-co-run]')?.addEventListener('click', onRun);
+  box.querySelector('[data-co-close]').addEventListener('click', onClose);
+}
 
 // Wiederholung: Regler, Abspielen/Anhalten, Tempo.
 export function setReplay(info) {

@@ -359,7 +359,7 @@ function recordProfile() {
   const me = app.mode === 'online' ? app.myRole : app.mode === 'bot' ? 'player_1' : null;
   if (!me) { ui.showProfileResult(null); return; }
   // Testpartien (Admin-Panel) zählen nur auf Wunsch fürs Profil, nie für die Bestenliste.
-  if (st.admin && !st.adminScore) {
+  if ((st.admin && !st.adminScore) || (st.coached && (st.daily || st.weekly))) {
     if (app.recordedGen !== app.gen) { app.recordedGen = app.gen; app.lastResult = null; ui.toast('Testpartie: nicht gewertet'); }
     ui.showProfileResult(null);
     return;
@@ -388,7 +388,7 @@ async function syncOnline(profile, st, me, score) {
     if (st.daily || st.weekly) ui.toast('Wähle im Menü einen Namen, dann zählen deine Punkte in der Bestenliste.');
     return;
   }
-  const kind = st.admin ? null : st.daily ? 'daily' : st.weekly ? 'weekly' : null;
+  const kind = st.admin || st.coached ? null : st.daily ? 'daily' : st.weekly ? 'weekly' : null;
   if (kind) {
     const res = await net.submitScore(kind, st.daily || st.weekly, score, st.tribes ? st.tribes[me] : null, st.round);
     if (res.data) ui.toast(`Bestenliste ${kind === 'daily' ? 'heute' : 'diese Woche'}: Platz ${res.data.rank} von ${res.data.total}`, 'good');
@@ -1177,6 +1177,78 @@ function startTutorial() {
   refresh();
 }
 
+// --- KI-Lehrling ------------------------------------------------------------------
+// Fragt die KI auf einer Kopie, was sie an Stelle des Spielers täte, und erklärt es.
+function coachHint() {
+  const st = app.state;
+  if (!myTurn()) { ui.toast('Tipps gibt es in deinem Zug'); return; }
+  const me = actAs();
+  const copy = JSON.parse(JSON.stringify(st));
+  R.useMap(copy);
+  let step = null;
+  try { step = botStep(copy, me); } catch (e) { step = null; }
+  // Krieg erklären schlägt der Lehrling nie vor.
+  if (step && step.kind === 'war') step = null;
+  if (st.daily || st.weekly) ui.toast('Mit Tipps zählt diese Herausforderung nicht für die Bestenliste', 'warn');
+  st.coached = true;
+  persist();
+  const U = t => UNITS[t].name;
+  let hint;
+  const at = (q, r) => { render.cameraTo(q, r, true); };
+  if (!step) hint = { text: 'Nichts Dringendes mehr – du kannst den Zug beenden.', runnable: false };
+  else switch (step.kind) {
+    case 'attack': {
+      const res = R.battleResults(st, R.findUnit(st, step.attacker.id), R.findUnit(st, step.defender.id));
+      hint = { text: `Greife mit ${U(step.attacker.type)} den gegnerischen ${U(step.defender.type)} an.`, why: res.damage >= step.defender.hp ? 'Der Angriff besiegt ihn sofort.' : `Das macht ${res.damage} Schaden, der Gegenschlag nur ${res.retaliation}.`, runnable: true };
+      app.sel = { kind: 'unit', id: step.attacker.id }; app.panelOpen = false;
+      app.pending = { unitId: step.attacker.id, key: step.defender.q + ',' + step.defender.r, kind: 'attack' };
+      at(step.defender.q, step.defender.r);
+      break;
+    }
+    case 'move':
+      hint = { text: `Ziehe ${U(step.unit.type)} auf das markierte Feld.`, why: 'Die KI rückt so auf ein Ziel zu, erkundet oder schützt eine Stadt.', runnable: true };
+      app.sel = { kind: 'unit', id: step.unit.id }; app.panelOpen = false;
+      app.pending = { unitId: step.unit.id, key: step.q + ',' + step.r, kind: 'move' };
+      at(step.q, step.r);
+      break;
+    case 'train': hint = { text: `Bilde in dieser Stadt ${U(step.type)} aus.`, why: 'Mehr Einheiten schützen deine Städte und erobern neue.', runnable: true }; app.sel = { kind: 'city', q: step.city.q, r: step.city.r }; at(step.city.q, step.city.r); break;
+    case 'buyPop': hint = { text: 'Kaufe in dieser Stadt Bevölkerung.', why: 'Mehr Bevölkerung bringt jede Runde mehr Sterne und Belohnungen.', runnable: true }; app.sel = { kind: 'city', q: step.city.q, r: step.city.r }; at(step.city.q, step.city.r); break;
+    case 'improve': hint = { text: `Baue ${IMPROVEMENTS[step.type].name} auf dem markierten Feld.`, why: 'Gebäude bringen dauerhaft mehr Sterne pro Runde.', runnable: true }; app.sel = { kind: 'city', q: step.city.q, r: step.city.r }; at(step.q, step.r); break;
+    case 'research': hint = { text: `Erforsche ${TECHS[step.tech].name}.`, why: TECHS[step.tech].desc, runnable: true }; break;
+    case 'reward': hint = { text: `Wähle als Belohnung „${CITY_REWARDS[step.choice].name}“.`, why: CITY_REWARDS[step.choice].desc, runnable: true }; at(step.city.q, step.city.r); break;
+    case 'settle': hint = { text: 'Gründe mit dem Siedler hier eine Stadt.', runnable: true }; at(step.unit.q, step.unit.r); break;
+    case 'upgrade': hint = { text: `Rüste ${U(step.unit.type)} auf.`, runnable: true }; app.sel = { kind: 'unit', id: step.unit.id }; at(step.unit.q, step.unit.r); break;
+    case 'trade': hint = { text: 'Handle mit dem Händlerkarren.', why: 'Das bringt sofort Sterne.', runnable: true }; at(step.unit.q, step.unit.r); break;
+    case 'road': hint = { text: 'Baue einen Weg auf dem markierten Feld.', why: 'Wege verbinden Städte und machen Einheiten schneller.', runnable: true }; at(step.q, step.r); break;
+    case 'bridge': hint = { text: 'Baue mit dieser Einheit eine Brücke.', runnable: true }; at(step.unit.q, step.unit.r); break;
+    default: hint = { text: 'Die KI hat einen Vorschlag, der sich hier nicht anzeigen lässt.', runnable: false };
+  }
+  refresh();
+  ui.showCoach(hint, () => { ui.showCoach(null); runCoachStep(step); }, () => { ui.showCoach(null); app.pending = null; refresh(); });
+}
+
+async function runCoachStep(step) {
+  if (!step || !myTurn()) return;
+  const st = app.state;
+  app.pending = null;
+  const unit = u => R.findUnit(st, u.id);
+  const city = c => R.cityAt(st, c.q, c.r);
+  switch (step.kind) {
+    case 'attack': return doAttack(unit(step.attacker), unit(step.defender));
+    case 'move': return doMove(unit(step.unit), step.q, step.r);
+    case 'train': return doTrain(city(step.city), step.type);
+    case 'buyPop': return doBuyPop(city(step.city));
+    case 'improve': return doImprove(city(step.city), step.type, step.q, step.r);
+    case 'research': return doResearch(step.tech);
+    case 'reward': return doChooseReward(city(step.city), step.choice);
+    case 'settle': return doFound(unit(step.unit));
+    case 'upgrade': return doUpgrade(unit(step.unit));
+    case 'trade': return doTrade(unit(step.unit));
+    case 'road': return doBuildRoad(step.q, step.r, null);
+    case 'bridge': return doBuildBridge(unit(step.unit), step.dir);
+  }
+}
+
 // --- Wiederholung und Zeitraffer -------------------------------------------------
 function showReplay() {
   const rp = app.replay;
@@ -1426,6 +1498,7 @@ function boot() {
     onLoadCargo: doLoadCargo,
     onUpgrade: doUpgrade,
     onTrade: doTrade,
+    onCoach: coachHint,
     onUnloadCargo: doUnloadCargo,
     onBuildRoad: doBuildRoad,
     onJump: (q, r) => render.cameraTo(q, r, true),
