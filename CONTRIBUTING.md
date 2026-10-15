@@ -41,7 +41,8 @@ Es gibt keinen Build-Schritt und keine npm-Abhängigkeiten. Änderungen im Code 
 - **Sprache:** Alle Texte im Spiel sind Deutsch, in einfachen Worten. Knöpfe sagen, was passiert („Zug beenden“, nicht „OK“).
 - **Keine Emojis und keine Textsymbole** in der Oberfläche (keine Pfeile, Sterne oder Häkchen als Zeichen). Wo ein Symbol nötig ist, als SVG.
 - **Kein Rückgängig.** Jeder Zug zählt; stattdessen verhindern zweistufige Aktionen (erst markieren, dann ausführen) Fehlbedienung.
-- **Stil:** realistisch-mittelalterlich im Low-Poly-Look. Neue Modelle und Farben passen sich daran an.
+- **Stil der Spielwelt:** realistisch-mittelalterlich im Low-Poly-Look. Neue Modelle passen sich daran an.
+- **Stil der Oberfläche:** schlicht wie Mini Metro – die Karte bleibt frei, Bedienung in schwebenden Kärtchen, Infos als Schild am Objekt, Aktionen als Werkzeugreihe unten. Eckige Ecken, eine Schrift, Hauptfarbe Waldgrün über die CSS-Variablen (hell und dunkel), Sechsecke nur als Marker und Abzeichen. Keine Verläufe, Texturen oder Zierschriften.
 - **Für alle Geräte:** Bedienbar mit Maus, Tastatur und Touch. Tippziele mindestens 36 px hoch, wichtige Dialoge passen ohne Scrollen auf ein iPad (810×950 hochkant, 1080×700 quer).
 - **Robust:** Beschädigte Spielstände, Profile oder unerwartete Eingaben dürfen das Spiel nie lahmlegen.
 
