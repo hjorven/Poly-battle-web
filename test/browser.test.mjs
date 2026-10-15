@@ -309,6 +309,46 @@ await test('Forschung: Sprungleiste nur wenn nötig, springt zum Zweig', async (
   await page.context().close();
 });
 
+await test('Wiederholung: nach Spielende abspielen, Regler, Tempo', async () => {
+  const page = await open('pc');
+  await startGame(page);
+  // Partie von der KI für alle Stämme zu Ende spielen lassen.
+  await page.evaluate(async () => {
+    const { app, R, botStep, sync } = window.__pb;
+    const { applyStep } = await import('./js/ai.js');
+    const st = app.state;
+    for (let i = 0; i < 4 * 120 && !st.winner; i++) {
+      const pl = st.turn; let k = 0;
+      while (st.turn === pl && k++ < 300) { const s = botStep(st, pl); if (!s) break; applyStep(st, s, pl); }
+      if (st.turn === pl && !st.winner) R.endTurn(st);
+    }
+    if (!st.winner) R.finishByScore(st);
+    sync();
+  });
+  await page.waitForTimeout(500);
+  assert.ok(await page.isVisible('#winner-overlay'), 'Ergebnis erscheint');
+  await page.click('#winnerMap');
+  await page.waitForTimeout(300);
+  assert.ok(await page.isVisible('#replay-bar'), 'Wiederholungsleiste');
+  const max = Number(await page.$eval('#rpSlider', e => e.max));
+  assert.ok(max >= 5, 'mehrere Runden: ' + max);
+  await page.$eval('#rpSlider', e => { e.value = '2'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(200);
+  assert.match(await page.textContent('#rpLabel'), /Runde 3/);
+  await page.click('[data-rpspeed="200"]');
+  await page.click('#rpPlay');
+  await page.waitForTimeout(1200);
+  const v = Number(await page.$eval('#rpSlider', e => e.value));
+  assert.ok(v > 2, 'Zeitraffer läuft: ' + v);
+  await page.click('#rpPlay');
+  assert.match(await page.textContent('#rpPlay'), /Abspielen/);
+  await page.click('#reviewBack');
+  await page.waitForTimeout(200);
+  assert.ok(!(await page.isVisible('#replay-bar')), 'Leiste weg beim Zurück');
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);

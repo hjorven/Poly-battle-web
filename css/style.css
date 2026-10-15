@@ -1393,3 +1393,16 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
 .tj-dot { width: 10px; height: 11px; clip-path: var(--hex); }
 @media (hover: none) { .tj-btn { min-height: 40px; } }
 .test-flag { font-size: 11px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); padding: 0 5px; align-self: flex-start; margin-top: 2px; }
+
+/* Wiederholung: Leiste unten in der Mitte */
+#replay-bar {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 30;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+  width: min(760px, calc(100% - 24px)); padding: 10px 12px; background: var(--panel); border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+#replay-bar.hidden { display: none; }
+#rpSlider { flex: 1 1 220px; min-width: 160px; accent-color: var(--primary); height: 28px; }
+.rp-label { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 96px; }
+.rp-speed .chip-btn { min-height: 32px; }
+@media (hover: none) { #rpSlider { height: 40px; } .rp-speed .chip-btn { min-height: 40px; } }

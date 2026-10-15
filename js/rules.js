@@ -791,6 +791,8 @@ export function endTurn(state) {
     recordHistory(state);
   }
   startTurn(state);
+  // Schnappschuss nach dem Rundenbeginn (Wachstum, Heilung …), so wie man die Runde sieht.
+  if (state.round !== startRound) recordFrame(state);
 }
 
 export function canAttackNow(state, unit) {
@@ -2245,7 +2247,82 @@ export function scoreBreakdown(state, player) {
   };
 }
 
+// --- Wiederholung ---------------------------------------------------------------
+// Pro Runde ein kompakter Schnappschuss: Städte [q, r, Besitzer, Bevölkerung],
+// Einheiten [q, r, Besitzer, Art, Nummer], dazu nur die Änderungen an Gebäuden
+// und Wegen. Besitzer = Index in players (-1 neutral), Art = Index in UNITS.
+const UNIT_KEYS = Object.keys(UNITS);
+const lastFrameBase = new WeakMap();
+
+export function recordFrame(state) {
+  if (!state.replay) state.replay = [];
+  const pl = players(state);
+  const own = o => (o ? pl.indexOf(o) : -1);
+  if (!state.ridSeq) state.ridSeq = 0;
+  for (const u of state.units) if (u.rid == null) u.rid = ++state.ridSeq;
+  const frame = {
+    r: state.round,
+    c: state.cities.map(c => [c.q, c.r, own(c.owner), c.pop]),
+    u: state.units.map(u => [u.q, u.r, own(u.owner), UNIT_KEYS.indexOf(u.type), u.rid])
+  };
+  // Gebäude und Wege nur als Änderung zum letzten Schnappschuss (nach dem Laden
+  // eines Spielstands einmal vollständig).
+  const imps = state.improvements || {}, roads = state.roads || {};
+  const last = state.replay[state.replay.length - 1];
+  const replacing = !!(last && last.r === frame.r);
+  const memo = lastFrameBase.get(state);
+  // Wird der Schnappschuss derselben Runde ersetzt, gilt die Basis davor.
+  let prev = memo ? (replacing ? memo.before : memo.now) : null;
+  if (!prev && (replacing ? state.replay.length === 1 : state.replay.length === 0)) prev = { imps: {}, roads: {} };
+  const base = prev || { imps: {}, roads: {} };
+  const add = {}, gone = [], roadAdd = [], roadGone = [];
+  for (const [k, v] of Object.entries(imps)) if (base.imps[k] !== v) add[k] = v;
+  for (const k of Object.keys(base.imps)) if (!(k in imps)) gone.push(k);
+  for (const k of Object.keys(roads)) if (!base.roads[k]) roadAdd.push(k);
+  for (const k of Object.keys(base.roads)) if (!roads[k]) roadGone.push(k);
+  if (!prev) frame.full = 1;
+  if (Object.keys(add).length) frame.i = add;
+  if (gone.length) frame.x = gone;
+  if (roadAdd.length) frame.w = roadAdd;
+  if (roadGone.length) frame.y = roadGone;
+  lastFrameBase.set(state, { before: prev, now: { imps: { ...imps }, roads: { ...roads } } });
+  if (replacing) state.replay[state.replay.length - 1] = frame;
+  else state.replay.push(frame);
+  // Obergrenze: sehr lange Partien behalten jede zweite frühe Runde.
+  if (state.replay.length > 150) state.replay = state.replay.filter((f, i) => i % 2 === 0 || i > state.replay.length - 50);
+}
+
+// Spielstand für Schnappschuss i nachbauen (Gelände, Brücken usw. vom aktuellen
+// Stand; Städte, Einheiten, Gebäude und Wege aus der Wiederholung).
+export function replayState(state, index) {
+  const frames = state.replay || [];
+  const f = frames[Math.max(0, Math.min(frames.length - 1, index))];
+  if (!f) return state;
+  const pl = players(state);
+  const owner = i => (i >= 0 ? pl[i] : null);
+  const imps = {}, roads = {};
+  for (let k = 0; k <= frames.indexOf(f); k++) {
+    const fr = frames[k];
+    if (fr.full) { for (const key of Object.keys(imps)) delete imps[key]; for (const key of Object.keys(roads)) delete roads[key]; }
+    Object.assign(imps, fr.i || {});
+    for (const key of fr.x || []) delete imps[key];
+    for (const key of fr.w || []) roads[key] = true;
+    for (const key of fr.y || []) delete roads[key];
+  }
+  return {
+    ...state,
+    round: f.r,
+    winner: null,
+    improvements: imps,
+    roads,
+    cities: f.c.map(([q, r, o, pop]) => ({ q, r, owner: owner(o), pop, isCapital: !!(cityAt(state, q, r) || {}).isCapital })),
+    units: f.u.map(([q, r, o, t, rid]) => ({ id: 'replay_' + rid, q, r, owner: owner(o), type: UNIT_KEYS[t] || 'warrior', hp: maxHp(UNIT_KEYS[t] || 'warrior'), mp: 0, hasMoved: true, acted: true })),
+    noFog: true
+  };
+}
+
 export function recordHistory(state, final = false) {
+  recordFrame(state);
   if (!state.history) state.history = [];
   const entry = { round: state.round, scores: {} };
   for (const p of players(state)) entry.scores[p] = score(state, p);

@@ -1177,7 +1177,45 @@ function startTutorial() {
   refresh();
 }
 
+// --- Wiederholung und Zeitraffer -------------------------------------------------
+function showReplay() {
+  const rp = app.replay;
+  if (!rp) { ui.setReplay(null); return; }
+  const f = app.state.replay[rp.index];
+  ui.setReplay({ count: app.state.replay.length, index: rp.index, round: f ? f.r : 1, playing: rp.playing, speed: rp.speed });
+}
+
+function replayFrame() {
+  const rp = app.replay;
+  if (!rp) return;
+  render.syncBoard(R.replayState(app.state, rp.index), null);
+  showReplay();
+}
+
+function playReplay() {
+  const rp = app.replay;
+  if (!rp) return;
+  rp.playing = true;
+  rp.timer = setInterval(() => {
+    if (!app.replay || !app.reviewing) return stopReplay();
+    if (rp.index >= app.state.replay.length - 1) { stopReplay(); showReplay(); return; }
+    rp.index++;
+    replayFrame();
+  }, rp.speed);
+}
+
+function stopReplay() {
+  const rp = app.replay;
+  if (!rp) return;
+  if (rp.timer) clearInterval(rp.timer);
+  rp.timer = null;
+  rp.playing = false;
+}
+
 function endReview() {
+  stopReplay();
+  app.replay = null;
+  ui.setReplay(null);
   app.reviewing = false;
   ui.setReview(false);
 }
@@ -1469,9 +1507,25 @@ function boot() {
       app.sel = null;
       ui.setReview(on);
       ui.hidePanel();
+      stopReplay();
+      const frames = (app.state.replay || []).length;
+      app.replay = on && frames >= 2 ? { index: frames - 1, playing: false, speed: (app.replay && app.replay.speed) || 550, timer: null } : null;
       render.syncBoard(app.state, viewer());
+      showReplay();
       if (on) render.resetCamera();
       refresh();
+    },
+    onReplay: (cmd, value) => {
+      const rp = app.replay;
+      if (!rp || !app.reviewing) return;
+      const last = app.state.replay.length - 1;
+      if (cmd === 'seek') { stopReplay(); rp.index = value; replayFrame(); }
+      else if (cmd === 'speed') { rp.speed = value; if (rp.playing) { stopReplay(); playReplay(); } else showReplay(); }
+      else if (cmd === 'toggle') {
+        if (rp.playing) stopReplay();
+        else { if (rp.index >= last) rp.index = 0; replayFrame(); playReplay(); }
+        showReplay();
+      }
     },
     onShare: async () => {
       const st = app.state;
