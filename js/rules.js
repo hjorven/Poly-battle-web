@@ -2037,17 +2037,24 @@ function generateRuins(state, rand) {
 
 // --- Monumente ------------------------------------------------------------------
 
-function monumentAchieved(state, player, type) {
+// Fortschritt zu einem Monument: [erreicht, benötigt] (für Anzeige und Freischaltung).
+export function monumentProgress(state, player, type) {
   const mine = citiesFor(state, player);
   switch (type) {
-    case 'm_wisdom': return (state.techs[player] || []).filter(t => t !== 'basic').length >= 20;
-    case 'm_valor': return ((state.killsBy && state.killsBy[player]) || 0) >= 10;
-    case 'm_eye': return lighthouseKeys(state).length > 0 && lighthouseCount(state, player) === lighthouseKeys(state).length;
-    case 'm_treasury': return (state.stars[player] || 0) >= 100;
-    case 'm_park': return mine.filter(c => c.pop >= MAX_POP).length >= 3;
-    case 'm_palace': return mine.length >= 8;
-    default: return false;
+    case 'm_wisdom': return [(state.techs[player] || []).filter(t => t !== 'basic').length, 20];
+    case 'm_valor': return [(state.killsBy && state.killsBy[player]) || 0, 10];
+    case 'm_eye': return [lighthouseCount(state, player), lighthouseKeys(state).length || 4];
+    case 'm_treasury': return [state.stars[player] || 0, 100];
+    case 'm_park': return [mine.filter(c => c.pop >= MAX_POP).length, 3];
+    case 'm_palace': return [mine.length, 8];
+    default: return [0, 1];
   }
+}
+
+function monumentAchieved(state, player, type) {
+  if (type === 'm_eye' && !lighthouseKeys(state).length) return false;
+  const [have, need] = monumentProgress(state, player, type);
+  return have >= need;
 }
 
 // Neu erreichte Erfolge dauerhaft freischalten; gibt die neuen Monumente zurück.

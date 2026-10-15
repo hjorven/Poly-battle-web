@@ -15,7 +15,7 @@ Es gibt kein Rückgängig – jeder Zug zählt.
 
 ## Sicher ziehen und angreifen
 
-Ziehen und Angreifen brauchen zwei Tipps: Der erste markiert das Ziel gelb und zeigt bei Angriffen eine Schadensvorschau, der zweite führt aus. So passiert nichts aus Versehen.
+Ziehen und Angreifen brauchen zwei Tipps: Der erste markiert das Ziel gelb, der zweite führt aus. So passiert nichts aus Versehen. Bei Angriffen erscheint nach dem ersten Tipp am Ziel eine **Kampfvorschau**: beide Einheiten mit ihren Leben vorher und nachher, der Schaden und ob es einen Gegenschlag gibt.
 
 Eine eigene Stadt wird beim Antippen ausgewählt. Um eine Einheit in die Stadt zu ziehen, tippe die Stadt schnell zweimal an.
 
@@ -31,6 +31,10 @@ Die Karte ist die Hauptsache; alles Weitere liegt in schwebenden Kärtchen an de
 | unten rechts | Minikarte (antippen springt dorthin), darüber die Kamera-Knöpfe |
 
 **Stadt oder Einheit gewählt:** Direkt am Objekt erscheint ein Schild – bei Städten mit Stufe (fünf Sechsecke), Einkommen und Belohnungen, bei Einheiten mit Lebensbalken und Werten (Leben, Angriff, Verteidigung, Bewegung, Reichweite). Unten in der Mitte liegt die **Werkzeugreihe**: bei Städten Ausbauen, Bevölkerung +1 und alle Einheiten, die du ausbilden kannst (Kosten im Sechseck); bei Einheiten die möglichen Aktionen wie Weg bauen, Aufrüsten oder Stadt gründen, dazu „Details“. Passt nicht alles hinein, lässt sich die Reihe seitwärts wischen oder mit dem Mausrad scrollen. Gesperrte Felder nennen den Grund.
+
+**Details zu einer Einheit:** „Details“ in der Werkzeugreihe (oder Taste I, oder die gewählte Einheit nochmal antippen) klappt die Reihe auf: Fähigkeiten (antippen erklärt sie), Gelände und Verteidigungsfaktor, Heilung, Fortschritt zum Veteranen und „Auflösen“.
+
+**Übersicht:** Reiter für Städte (Stufe, Einkommen und was gerade zu tun ist: Belohnung wählen, ausbilden, bedroht), Armee, Diplomatie und Monumente mit Fortschritt („12 von 20 Technologien“). Ein Tipp auf eine Stadt oder Einheit springt dorthin.
 
 **Hell oder dunkel:** im Menü unter „Spielen“, Spieleinstellungen, „Darstellung“: Wie System, Hell oder Dunkel.
 
@@ -70,7 +74,7 @@ Auf **Leicht** greift die KI dich bis Runde 12 nicht an, auf **Normal** bis Rund
 | M | Ton an/aus |
 | Esc | Auswahl aufheben, Fenster schließen |
 
-Im Bau-Fenster einer Stadt wechseln die Pfeiltasten das Feld und die Ziffern 1–9 bauen die entsprechende Möglichkeit. In der Forschung verschiebt Ziehen den Baum, Mausrad oder zwei Finger zoomen, ein Doppeltipp setzt die Ansicht zurück.
+Im Bau-Fenster einer Stadt wechseln die Pfeiltasten das Feld und die Ziffern 1–9 bauen die entsprechende Möglichkeit. In der Forschung verschiebt Ziehen den Baum, Mausrad oder zwei Finger zoomen, ein Doppeltipp setzt die Ansicht zurück. Passt der Baum nicht ganz ins Fenster (iPad, Handy), springen die Knöpfe oben direkt zu einem der fünf Zweige.
 
 ## Rundenbericht
 

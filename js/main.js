@@ -299,6 +299,7 @@ function updateSelection() {
       bridge: canBridge ? R.bridgeOptions(st, u).flatMap(o => o.tiles) : null
     });
     let hint = null;
+    let duel = null;
     if (pend) {
       const [tq, tr] = pend.key.split(',').map(Number);
       const foe = R.unitAt(st, tq, tr);
@@ -307,15 +308,13 @@ function updateSelection() {
         const range = Math.max(...[u.q - tq, u.r - tr, u.q - tq + u.r - tr].map(Math.abs));
         const back = res.damage >= foe.hp ? 0 : (UNITS[foe.type].range >= range ? res.retaliation : 0);
         hint = `Nochmal tippen zum Angreifen · ${res.damage >= foe.hp ? 'besiegt ' + UNITS[foe.type].name : res.damage + ' Schaden'}${back ? ' · Gegenschlag ' + back : ''}`;
+        // Kampfvorschau als Schild am Ziel: beide Einheiten vorher und nachher.
+        duel = { q: tq, r: tr, foe, damage: Math.min(res.damage, foe.hp), back };
       } else hint = 'Ziel gewählt – nochmal tippen zum Ziehen';
     }
-    if (app.panelOpen) {
-      ui.hideUnitChip();
-      ui.showUnitPanel(st, u, ctx());
-    } else {
-      ui.hidePanel();
-      ui.showUnitChip(st, u, { ...ctx(), hint });
-    }
+    // Details klappen die Werkzeugreihe auf (statt eines eigenen Fensters).
+    ui.hidePanel();
+    ui.showUnitChip(st, u, { ...ctx(), hint, duel, expanded: app.panelOpen });
   } else {
     const city = R.cityAt(st, app.sel.q, app.sel.r);
     render.setHighlights({ selected: city.q + ',' + city.r });
@@ -1382,7 +1381,7 @@ function boot() {
     onNextIdle: nextIdle,
     onSelectCity: (q, r) => { app.sel = { kind: 'city', q, r }; sfx('select'); refresh(); },
     onSelectUnit: id => { if (R.findUnit(app.state, id)) { selectUnit(id, true); sfx('select'); refresh(); } },
-    onUnitDetails: () => { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = true; refresh(); } },
+    onUnitDetails: () => { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = !app.panelOpen; refresh(); } },
     onCamera: cmd => {
       if (cmd === 'rotL') render.rotateCamera(-1);
       else if (cmd === 'rotR') render.rotateCamera(1);
