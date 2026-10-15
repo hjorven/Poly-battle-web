@@ -161,11 +161,13 @@ function bestBuilding(state, player) {
         // Ein Ballonplatz pro Stamm reicht.
         if (type === 'airfield' && state.cities.some(c => c.owner === player && R.cityAirfields(state, c).length)) continue;
         if (type === 'port' && hasPort) continue;
+        if (type === 'watchtower' && (R.cityTiles(state, city).some(([tq, tr]) => R.improvementAt(state, tq, tr) === 'watchtower') ||
+          !state.units.some(e => R.hostile(state, player, e.owner) && e.owner && hexDistance(e.q, e.r, city.q, city.r) <= 5))) continue;
         const cost = R.improvementCost(state, player, type);
         if (stars < cost + 2) continue;
         if (!R.canImprove(state, city, type, q, r).ok) continue;
         // Ertrag je Stern, inklusive Nachbarschaftsbonus (Mühle, Schmelzhütte, Markt).
-        const gain = R.improvementIncome(state, player, type, q, r);
+        const gain = R.improvePreview(state, city, type, q, r).gain + (type === 'watchtower' ? 0.6 : 0);
         const score = gain / cost + (type === 'port' && needsPort ? 1 : 0) + (type === 'airfield' && needsAirfield ? 1 : 0);
         if (score <= 0) continue;
         if (!best || score > best.score) best = { kind: 'improve', city, type, q, r, score };
@@ -208,6 +210,26 @@ function bestSettleMove(state, s) {
   return best;
 }
 
+// Händlerkarren: zur lohnendsten Stadt fahren (eigene, nicht die Heimat, oder
+// fremde im Frieden) und dort handeln.
+function cartMove(state, cart) {
+  const home = cart.home;
+  const cities = state.cities.filter(c => c.owner && !(home && c.q === home.q && c.r === home.r) &&
+    (c.owner === cart.owner || R.atPeace(state, cart.owner, c.owner)));
+  if (!cities.length) return null;
+  const worth = c => (home ? hexDistance(home.q, home.r, c.q, c.r) : 3) * (c.owner === cart.owner ? 1 : 1.5) - hexDistance(cart.q, cart.r, c.q, c.r) * 0.6;
+  const goal = cities.reduce((a, b) => (worth(b) > worth(a) ? b : a));
+  const reach = R.reachableMap(state, cart);
+  let best = null, bd = hexDistance(cart.q, cart.r, goal.q, goal.r);
+  for (const [k] of reach) {
+    const [q, r] = k.split(',').map(Number);
+    if (R.unitAt(state, q, r)) continue;
+    const d = hexDistance(q, r, goal.q, goal.r);
+    if (d < bd) { bd = d; best = { unit: cart, q, r }; }
+  }
+  return best;
+}
+
 function bestMove(state, unit, player) {
   const reach = R.reachableMap(state, unit);
   if (!reach.size) return null;
@@ -224,7 +246,7 @@ function bestMove(state, unit, player) {
   if (!target) return null;
 
   const currentD = hexDistance(unit.q, unit.r, target.q, target.r);
-  const range = UNITS[unit.type].range;
+  const range = R.rangeOf(state, unit);
   let best = null;
   for (const [k, cost] of reach) {
     const [q, r] = k.split(',').map(Number);
@@ -392,9 +414,22 @@ export function botStep(state, player) {
     const unlocked = R.unlockedUnits(state, player);
     const stars = state.stars[player];
     const order = [
-      'giant', 'paladin', 'knight', 'battleship', 'airship', 'ship', 'swordsman', 'catapult', 'crossbow', 'fireballoon',
+      'giant', 'paladin', 'knight', 'horsearcher', 'battleship', 'airship', 'ship', 'swordsman', 'catapult', 'crossbow', 'fireballoon',
       'boat', 'mindbender', 'archer', 'pikeman', 'defender', 'rider', 'warrior'
     ];
+    // Gemischte Armee: keine Einheitenart über 35 % der Landtruppen.
+    const army = mine.filter(u => !UNITS[u.type].abilities.includes('water') && UNITS[u.type].atk > 0);
+    const share = t => army.length < 4 ? 0 : army.filter(u => u.type === t).length / army.length;
+    // Rammbock, sobald eine feindliche Stadt nahe ist und noch keiner da ist.
+    const enemyCityNear = state.cities.some(e => e.owner && R.hostile(state, player, e.owner) && hexDistance(e.q, e.r, c.q, c.r) <= 6 &&
+      !R.graceProtects(state, player, e.owner));
+    if (enemyCityNear && unlocked.includes('ram') && !mine.some(u => u.type === 'ram') && stars >= R.unitCost(state, player, 'ram') + 2 &&
+      R.canTrain(state, c, 'ram', player).ok) return { kind: 'train', city: c, type: 'ram' };
+    // Händlerkarren: einer zur Zeit, wenn es eine zweite Stadt gibt.
+    if (unlocked.includes('cart') && !mine.some(u => u.type === 'cart') && R.citiesFor(state, player).length >= 2 &&
+      stars >= R.unitCost(state, player, 'cart') + (persona === 'merchant' ? 2 : 8) && R.canTrain(state, c, 'cart', player).ok) {
+      return { kind: 'train', city: c, type: 'cart' };
+    }
     // Gegen nahe Reiterei Pikeniere aufstellen.
     const cavalry = state.units.some(e => R.hostile(state, player, e.owner) &&
       ['rider', 'knight', 'paladin'].includes(e.type) && hexDistance(e.q, e.r, c.q, c.r) <= 4);
@@ -403,6 +438,7 @@ export function botStep(state, player) {
     // Bestes Wunschziel, das hier gerade möglich ist (Land- und Schiffsplatz getrennt).
     for (const t of order) {
       if (!unlocked.includes(t)) continue;
+      if (share(t) > 0.35) continue;
       if (R.unitCost(state, player, t) > stars) continue;
       if (t === 'giant' && stars < 10) continue;
       if (R.canTrain(state, c, t, player).ok) return { kind: 'train', city: c, type: t };
@@ -430,6 +466,12 @@ export function botStep(state, player) {
     if (u.type === 'spy' || u.type === 'balloon') {
       const mv = spyMove(state, u);
       if (mv) return mv;
+      continue;
+    }
+    if (u.type === 'cart') {
+      if (R.tradeOption(state, u)) return { kind: 'trade', unit: u };
+      const mv = cartMove(state, u);
+      if (mv) return { kind: 'move', unit: mv.unit, q: mv.q, r: mv.r };
       continue;
     }
     if (u.type === 'settler') {
@@ -500,6 +542,7 @@ export function applyStep(state, step, player) {
     case 'reward': return R.chooseReward(state, step.city, step.choice, player);
     case 'war': return R.declareWar(state, player, step.target);
     case 'upgrade': return R.upgradeUnit(state, step.unit, player);
+    case 'trade': return R.trade(state, step.unit, player);
     case 'road': {
       const res = R.buildRoad(state, player, step.q, step.r);
       if (res.ok) { if (!state.aiRoadRound) state.aiRoadRound = {}; state.aiRoadRound[player] = state.round; }

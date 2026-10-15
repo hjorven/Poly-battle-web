@@ -61,7 +61,19 @@ export function unitCost(state, player, type) {
 }
 
 export function defenseOf(state, unit) {
-  return UNITS[unit.type].def + (unit.owner ? techBonus(state, unit.owner, 'def', unit.type) : 0);
+  let d = UNITS[unit.type].def + (unit.owner ? techBonus(state, unit.owner, 'def', unit.type) : 0);
+  if (unit.owner && perkOf(state, unit.owner) === 'legion') {
+    const c = cityAt(state, unit.q, unit.r);
+    if (c && c.owner === unit.owner) d += 1;
+  }
+  return d;
+}
+
+// Reichweite einer Einheit (Langbogen: Bogenschützen schießen aus dem Wald 1 weiter).
+export function rangeOf(state, unit) {
+  const base = UNITS[unit.type].range;
+  if (unit.type === 'archer' && unit.owner && perkOf(state, unit.owner) === 'longbow' && terrainAt(state, unit.q, unit.r) === 'forest') return base + 1;
+  return base;
 }
 
 export function improvementCost(state, player, type) {
@@ -295,8 +307,11 @@ export function improvementIncome(state, owner, type, q, r) {
       const each = def.adjacent[imp] ?? (def.adjacent['*'] && imp !== type && !IMPROVEMENTS[imp].monument ? def.adjacent['*'] : 0);
       n += each;
     }
+    // Markt: genutzte Rohstoffe daneben zählen wie Gebäude.
+    if (def.resources) for (const [nq, nr] of neighbors(q, r)) if (resourceAt(state, nq, nr) && ownLand(state, owner, nq, nr)) n += def.adjacent['*'];
     s += def.max ? Math.min(def.max, n) : n;
   }
+  if (def.adjacentRes) for (const [nq, nr] of neighbors(q, r)) s += def.adjacentRes[resourceAt(state, nq, nr)] || 0;
   if (type === 'farm' && owner) s += techBonus(state, owner, 'farmBonus');
   return s;
 }
@@ -405,9 +420,10 @@ export function canEnter(state, unit, tile, q, r) {
   const t = TERRAIN[tile];
   if (!t) return false;
   // Luft-Einheiten fliegen überall hin, nur nicht in fremde Städte.
-  if (isAir(unit.type)) {
+  if (isAir(unit.type) || hasAbility(unit.type, 'trade')) {
     const c = q != null ? cityAt(state, q, r) : null;
-    return !c || c.owner === unit.owner;
+    if (c && c.owner !== unit.owner) return false;
+    if (isAir(unit.type)) return true;
   }
   if (hasAbility(unit.type, 'water')) {
     if (tile === 'water' || tile === 'ocean') return true;
@@ -507,6 +523,9 @@ export function defenceBonus(state, defender) {
   let b = t.def;
   if (t.tech && !hasTech(state, defender.owner, t.tech)) b = DEF_BONUS.none;
   if (improvementAt(state, defender.q, defender.r) === 'fort') b = Math.max(b, DEF_BONUS.fort);
+  // Wachturm im eigenen Gebiet: darauf und daneben anderthalbfache Verteidigung.
+  if ([[defender.q, defender.r], ...neighbors(defender.q, defender.r)].some(([q, r]) =>
+    improvementAt(state, q, r) === 'watchtower' && ownLand(state, defender.owner, q, r))) b = Math.max(b, DEF_BONUS.standard);
   const city = cityAt(state, defender.q, defender.r);
   if (city && city.owner === defender.owner && hasAbility(defender.type, 'fortify')) {
     b = Math.max(b, hasReward(city, 'wall') ? DEF_BONUS.wall : DEF_BONUS.standard);
@@ -526,9 +545,14 @@ export function battleResults(state, attacker, defender) {
   let damage = Math.round((af / total) * atk * ACCELERATOR);
   let retaliation = Math.round((df / total) * dv * ACCELERATOR);
   // Pikeniere gegen Reiterei: anderthalbfacher Schaden in beide Richtungen.
-  const mounted = u => u.type === 'rider' || u.type === 'knight' || u.type === 'paladin';
+  const mounted = u => ['rider', 'knight', 'paladin', 'horsearcher'].includes(u.type);
   if (hasAbility(attacker.type, 'pikes') && mounted(defender)) damage = Math.round(damage * 1.5);
   if (hasAbility(defender.type, 'pikes') && mounted(attacker)) retaliation = Math.round(retaliation * 1.5);
+  // Rammbock: dreifacher Schaden gegen Städte und Burgen, dort kein Gegenschlag.
+  if (hasAbility(attacker.type, 'siege') && (cityAt(state, defender.q, defender.r) || improvementAt(state, defender.q, defender.r) === 'fort')) {
+    damage = Math.round(damage * 3);
+    retaliation = 0;
+  }
   const ranged = u => UNITS[u.type].range >= 2;
   // Fernkämpfer gegen Luft: Zerbrechliches fällt sofort, große Hüllen leiden doppelt.
   if (isAir(defender.type) && ranged(attacker)) {
@@ -572,6 +596,11 @@ export function visibleKeys(state, player) {
   }
   for (const c of state.cities) {
     if (c.owner === player) addArea(c.q, c.r, VISION.city);
+  }
+  for (const [k, imp] of Object.entries(state.improvements || {})) {
+    if (!IMPROVEMENTS[imp] || !IMPROVEMENTS[imp].sight) continue;
+    const [q, r] = k.split(',').map(Number);
+    if (ownLand(state, player, q, r)) addArea(q, r, IMPROVEMENTS[imp].sight);
   }
   return keys;
 }
@@ -668,7 +697,7 @@ export function canAct(state, player) {
 export function threatened(state, u) {
   return state.units.some(e =>
     hostile(state, e.owner, u.owner) && canEverAttack(e.type) &&
-    hexDistance(e.q, e.r, u.q, u.r) <= UNITS[e.type].range
+    hexDistance(e.q, e.r, u.q, u.r) <= rangeOf(state, e)
   );
 }
 
@@ -679,7 +708,7 @@ export function threatenedCities(state, player) {
     isVisible(state, player, e.q, e.r));
   if (!foes.length) return [];
   return citiesFor(state, player).filter(c => foes.some(e =>
-    hexDistance(e.q, e.r, c.q, c.r) <= maxMove(state, e.owner, e.type) + UNITS[e.type].range));
+    hexDistance(e.q, e.r, c.q, c.r) <= maxMove(state, e.owner, e.type) + rangeOf(state, e)));
 }
 
 // Heilt zu Rundenbeginn: Verschanzer, die nichts getan haben (wie bisher),
@@ -860,7 +889,7 @@ export function canEverAttack(type) {
 export function attackTargets(state, unit) {
   if (!unit || !UNITS[unit.type] || !canEverAttack(unit.type)) return [];
   if (!canAttackNow(state, unit)) return [];
-  const range = UNITS[unit.type].range;
+  const range = rangeOf(state, unit);
   return state.units.filter(u =>
     hostile(state, unit.owner, u.owner) &&
     // Luft-Einheiten erreichen nur Fernkämpfer (Reichweite ab 2).
@@ -993,7 +1022,7 @@ export function attack(state, attacker, defender) {
   } else {
     logEvent(state, { kind: 'hit', victim: defender.owner, unit: defender.type, dmg: res.damage, q: defender.q, r: defender.r });
   }
-  if (!killed && !hasAbility(defender.type, 'stiff') && UNITS[defender.type].range >= dist && res.retaliation > 0) {
+  if (!killed && !hasAbility(defender.type, 'stiff') && rangeOf(state, defender) >= dist && res.retaliation > 0) {
     attacker.hp -= res.retaliation;
     events.push({ kind: 'retaliate', from: defender.id, to: attacker.id, dmg: res.retaliation });
     if (attacker.hp <= 0) {
@@ -1137,10 +1166,43 @@ export function trainUnit(state, city, type, player) {
   state.units.push({
     id: `${player.replace('_', '')}_${Date.now().toString(36)}_${unitSeq++}`,
     owner: player, type, q: sq, r: sr,
-    hp: maxHp(type), mp: maxMove(state, player, type), hasMoved: false, acted: false
+    hp: maxHp(type), mp: maxMove(state, player, type), hasMoved: false, acted: false,
+    ...(hasAbility(type, 'trade') ? { home: { q: city.q, r: city.r } } : {})
   });
   updateExplored(state, player);
   return { ok: true };
+}
+
+// --- Handel (Händlerkarren) -----------------------------------------------------
+// In oder neben einer anderen eigenen Stadt als der Heimatstadt oder einer
+// fremden Stadt im Frieden: einmalig Sterne, mehr je weiter entfernt; bei
+// fremden Städten anderthalbfach, und der Besitzer erhält 2 Sterne.
+export function tradeOption(state, unit) {
+  if (!unit || !hasAbility(unit.type, 'trade') || unit.acted) return null;
+  const home = unit.home || null;
+  let best = null;
+  for (const [q, r] of [[unit.q, unit.r], ...neighbors(unit.q, unit.r)]) {
+    const c = cityAt(state, q, r);
+    if (!c || !c.owner || (home && c.q === home.q && c.r === home.r)) continue;
+    // Fremde Städte nur im Frieden (Handel belohnt Diplomatie).
+    if (c.owner !== unit.owner && !atPeace(state, unit.owner, c.owner)) continue;
+    const dist = home ? hexDistance(home.q, home.r, c.q, c.r) : 3;
+    const foreign = c.owner !== unit.owner;
+    const stars = Math.min(16, Math.round((2 + dist) * (foreign ? 1.5 : 1)));
+    if (!best || stars > best.stars) best = { city: c, stars, foreign };
+  }
+  return best;
+}
+
+export function trade(state, unit, player) {
+  if (!unit || unit.owner !== player) return { ok: false, reason: 'Fremde Einheit' };
+  const o = tradeOption(state, unit);
+  if (!o) return { ok: false, reason: 'Keine Stadt zum Handeln in der Nähe' };
+  state.stars[player] += o.stars;
+  if (o.foreign) state.stars[o.city.owner] = (state.stars[o.city.owner] || 0) + 2;
+  state.units = state.units.filter(u => u !== unit);
+  countStat(state, 'tradesBy', player);
+  return { ok: true, stars: o.stars, foreign: o.foreign, city: o.city };
 }
 
 export function popCost(city, state = null) {
@@ -1836,10 +1898,14 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
     for (const type of units) {
       let q = city.q, r = city.r;
       if (!first || unitAt(state, q, r)) {
-        const opts = neighbors(city.q, city.r).filter(([nq, nr]) =>
+        // Erst die Nachbarfelder, dann (für Boote) bis zu 2 Felder weit.
+        const near = [...neighbors(city.q, city.r)];
+        forEachHex((nq, nr) => { if (hexDistance(city.q, city.r, nq, nr) === 2) near.push([nq, nr]); });
+        const opts = near.filter(([nq, nr]) =>
           canEnter(state, { owner, type }, terrainAt(state, nq, nr), nq, nr) && !unitAt(state, nq, nr) && !cityAt(state, nq, nr)
         );
-        if (!opts.length) continue;
+        // Kein Platz (z. B. Boot ohne Wasser in der Nähe): Ersatz in Sternen.
+        if (!opts.length) { state.stars[owner] += UNITS[type].cost; continue; }
         [q, r] = opts[0];
       }
       spawnUnit(owner, type, q, r);
