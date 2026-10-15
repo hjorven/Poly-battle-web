@@ -80,6 +80,8 @@ function statusText() {
 
 function refresh() {
   if (!app.state) return;
+  // Tipp der KI gilt nur für den Moment: außerhalb des eigenen Zugs schließen.
+  if (!myTurn() || app.reviewing) ui.showCoach(null);
   ui.updateStrip(app.state, ctx());
   ui.setStatus(statusText());
   ui.setEndTurn(myTurn());
@@ -278,7 +280,7 @@ function updateSelection() {
   if (!st) return;
   if (app.sel) {
     if (app.sel.kind === 'unit' && !R.findUnit(st, app.sel.id)) app.sel = null;
-    if (app.sel.kind === 'city' && !R.cityAt(st, app.sel.q, app.sel.r)) app.sel = null;
+    else if (app.sel.kind === 'city' && !R.cityAt(st, app.sel.q, app.sel.r)) app.sel = null;
   }
   if (!app.sel) {
     render.setHighlights({});
@@ -509,6 +511,7 @@ function announce(events) {
 }
 
 async function afterAction(events = []) {
+  ui.showCoach(null);
   app.pending = null;
   announce(events);
   app.busy = false;

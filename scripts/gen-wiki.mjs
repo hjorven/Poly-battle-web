@@ -83,9 +83,14 @@ const fmt = n => String(n).replace('.', ',');
   for (const [lvl, [a, b]] of Object.entries(REWARD_CHOICES)) md += row([lvl, `**${CITY_REWARDS[a].name}**: ${CITY_REWARDS[a].desc}`, `**${CITY_REWARDS[b].name}**: ${CITY_REWARDS[b].desc}`]) + '\n';
   md += '\n## Gebäude\n\nGebaut wird im Stadtmenü über **Ausbauen**: Feld im Stadtgebiet antippen, dann das Gebäude wählen.\n\n';
   md += row(['Gebäude', 'Kosten', 'Gelände', 'Technologie', 'Ertrag']) + '\n' + row(Array(5).fill('---')) + '\n';
-  for (const [, d] of Object.entries(IMPROVEMENTS).filter(([, d]) => !d.monument)) {
+  for (const [id, d] of Object.entries(IMPROVEMENTS).filter(([, d]) => !d.monument)) {
     let y = d.pop ? `+${d.pop} pro Runde` : '';
     if (d.adjacent) y = Object.entries(d.adjacent).map(([k, v]) => `+${v} je angrenzende${k === '*' ? 'm Gebäude' : 'r ' + IMPROVEMENTS[k].name}`).join(', ') + (d.max ? ` (bis ${d.max})` : '');
+    if (d.adjacent) y = (d.pop ? `+${d.pop}, ` : '') + y + (d.resources ? ', Rohstoffe zählen mit' : '');
+    if (d.adjacentRes) y += ', ' + Object.entries(d.adjacentRes).map(([k, v]) => `+${v} je angrenzendem Fischgrund`).join(', ');
+    if (d.sight) y = `Sicht ${d.sight} Felder; Einheiten darauf und daneben verteidigen anderthalbfach`;
+    if (id === 'fort') y = 'Einheiten darauf verteidigen dreifach';
+    if (id === 'monastery') y = `+${d.pop}, Einheiten im Gebiet heilen mehr`;
     md += row([`**${d.name}**`, d.cost, terr(d.terrain), techName(d.tech), y || 'Sonderwirkung']) + '\n';
   }
   md += `| **Weg** | ${ROAD.cost} | Land | ${techName(ROAD.tech)} | Schritt von Weg zu Weg kostet halbe Bewegung |\n`;

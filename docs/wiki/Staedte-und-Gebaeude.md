@@ -21,15 +21,17 @@ Gebaut wird im Stadtmenü über **Ausbauen**: Feld im Stadtgebiet antippen, dann
 | --- | --- | --- | --- | --- |
 | **Farm** | 6 | Feld | Landwirtschaft | +1 pro Runde |
 | **Sägewerk** | 7 | Wald | Forstwirtschaft | +1 pro Runde |
-| **Mine** | 8 | Berg | Bergbau | +1 pro Runde |
+| **Mine** | 6 | Berg | Bergbau | +1 pro Runde |
 | **Hafen** | 7 | Flachwasser, Ozean | Segeln | +1 pro Runde |
 | **Tempel** | 10 | Feld | Meditation | +2 pro Runde |
 | **Ballonplatz** | 8 | Feld | Ballonfahrt | +1 pro Runde |
-| **Windmühle** | 6 | Feld | Mühlenbau | +1 je angrenzender Farm |
-| **Schmelzhütte** | 8 | Feld | Verhüttung | +2 je angrenzender Mine |
-| **Markt** | 10 | Feld | Märkte | +1 je angrenzendem Gebäude (bis 4) |
-| **Burg** | 10 | Feld, Wald | Burgbau | Sonderwirkung |
-| **Kloster** | 12 | Feld | Klosterwesen | +2 pro Runde |
+| **Windmühle** | 6 | Feld | Mühlenbau | +1, +1 je angrenzender Farm |
+| **Schmelzhütte** | 6 | Feld | Verhüttung | +1, +2 je angrenzender Mine |
+| **Markt** | 8 | Feld | Märkte | +1 je angrenzendem Gebäude (bis 5), Rohstoffe zählen mit |
+| **Wachturm** | 5 | Feld, Berg | Schildmacher | Sicht 3 Felder; Einheiten darauf und daneben verteidigen anderthalbfach |
+| **Fischerhütte** | 5 | Flachwasser | Fischerei | +1 pro Runde, +1 je angrenzendem Fischgrund |
+| **Burg** | 10 | Feld, Wald | Burgbau | Einheiten darauf verteidigen dreifach |
+| **Kloster** | 12 | Feld | Klosterwesen | +2, Einheiten im Gebiet heilen mehr |
 | **Weg** | 3 | Land | Wege | Schritt von Weg zu Weg kostet halbe Bewegung |
 | **Brücke** | 5 je Feld | Flachwasser, bis 2 Felder | Wege | Landeinheiten überqueren Wasser |
 

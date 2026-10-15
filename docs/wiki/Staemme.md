@@ -6,12 +6,12 @@ Jeder Stamm startet mit einer Technologie, einer Einheit und einer Besonderheit.
 
 | Stamm | Start-Technologie | Start-Einheit | Besonderheit |
 | --- | --- | --- | --- |
-| **Imperius** | Organisation | Krieger | Legion: Krieger kosten 1 Stern weniger, die Hauptstadt bringt +1 Stern pro Runde. |
+| **Imperius** | Organisation | Krieger | Legion: Krieger kosten 1 Stern weniger, die Hauptstadt bringt +1 Stern pro Runde, Einheiten in eigenen Städten +1 Verteidigung. |
 | **Bardur** | Jagd | Krieger | Waldvolk: Wald kostet nur 1 Bewegung. |
-| **Xin-Xi** | Klettern | Krieger | Bergsteiger: Berge kosten nur 1 Bewegung. |
-| **Kickoo** | Fischerei | Krieger | Seefahrer: Schiffe und Boote haben +1 Bewegung. |
+| **Xin-Xi** | Klettern, Bergbau | Krieger | Bergsteiger: Berge kosten nur 1 Bewegung. |
+| **Kickoo** | Fischerei | Krieger, Boot | Seefahrer: Schiffe und Boote haben +1 Bewegung; Start mit einem Boot. |
 | **Oumaji** | keine (+3 Sterne) | Krieger | Späher: Reiter und Ritter sehen 1 Feld weiter. |
-| **Hoodrick** | Bogenschießen | Bogenschütze | Langbogen: Bogenschützen kosten 1 Stern weniger. |
+| **Hoodrick** | Bogenschießen | Bogenschütze, Krieger | Langbogen: Bogenschützen kosten 1 Stern weniger und schießen aus dem Wald 1 Feld weiter. |
 | **Quetzali** | Schildmacher | Verteidiger | Wächter: Verteidiger kosten 1 Stern weniger. |
 | **Vengir** | Schmiedekunst | Schwertkämpfer | Schmiede: Schwertkämpfer kosten 1 Stern weniger. |
 | **Zebasi** | Landwirtschaft | Krieger | Ernte: Farmen bringen +1 Stern zusätzlich. |
