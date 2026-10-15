@@ -8,7 +8,7 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, incomeFor, tileYield, improvePreview, monumentProgress, threatenedCities, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, tradeOption, incomeFor, tileYield, improvePreview, monumentProgress, threatenedCities, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS, toWorld, hexDistance } from './hex.js';
 import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks, project } from './render.js';
@@ -671,6 +671,10 @@ export function showUnitChip(state, unit, ctx) {
 function quickActions(state, unit, ctx) {
   const out = [];
   if (unit.type === 'settler') { const f = canFound(state, unit, ctx.actAs); out.push({ label: 'Stadt gründen', reason: f.ok ? '' : f.reason, run: () => handlers.onFound(unit) }); }
+  if (UNITS[unit.type].abilities.includes('trade')) {
+    const t = tradeOption(state, unit);
+    out.push({ label: t ? `Handeln: +${t.stars}` : 'Handeln', reason: t ? '' : 'In oder neben eine andere eigene Stadt ziehen (fremde nur im Frieden)', run: () => handlers.onTrade(unit) });
+  }
   const city = cityAt(state, unit.q, unit.r);
   if (city && city.owner === ctx.actAs) out.push({ label: 'Stadtmenü', run: () => handlers.onSelectCity(unit.q, unit.r) });
   const up = upgradeOption(state, unit);
@@ -1013,11 +1017,13 @@ const IMP_EFFECT = {
   port: '+1 Stern pro Runde, Schiffe ausbilden',
   temple: '+2 Sterne pro Runde',
   airfield: '+1 Stern pro Runde, Luft-Einheiten ausbilden',
-  mill: '+1 Stern je angrenzender Farm',
-  forge: '+2 Sterne je angrenzender Mine',
-  market: '+1 Stern je angrenzendem Gebäude (bis 4)',
+  mill: '+1 Stern, +1 je angrenzender Farm',
+  forge: '+1 Stern, +2 je angrenzender Mine',
+  market: '+1 Stern je angrenzendem Gebäude oder Rohstoff (bis 5)',
   fort: 'Einheiten darauf verteidigen dreifach',
-  monastery: '+2 Sterne, Einheiten im Gebiet heilen mehr'
+  monastery: '+2 Sterne, Einheiten im Gebiet heilen mehr',
+  watchtower: 'Sicht 3 Felder, Einheiten darauf und daneben verteidigen anderthalbfach',
+  fishhut: '+1 Stern, +1 je Fischgrund daneben'
 };
 const impEffect = id => IMPROVEMENTS[id].monument ? `+${3} Bevölkerung, 200 Punkte (einmalig je Stamm)` : IMP_EFFECT[id] || '';
 
