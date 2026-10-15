@@ -371,6 +371,18 @@ await test('KI-Lehrling: Tipp erklärt, Ausführen spielt den Zug, keine Bestenl
   await page.context().close();
 });
 
+await test('Gewählte Einheit verschwindet (besiegt, gehandelt): kein Absturz', async () => {
+  const page = await open('pc');
+  await startGame(page);
+  await page.keyboard.press(' ');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { const { app, sync } = window.__pb; const id = app.sel.id; app.state.units = app.state.units.filter(u => u.id !== id); sync(); });
+  await page.waitForTimeout(200);
+  assert.strictEqual(await page.evaluate(() => window.__pb.app.sel), null);
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);

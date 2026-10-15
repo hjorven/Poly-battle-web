@@ -9,10 +9,13 @@ Rundenbasierte Eroberung im Browser, angelehnt an *The Battle of Polytopia*: Gr�
 ## Was dich erwartet
 
 - **12 Stämme** mit eigener Start-Technologie und Besonderheit, dazu KI-Gegner mit Persönlichkeit (Eroberer, Händler, Seefahrer, Baumeister).
-- **21 Einheiten** an Land, auf See und in der Luft – vom Krieger bis zum Kriegsluftschiff, mit Veteranen und Aufrüsten.
+- **24 Einheiten** an Land, auf See und in der Luft – vom Krieger über Bogenreiter, Rammbock und Händlerkarren bis zum Kriegsluftschiff, mit Veteranen und Aufrüsten.
 - **55 Technologien** in einem Wabenbaum mit sechs Stufen.
 - **Städte ausbauen** in einer 3D-Ansicht des Stadtgebiets: Feld antippen, Gebäude wählen – jedes zeigt vorher, wie viele Sterne es pro Runde mehr bringt, auch durch Nachbarn wie Windmühle und Farm. Stadtstufen bringen Belohnungen, Monumente werden durch Erfolge freigeschaltet.
-- **Nebel, Diplomatie, Brücken, Häfen, Ruinen und Leuchttürme.**
+- **Nebel, Diplomatie, Handel, Brücken, Häfen, Wachtürme, Ruinen und Leuchttürme.**
+- **KI-Lehrling:** Der Knopf „Tipp“ zeigt und erklärt, was die KI an deiner Stelle tun würde.
+- **Wiederholung:** Nach Spielende jede Runde ansehen oder die ganze Partie im Zeitraffer ablaufen lassen.
+- **Ausbalanciert:** Stämme und Einheiten werden mit KI-Turnieren gemessen (240 Partien: jeder Stamm gewinnt 16–31 %).
 - **Spielmodi:** gegen die KI, Hotseat an einem Gerät, online per Link, Tutorial, zehn Kampagnen-Missionen, Tages- und Wochen-Herausforderung mit Bestenliste.
 - **Profil** mit Stufen, 17 Erfolgen, freischaltbarem Aussehen und Statistik; mit dem Profil-Code geht es auf jedem Gerät weiter.
 - **Freie Karte:** Die Bedienung liegt in schwebenden Kärtchen an den Rändern. Wählst du eine Stadt oder Einheit, steht ein Schild mit ihren Werten direkt daran, die Aktionen liegen als Werkzeugreihe unten – angelehnt an Mini Metro.

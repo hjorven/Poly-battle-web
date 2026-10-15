@@ -12,13 +12,16 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 | **Bogenschütze** | 3 | 10 | 2 | 1 | 1 | 2 | Bogenschießen | Sturm, Verschanzen |
 | **Reiter** | 3 | 10 | 2 | 1 | 2 | 1 | Reiten | Sturm, Rückzug, Verschanzen |
 | **Verteidiger** | 3 | 15 | 1 | 3 | 1 | 1 | Schildmacher | Verschanzen |
-| **Pikenier** | 4 | 10 | 2 | 2 | 1 | 1 | Pikeniere | Sturm, Verschanzen, Pikenwall |
+| **Pikenier** | 4 | 10 | 2 | 3 | 1 | 1 | Pikeniere | Sturm, Verschanzen, Pikenwall |
 | **Schwertkämpfer** | 5 | 15 | 3 | 3 | 1 | 1 | Schmiedekunst | Sturm |
 | **Armbrustschütze** | 6 | 10 | 3 | 1 | 1 | 2 | Armbrust | Sturm, Verschanzen |
 | **Katapult** | 8 | 10 | 4 | 0 | 1 | 3 | Mathematik | Starr |
+| **Rammbock** | 6 | 15 | 1 | 1 | 1 | 1 | Baukunst | Belagerung |
 | **Gedankenbeuger** | 5 | 10 | 0 | 1 | 1 | 1 | Philosophie | Heilen, Bekehren, Starr |
-| **Ritter** | 8 | 10 | 3,5 | 1 | 3 | 1 | Ritterlichkeit | Sturm, Durchhalten, Verschanzen |
+| **Bogenreiter** | 6 | 10 | 2 | 1 | 2 | 2 | Hufeisen | Sturm, Rückzug |
+| **Ritter** | 9 | 10 | 3 | 1 | 3 | 1 | Ritterlichkeit | Sturm, Durchhalten, Verschanzen |
 | **Paladin** | 13 | 15 | 4 | 2 | 3 | 1 | Ritterorden | Sturm, Durchhalten, Verschanzen |
+| **Händlerkarren** | 5 | 6 | 0 | 1 | 2 | 1 | Handel | Handel |
 | **Riese** (nur als Belohnung) | – | 40 | 5 | 4 | 1 | 1 | – | Statisch |
 | **Spion** | 4 | 6 | 0 | 1 | 2 | 1 | – | Spähen |
 | **Siedler** | 5 | 10 | 0 | 0 | 1 | 1 | – | Statisch, Siedeln |
@@ -60,6 +63,8 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 | **Zerbrechlich** | Ein Treffer eines Fernkämpfers (Bogenschütze, Katapult, Schiff, Luftschiff) zerstört sie sofort. |
 | **Große Hülle** | Nimmt von Fernkämpfern doppelten Schaden. |
 | **Transport** | Nimmt eine benachbarte eigene Landeinheit auf und setzt sie anderswo ab. |
+| **Belagerung** | Dreifacher Schaden gegen Einheiten in Städten und auf Burgen; dort ohne Gegenschlag. |
+| **Handel** | In oder neben einer anderen Stadt: einmalig Sterne, mehr je weiter von der Heimatstadt entfernt. Erobert keine Städte. |
 | **Pikenwall** | Anderthalbfacher Schaden gegen Reiter, Ritter und Paladine – auch beim Gegenschlag. |
 
 ## Aufrüsten
