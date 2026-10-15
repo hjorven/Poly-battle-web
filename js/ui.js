@@ -11,7 +11,7 @@ import {
   hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, incomeFor, tileYield, improvePreview, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS, toWorld, hexDistance } from './hex.js';
-import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks } from './render.js';
+import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks, project } from './render.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
@@ -59,6 +59,11 @@ export function initUI(h) {
     handlers.onHotkey(action);
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
+  // Die Karte reicht bis oben; Elemente darunter richten sich nach der Höhe der Kärtchen.
+  const syncTop = () => document.documentElement.style.setProperty('--hud-h', $('topbar').offsetHeight + 'px');
+  syncTop();
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncTop).observe($('topbar'));
+  else window.addEventListener('resize', syncTop);
   $('buildClose').addEventListener('click', closeBuild);
   $('build-overlay').addEventListener('click', e => { if (e.target === $('build-overlay')) closeBuild(); });
   document.addEventListener('keydown', e => { if (build.open && !e.target.closest('input, textarea, select')) buildKey(e); });
@@ -287,7 +292,7 @@ export function updateStrip(state, ctx) {
   const tr = $('treasury');
   if (me && state.stars[me] != null) {
     const inc = incomeFor(state, me);
-    tr.innerHTML = `<span class="tr-num">${state.stars[me]}</span><span class="tr-txt"><span class="tr-lbl">${state.stars[me] === 1 ? 'Stern' : 'Sterne'}</span><span class="tr-inc">+${inc} nächste Runde</span></span>`;
+    tr.innerHTML = `<span class="tr-hex" aria-hidden="true"></span><span class="tr-num">${state.stars[me]}</span><span class="tr-txt"><span class="tr-lbl">${state.stars[me] === 1 ? 'Stern' : 'Sterne'}</span><span class="tr-inc">+${inc} nächste Runde</span></span>`;
     tr.title = `${state.stars[me]} Sterne, nächste Runde kommen ${inc} dazu`;
   } else tr.innerHTML = '';
   $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' / ' + state.turnLimit : '');
@@ -476,8 +481,7 @@ export function showNews(report) {
     const i = flat.push(l) - 1;
     return `<li class="tone-${l.tone || 'info'}"><button data-news="${i}" ${l.q == null ? 'tabindex="-1"' : ''}>${esc(l.text)}${l.q != null ? ' <span class="news-go">zeigen</span>' : ''}</button></li>`;
   }).join('')}</ul></div>`).join('');
-  box.innerHTML = `<h3>Rundenbericht</h3><div class="news-head">${esc(report.head)}</div>${html}
-    <button class="btn small" data-news-close>OK</button>`;
+  box.innerHTML = `<div class="news-top"><h3>Rundenbericht</h3><button class="btn ghost small" data-news-close>Schließen</button></div><div class="news-head">${esc(report.head)}</div>${html}`;
   box.querySelectorAll('[data-news]').forEach(b => b.addEventListener('click', () => {
     const l = flat[Number(b.dataset.news)];
     if (l.q != null) handlers.onJump(l.q, l.r);
@@ -510,12 +514,75 @@ export function describeUnits(units) {
 
 export function hidePanel() {
   $('panel').classList.add('hidden');
+  if (anchor.kind === 'city') clearAnchor();
 }
 
-function panel(html) {
+// --- Schild am Objekt (wie bei Mini Metro): folgt der Kamera ------------------------
+const anchor = { kind: null, q: 0, r: 0, raf: 0 };
+function setAnchor(kind, q, r, html) {
+  let el = $('anchor-tag');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'anchor-tag';
+    el.setAttribute('role', 'status');
+    $('stage').appendChild(el);
+  }
+  el.innerHTML = html;
+  el.classList.remove('hidden');
+  Object.assign(anchor, { kind, q, r });
+  if (!anchor.raf) {
+    const step = () => {
+      anchor.raf = 0;
+      if (!anchor.kind) return;
+      const p = project(anchor.q, anchor.r);
+      const tag = $('anchor-tag');
+      if (p && tag) {
+        tag.style.left = p.x + 'px';
+        tag.style.top = p.y + 'px';
+        tag.style.visibility = p.x < 0 || p.y < 0 || p.x > innerWidth || p.y > innerHeight ? 'hidden' : '';
+      }
+      anchor.raf = requestAnimationFrame(step);
+    };
+    step();
+  }
+}
+function clearAnchor() {
+  anchor.kind = null;
+  if (anchor.raf) cancelAnimationFrame(anchor.raf);
+  anchor.raf = 0;
+  const el = $('anchor-tag');
+  if (el) el.classList.add('hidden');
+}
+const hpBar = (v, max, cls = '') => `<span class="at-bar ${cls}"><span style="width:${Math.max(0, Math.min(100, v / max * 100))}%"></span></span>`;
+
+function panel(html, mode = '') {
   const p = $('panel');
   p.innerHTML = html;
+  p.className = mode;
   p.classList.remove('hidden');
+  p.querySelectorAll('.tb-row').forEach(wheelSideways);
+}
+
+// Mausrad scrollt eine Werkzeugreihe seitwärts (am PC ohne Querscrollen).
+function wheelSideways(row) {
+  row.addEventListener('wheel', e => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || row.scrollWidth <= row.clientWidth) return;
+    e.preventDefault();
+    row.scrollLeft += e.deltaY;
+  }, { passive: false });
+}
+
+// Kleine Symbole für Werte (SVG, keine Schriftzeichen). Bedeutung im title.
+const ICON = {
+  heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 7.6a4.2 4.2 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z"/>',
+  sword: '<path d="M19.5 3.5l-.6 3.4-8 8-2.8-2.8 8-8zM6 11.6l1.4-1.4 6.4 6.4-1.4 1.4zM8.6 15.4l1.4 1.4-3.6 3.6a1 1 0 0 1-1.4-1.4z"/>',
+  shield: '<path d="M12 3.5l7 2.6v5.2c0 4.6-3 7.8-7 9.2-4-1.4-7-4.6-7-9.2V6.1z"/>',
+  boot: '<path d="M7 3.5h6v8l5.2 2.4A3 3 0 0 1 20 16.6V18H6.2L7 13.5zM5.8 19.2H20v1.6H5.8z"/>',
+  bow: '<path d="M6.5 4.5c7 1 11.4 6.6 10.6 14.4l-1.6-.2c.7-6.9-3.2-11.7-9.2-12.6zM6.3 5.1l1.1-1.1 11.8 11.8-1.1 1.1zM19.4 18.3l-1.2-3.6-1.6 1.6z"/>'
+};
+const LABEL = { heart: 'Leben', sword: 'Angriff', shield: 'Verteidigung', boot: 'Bewegung', bow: 'Reichweite' };
+function stat(kind, value) {
+  return `<span class="vstat" title="${LABEL[kind]}" aria-label="${LABEL[kind]} ${value}"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true" fill="currentColor">${ICON[kind]}</svg>${value}</span>`;
 }
 
 function abilityChips(type) {
@@ -541,23 +608,60 @@ function wirePanel(p) {
 
 // Kleine Leiste für die gewählte Einheit (statt des großen Info-Menüs).
 export function showUnitChip(state, unit, ctx) {
-  const chip = $('unit-chip');
+  const bar = $('unit-chip');
   const def = UNITS[unit.carry || unit.type];
   const mine = unit.owner === ctx.actAs;
-  const opts = mine && ctx.myTurn ? unitOptions(state, unit) : [];
-  const status = !mine ? (tribeName(state, unit.owner) || NAMES[unit.owner])
-    : opts.length ? 'kann noch: ' + opts.join(', ') : 'erledigt';
-  chip.innerHTML = `
-    <span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>
-    <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ' + STAR_ICON : ''}</b>
-      <span class="uc-sub">${ctx.hint ? `<b class="uc-hint">${esc(ctx.hint)}</b>` : `Leben ${unit.hp}/${hpCap(unit)} · Bewegung ${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)} · ${esc(status)}`}</span></span>
-    <button class="btn ghost small" data-details>Details</button>`;
-  chip.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
-  chip.classList.remove('hidden');
+  const live = mine && ctx.myTurn;
+  const opts = live ? unitOptions(state, unit) : [];
+  const cap = hpCap(unit);
+  setAnchor('unit', unit.q, unit.r, `
+    <div class="at-head"><span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span><b>${def.name}${unit.carry ? ' (Boot)' : ''}</b>${unit.vet ? '<span class="at-vet">Veteran</span>' : ''}</div>
+    ${hpBar(unit.hp, cap, unit.hp / cap <= 0.35 ? 'low' : '')}
+    <div class="at-stats">${stat('heart', `${unit.hp}/${cap}`)}${stat('sword', attackOf(state, unit))}${stat('shield', defenseOf(state, unit))}${stat('boot', `${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}`)}${def.range > 1 ? stat('bow', def.range) : ''}</div>`);
+  const status = ctx.hint ? `<b class="uc-hint">${esc(ctx.hint)}</b>`
+    : !mine ? esc(tribeName(state, unit.owner) || NAMES[unit.owner])
+    : !ctx.myTurn ? 'Nicht am Zug'
+    : opts.length ? 'Kann noch ' + esc(opts.join(', ')) : 'Hat in diesem Zug gehandelt';
+  const acts = live ? quickActions(state, unit, ctx) : [];
+  bar.innerHTML = `
+    <div class="tb-cap">${status}</div>
+    <div class="tb-row">
+      ${acts.map((a, i) => `<button class="btn tool-tile${a.reason ? ' off' : ''}" data-act="${i}" ${a.reason ? 'aria-disabled="true"' : ''} title="${esc(a.reason || a.label)}"><b>${esc(a.label)}</b><span class="tt-foot">${a.cost != null ? `<span class="tt-cost">${a.cost}</span>` : ''}${a.reason ? `<span class="tt-why">${esc(a.reason)}</span>` : ''}</span></button>`).join('')}
+      <button class="btn tool-tile ghost" data-details><b>Details</b><span class="tt-foot"><span class="tt-why">Alle Werte und Aktionen</span></span></button>
+    </div>`;
+  bar.querySelectorAll('.tb-row').forEach(wheelSideways);
+  bar.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
+  bar.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+    const a = acts[Number(b.dataset.act)];
+    if (a.reason) toast(`${a.label}: ${a.reason}`, 'warn'); else a.run();
+  }));
+  bar.classList.remove('hidden');
+}
+
+// Häufige Aktionen der Einheit (dieselben Regeln wie im Detail-Menü).
+function quickActions(state, unit, ctx) {
+  const out = [];
+  if (unit.type === 'settler') { const f = canFound(state, unit, ctx.actAs); out.push({ label: 'Stadt gründen', reason: f.ok ? '' : f.reason, run: () => handlers.onFound(unit) }); }
+  const city = cityAt(state, unit.q, unit.r);
+  if (city && city.owner === ctx.actAs) out.push({ label: 'Stadtmenü', run: () => handlers.onSelectCity(unit.q, unit.r) });
+  const up = upgradeOption(state, unit);
+  if (up) out.push({ label: `Aufrüsten: ${UNITS[up.to].name}`, cost: up.cost, reason: up.ok ? '' : up.reason, run: () => handlers.onUpgrade(unit) });
+  for (const o of bridgeOptions(state, unit)) { const chk = canBuildBridge(state, unit, o.dir, ctx.actAs); out.push({ label: `Brücke nach ${DIR_NAMES[o.dir]}`, cost: o.cost, reason: chk.ok ? '' : chk.reason, run: () => handlers.onBuildBridge(unit, o.dir) }); }
+  if (!unit.carry && !UNITS[unit.type].abilities.includes('water') && state.techs[ctx.actAs].includes(ROAD.tech) && !roadAt(state, unit.q, unit.r)) {
+    const chk = canBuildRoad(state, ctx.actAs, unit.q, unit.r, true);
+    const spent = unit.mp <= 0 && unit.hasMoved;
+    if (chk.reason !== 'Städte sind schon angebunden') out.push({ label: 'Weg bauen', cost: ROAD.cost, reason: spent ? 'Keine Bewegung mehr' : chk.ok ? '' : chk.reason, run: () => handlers.onBuildRoad(unit.q, unit.r, unit) });
+  }
+  const dirTo = (q, r) => DIRS.findIndex(([dq, dr]) => unit.q + dq === q && unit.r + dr === r);
+  for (const [q, r] of unit.cargo ? unloadOptions(state, unit) : []) out.push({ label: `Absetzen nach ${DIR_NAMES[dirTo(q, r)]}`, run: () => handlers.onUnloadCargo(unit, q, r) });
+  for (const u of loadOptions(state, unit)) out.push({ label: `${UNITS[u.type].name} aufnehmen`, run: () => handlers.onLoadCargo(unit, u.id) });
+  for (const [q, r] of destroyableBridges(state, unit)) out.push({ label: 'Brücke einreißen', run: () => handlers.onDestroyBridge(unit, q, r) });
+  return out;
 }
 
 export function hideUnitChip() {
   $('unit-chip').classList.add('hidden');
+  if (anchor.kind === 'unit') clearAnchor();
 }
 
 export function showUnitPanel(state, unit, ctx) {
@@ -731,7 +835,7 @@ function switchToUnit(state, city, ctx) {
   if (!u) return '';
   const def = UNITS[u.carry || u.type];
   const mine = u.owner === ctx.actAs;
-  return `<div class="action-list"><button class="btn action ghost" data-open-unit="${u.id}"><span>${mine ? 'Einheit auswählen' : 'Einheit ansehen'}: ${def.name}<span class="sub">Steht in der Stadt${mine ? ' – ziehen, angreifen, auflösen' : ''}</span></span></button></div>`;
+  return `<button class="btn small unit-in-city" data-open-unit="${u.id}" title="Steht in der Stadt${mine ? ' – ziehen, angreifen, auflösen' : ''}">${mine ? 'Einheit wählen' : 'Einheit ansehen'}: ${def.name}</button>`;
 }
 
 export function showCityPanel(state, city, ctx) {
@@ -747,69 +851,52 @@ export function showCityPanel(state, city, ctx) {
   const built = tiles.filter(([q, r]) => improvementAt(state, q, r)).length;
   const res = tiles.filter(([q, r]) => resourceAt(state, q, r)).length;
 
-  let actions = '';
+  // Wie bei Mini Metro: Infos als Schild an der Stadt, Werkzeuge als Reihe unten.
+  const name = city.isCapital ? 'Hauptstadt' : 'Stadt';
+  const rewards = Object.entries(city.rewards || {}).sort((a, b) => a[0] - b[0]).map(([, id]) => CITY_REWARDS[id].name);
+  setAnchor('city', city.q, city.r, `
+    <div class="at-head">${city.owner ? `<span class="dot" style="background:${hex(playerColor(state, city.owner))}"></span>` : ''}<b>${name}</b><span class="at-lvl">Stufe ${city.pop}</span></div>
+    <span class="at-hexes" aria-label="Stufe ${city.pop} von ${MAX_POP}">${Array.from({ length: MAX_POP }, (_, i) => `<span class="${i < city.pop ? 'on' : ''}"></span>`).join('')}</span>
+    <div class="at-stats">${city.owner ? `<span class="at-inc">+${income} pro Runde</span>` : `<span>${esc(ownerName)}</span>`}<span>${tiles.length} Felder</span></div>
+    ${rewards.length ? `<div class="at-sub">${rewards.map(esc).join(', ')}</div>` : ''}`);
+  const tiles2 = [];
+  let cap = '';
   if (city.owner && city.owner === ctx.actAs) {
-    const unlocked = UNIT_ORDER.filter(t => {
-      const u = UNITS[t];
-      if (u.reward) return false;
-      if (u.tech && !state.techs[city.owner].includes(u.tech)) return false;
-      return true;
-    });
     const lvl = pendingLevel(city);
-    if (lvl && mine) {
-      actions += `<button class="btn primary city-reward" data-reward-open>Stufe ${lvl} erreicht – Belohnung wählen</button>`;
-    }
+    if (lvl && mine) tiles2.push(`<button class="btn primary tool-tile" data-reward-open><b>Stufe ${lvl}</b><span class="tt-foot"><span class="tt-why">Belohnung wählen</span></span></button>`);
     const can = buildOptionsCount(state, city, ctx);
+    tiles2.push(`<button class="btn tool-tile tt-main" data-build-open><b>Ausbauen</b><span class="tt-foot"><span class="tt-why">${can ? `${can} ${can === 1 ? 'Möglichkeit' : 'Möglichkeiten'}` : 'Gebiet ansehen'}</span></span></button>`);
     const popReason = popReasonFor(state, city, ctx);
-    actions += `<div class="city-actions">
-      <button class="btn city-act" data-build-open>
-        <b>Ausbauen</b><span class="sub">${can ? `${can} ${can === 1 ? 'Möglichkeit' : 'Möglichkeiten'} jetzt` : 'Stadtgebiet ansehen'}</span>
-      </button>
-      <button class="btn city-act" data-buypop ${popReason ? 'disabled' : ''} title="${popReason || 'Mehr Sterne pro Runde, neue Stufe mit Belohnung'}">
-        <b>Bevölkerung +1</b><span class="sub">${popReason || popCost(city, state) + ' Sterne'}</span>
-      </button>
-    </div>`;
-    actions += `<div class="panel-sub city-sec">Einheiten ausbilden</div><div class="train-grid">`;
+    tiles2.push(`<button class="btn tool-tile" data-buypop ${popReason ? 'disabled' : ''} title="${popReason || 'Mehr Sterne pro Runde, neue Stufe mit Belohnung'}"><b>Bevölkerung +1</b><span class="tt-foot">${popReason ? `<span class="tt-why">${popReason}</span>` : `<span class="tt-cost">${popCost(city, state)}</span>`}</span></button>`);
+    tiles2.push('<span class="tb-sep" aria-hidden="true"></span>');
+    const unlocked = UNIT_ORDER.filter(t => !UNITS[t].reward && (!UNITS[t].tech || state.techs[city.owner].includes(UNITS[t].tech)));
     for (const t of unlocked) {
       const u = UNITS[t];
       const reason = trainReason(state, city, t, ctx);
-      const stats = `Angriff ${attackOf(state, { type: t, owner: city.owner })} · Verteidigung ${u.def} · Bewegung ${maxMove(state, city.owner, t)} · Reichweite ${u.range} · Leben ${u.hp}`;
-      actions += `<button class="btn train-tile" data-train="${t}" ${reason ? 'disabled' : ''} title="${reason ? reason + ' · ' : ''}${stats}">
-        <span class="tt-name">${u.name}</span><span class="tt-cost">${unitCost(state, city.owner, t)}</span>
-        <span class="tt-stats">${reason && reason !== 'Zu wenig Sterne' ? reason : `A ${attackOf(state, { type: t, owner: city.owner })} · V ${u.def} · B ${maxMove(state, city.owner, t)}${u.range > 1 ? ' · R ' + u.range : ''}`}</span>
-      </button>`;
+      const atk = attackOf(state, { type: t, owner: city.owner });
+      const mv = maxMove(state, city.owner, t);
+      tiles2.push(`<button class="btn tool-tile" data-train="${t}" ${reason ? 'disabled' : ''} title="${reason ? reason + ': ' : ''}${u.name}, Angriff ${atk}, Verteidigung ${u.def}, Bewegung ${mv}, Reichweite ${u.range}, Leben ${u.hp}">
+        <b>${u.name}</b><span class="tt-stats">${stat('sword', atk)}${stat('shield', u.def)}${stat('boot', mv)}${u.range > 1 ? stat('bow', u.range) : ''}</span>
+        <span class="tt-foot"><span class="tt-cost">${unitCost(state, city.owner, t)}</span></span></button>`);
     }
-    actions += `</div><div class="hint tt-legend">Zahl rechts = Sterne · A Angriff · V Verteidigung · B Bewegung · R Reichweite</div>`;
-    if (city.trained) actions += `<div class="hint">Diese Stadt hat diese Runde schon eine Landeinheit ausgebildet${cityPorts(state, city).length && !city.trainedShip ? ' – ein Schiff geht noch' : ''}.</div>`;
-    else if (city.trainedShip) actions += `<div class="hint">Schiff gebaut – eine Landeinheit geht diese Runde noch.</div>`;
-    if (occupied) actions += `<div class="hint">Einheit in der Stadt – zum Ausbilden zuerst wegziehen.</div>`;
-  } else if (city.owner) {
-    actions = '';
+    if (occupied) cap = 'Einheit in der Stadt – zum Ausbilden zuerst wegziehen.';
+    else if (city.trained) cap = `Diese Runde schon ausgebildet${cityPorts(state, city).length && !city.trainedShip ? ' – ein Schiff geht noch' : ''}.`;
+    else if (city.trainedShip) cap = 'Schiff gebaut – eine Landeinheit geht noch.';
+    else if (!ctx.myTurn) cap = 'Nicht dein Zug.';
+  } else {
+    cap = !city.owner ? 'Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.'
+      : 'Feindliche Stadt – besiege die Verteidiger und rücke ein, um sie zu erobern.';
   }
-
+  const u0 = unitAt(state, city.q, city.r);
   panel(`
-    <div class="panel-head">
-      <div>
-        <div class="panel-title">Stadt${city.isCapital ? ' · Hauptstadt' : ''}</div>
-        <div class="panel-sub owner-line">${city.owner ? `<span class="dot" style="background:${hex(playerColor(state, city.owner))}"></span>` : ''}${ownerName}</div>
-      </div>
-      <div class="panel-head-right">
-        <span class="panel-sub">${city.pop >= MAX_POP ? 'max. Bev.' : ''}</span>
-        <button class="btn icon-btn panel-close" data-close>Schließen</button>
-      </div>
+    <div class="tb-cap">
+      <span>${cap ? esc(cap) : ''}</span>
+      ${u0 ? `<button class="btn ghost small" data-open-unit="${u0.id}">${u0.owner === ctx.actAs ? 'Einheit wählen' : 'Einheit ansehen'}: ${UNITS[u0.carry || u0.type].name}</button>` : ''}
+      ${city.owner !== ctx.actAs ? '<button class="btn ghost small" data-build-open>Gebiet ansehen</button>' : ''}
+      <button class="btn ghost small" data-close>Schließen</button>
     </div>
-    <div class="stat-row">
-      <div class="stat">Stufe<b>${city.pop}/${MAX_POP}</b></div>
-      <div class="stat">Einkommen<b>${income}/Runde</b></div>
-      <div class="stat">Gebiet<b>${tiles.length} Felder</b></div>
-    </div>
-    <div class="hint city-sum">${built} ${built === 1 ? 'Gebäude' : 'Gebäude'} · ${res} ${res === 1 ? 'Rohstoff' : 'Rohstoffe'} im Stadtgebiet${city.owner === ctx.actAs ? '' : ` · <button class="linklike" data-build-open>Gebiet ansehen</button>`}</div>
-    ${levelChips(city)}
-    ${switchToUnit(state, city, ctx)}
-    ${actions || (!city.owner ? '<div class="hint">Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.</div>'
-      : city.owner !== ctx.actAs ? '<div class="hint">Feindliche Stadt – besiege die Verteidiger und rücke ein, um sie zu erobern.</div>'
-      : '<div class="hint">Nicht dein Zug.</div>')}
-  `);
+    ${tiles2.length ? `<div class="tb-row">${tiles2.join('')}</div>` : ''}
+  `, 'toolbar');
   wirePanel($('panel'));
   $('panel').querySelectorAll('[data-train]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onTrain(city, btn.dataset.train));
@@ -850,7 +937,7 @@ function levelChips(city) {
   const got = Object.entries(city.rewards || {}).sort((a, b) => a[0] - b[0]);
   if (!got.length) return '';
   return `<div class="level-row">${got.map(([lvl, id]) =>
-    `<span class="level-chip" title="${CITY_REWARDS[id].desc}">Stufe ${lvl}: ${CITY_REWARDS[id].name}</span>`).join('')}</div>`;
+    `<span class="level-chip" title="Stufe ${lvl}: ${CITY_REWARDS[id].desc}">${CITY_REWARDS[id].name}</span>`).join('')}</div>`;
 }
 
 // Auswahl-Dialog für die Belohnung einer aufgestiegenen Stadt.
