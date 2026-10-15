@@ -614,7 +614,19 @@ export function showUnitChip(state, unit, ctx) {
   const live = mine && ctx.myTurn;
   const opts = live ? unitOptions(state, unit) : [];
   const cap = hpCap(unit);
-  setAnchor('unit', unit.q, unit.r, `
+  if (ctx.duel) {
+    const d = ctx.duel, foe = d.foe, fcap = hpCap(foe);
+    const fAfter = foe.hp - d.damage, aAfter = Math.max(0, unit.hp - d.back);
+    const row = (name, owner, hp, max, after, note) => `
+      <div class="du-row"><span class="dot" style="background:${hex(playerColor(state, owner))}"></span><b>${name}</b><span class="du-note">${note}</span></div>
+      <span class="du-bar" aria-hidden="true"><span class="du-now" style="width:${hp / max * 100}%"></span><span class="du-after${after <= 0 ? ' dead' : ''}" style="width:${Math.max(0, after) / max * 100}%"></span></span>
+      <div class="du-hp">${hp} auf <b>${Math.max(0, after)}</b> von ${max} Leben</div>`;
+    setAnchor('unit', d.q, d.r, `
+      <div class="du-title">Angriff</div>
+      ${row(UNITS[foe.type].name, foe.owner, foe.hp, fcap, fAfter, fAfter <= 0 ? 'wird besiegt' : `−${d.damage}`)}
+      ${row(def.name, unit.owner, unit.hp, cap, aAfter, d.back ? `Gegenschlag −${d.back}` : 'kein Gegenschlag')}
+      <div class="du-go">Nochmal tippen zum Angreifen</div>`);
+  } else setAnchor('unit', unit.q, unit.r, `
     <div class="at-head"><span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span><b>${def.name}${unit.carry ? ' (Boot)' : ''}</b>${unit.vet ? '<span class="at-vet">Veteran</span>' : ''}</div>
     ${hpBar(unit.hp, cap, unit.hp / cap <= 0.35 ? 'low' : '')}
     <div class="at-stats">${stat('heart', `${unit.hp}/${cap}`)}${stat('sword', attackOf(state, unit))}${stat('shield', defenseOf(state, unit))}${stat('boot', `${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}`)}${def.range > 1 ? stat('bow', def.range) : ''}</div>`);

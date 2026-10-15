@@ -299,6 +299,7 @@ function updateSelection() {
       bridge: canBridge ? R.bridgeOptions(st, u).flatMap(o => o.tiles) : null
     });
     let hint = null;
+    let duel = null;
     if (pend) {
       const [tq, tr] = pend.key.split(',').map(Number);
       const foe = R.unitAt(st, tq, tr);
@@ -307,6 +308,8 @@ function updateSelection() {
         const range = Math.max(...[u.q - tq, u.r - tr, u.q - tq + u.r - tr].map(Math.abs));
         const back = res.damage >= foe.hp ? 0 : (UNITS[foe.type].range >= range ? res.retaliation : 0);
         hint = `Nochmal tippen zum Angreifen · ${res.damage >= foe.hp ? 'besiegt ' + UNITS[foe.type].name : res.damage + ' Schaden'}${back ? ' · Gegenschlag ' + back : ''}`;
+        // Kampfvorschau als Schild am Ziel: beide Einheiten vorher und nachher.
+        duel = { q: tq, r: tr, foe, damage: Math.min(res.damage, foe.hp), back };
       } else hint = 'Ziel gewählt – nochmal tippen zum Ziehen';
     }
     if (app.panelOpen) {
@@ -314,7 +317,7 @@ function updateSelection() {
       ui.showUnitPanel(st, u, ctx());
     } else {
       ui.hidePanel();
-      ui.showUnitChip(st, u, { ...ctx(), hint });
+      ui.showUnitChip(st, u, { ...ctx(), hint, duel });
     }
   } else {
     const city = R.cityAt(st, app.sel.q, app.sel.r);

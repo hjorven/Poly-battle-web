@@ -234,6 +234,44 @@ await test('Übersicht: Reiter, Stadt antippen springt hin, Monumente mit Fortsc
   await page.context().close();
 });
 
+await test('Kampfvorschau: erster Tipp zeigt beide Einheiten, zweiter greift an', async () => {
+  for (const d of ['pc', 'ipadQuer']) {
+    const page = await open(d);
+    await startGame(page);
+    const pos = await page.evaluate(() => {
+      const { app, R, sync } = window.__pb; const st = app.state;
+      const me = st.units.find(u => u.owner === 'player_1');
+      // Freies Landfeld neben dem Krieger suchen und dort einen Gegner hinstellen.
+      const dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+      for (const [dq, dr] of dirs) {
+        const q = me.q + dq, r = me.r + dr;
+        const t = R.terrainAt(st, q, r);
+        if (t && t !== 'water' && t !== 'ocean' && t !== 'mountain' && !R.unitAt(st, q, r) && !R.cityAt(st, q, r)) {
+          st.units.push({ id: 'feind', owner: 'player_2', type: 'warrior', q, r, hp: 10, mp: 1, hasMoved: false, acted: false });
+          me.acted = false; me.hasMoved = false; me.mp = 1;
+          app.sel = { kind: 'unit', id: me.id }; sync();
+          return { q, r };
+        }
+      }
+      return null;
+    });
+    assert.ok(pos, 'Testaufbau');
+    await page.waitForTimeout(300);
+    const pt = await page.evaluate(([q, r]) => window.__pb.project(q, r), [pos.q, pos.r]);
+    await page.mouse.click(pt.x, pt.y);
+    await page.waitForTimeout(300);
+    const tag = await page.$eval('#anchor-tag', e => e.textContent.replace(/\s+/g, ' '));
+    assert.ok(/Angriff/.test(tag) && /Nochmal tippen/.test(tag), 'Vorschau am Ziel: ' + tag.slice(0, 80));
+    assert.strictEqual(await page.evaluate(() => window.__pb.app.state.units.find(u => u.id === 'feind').hp), 10, 'noch kein Schaden');
+    await page.mouse.click(pt.x, pt.y);
+    await page.waitForTimeout(1500);
+    const hp = await page.evaluate(() => { const f = window.__pb.app.state.units.find(u => u.id === 'feind'); return f ? f.hp : 0; });
+    assert.ok(hp < 10, 'Angriff ausgeführt');
+    noErrors(page);
+    await page.context().close();
+  }
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
