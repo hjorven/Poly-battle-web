@@ -1306,3 +1306,25 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
   #panel.toolbar, #unit-chip { left: 8px; right: 8px; width: auto; max-width: none; transform: none; }
   .tool-tile { width: 104px; }
 }
+
+/* Sechsecke als Erkennungszeichen – nur für Marker, Abzeichen und Währung */
+:root { --hex: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
+.dot, .chip .dot, .owner-line .dot, .at-head .dot, .tribe-opt .tribe-name .dot { clip-path: var(--hex); box-shadow: none; }
+.chip .dot { width: 11px; height: 12px; }
+.idle-dot { border-radius: 0; clip-path: var(--hex); width: 9px; height: 10px; }
+#profile-card .pc-level { clip-path: var(--hex); width: 46px; height: 52px; }
+.tr-hex { width: 20px; height: 23px; flex: none; background: var(--accent); clip-path: var(--hex); }
+.tool-tile .tt-cost {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 34px; padding: 0 4px;
+  background: var(--accent); color: var(--on-primary); clip-path: var(--hex); font-size: 14px;
+}
+.tool-tile[disabled] .tt-cost, .tool-tile.off .tt-cost { background: var(--border-strong); color: var(--panel); }
+.at-hexes { display: flex; gap: 3px; margin: 6px 0 4px; }
+.at-hexes span { width: 14px; height: 16px; background: var(--hover); clip-path: var(--hex); }
+.at-hexes span.on { background: var(--primary); }
+@media (max-width: 900px) and (min-width: 561px) {
+  .hud-left { gap: 8px; padding: 4px 10px; }
+  #topbar .top-actions .btn { padding: 6px 8px; }
+  #topbar .top-actions #endTurnBtn { padding: 8px 12px; }
+}
+@media (max-width: 400px) { #topbar { padding: 8px 6px; } #topbar .top-actions .btn { padding: 6px 6px; } #topbar .top-actions #endTurnBtn { padding: 8px 10px; } }
