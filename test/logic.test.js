@@ -102,8 +102,11 @@ test('createGame: Grundinvarianten über mehrere Seeds', () => {
       assert.strictEqual(st.cities.filter(c => c.owner === owner).length, 1, owner + ' Stadt');
       const tribe = TRIBES[st.tribes[owner]];
       assert.ok(tribe, owner + ' unbekannter Stamm');
-      assert.strictEqual(st.units.filter(u => u.owner === owner).length, tribe.startUnits.length, owner + ' Starteinheiten');
-      const expected = START_STARS + tribe.bonusStars + (owner === 'player_1' ? R.incomeFor(st, owner) : 0);
+      const n = st.units.filter(u => u.owner === owner).length;
+      // Ein Boot ohne Wasser in der Nähe wird durch Sterne ersetzt.
+      assert.ok(n === tribe.startUnits.length || (tribe.startUnits.includes('boat') && n === tribe.startUnits.length - 1), owner + ' Starteinheiten');
+      const boatRefund = n < tribe.startUnits.length ? UNITS.boat.cost : 0;
+      const expected = START_STARS + tribe.bonusStars + boatRefund + (owner === 'player_1' ? R.incomeFor(st, owner) : 0);
       assert.strictEqual(st.stars[owner], expected, owner + ' Startsterne');
       assert.ok(st.techs[owner].includes('basic'), owner + ' basic');
       for (const tech of tribe.startTechs) assert.ok(st.techs[owner].includes(tech), owner + ' Start-Tech');
@@ -483,15 +486,16 @@ test('Neue Gebäude: Windmühle, Schmelzhütte, Markt, Burg, Kloster; Zünfte, D
   const city = { q: 5, r: 5, owner: 'player_1', pop: 1, rewards: { 4: 'borders' } };
   st.cities = [city];
   st.improvements = { '6,5': 'farm', '6,4': 'farm' };
-  assert.strictEqual(R.improvementIncome(st, 'player_1', 'mill', 7, 4), 2, 'Mühle neben zwei Farmen');
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'mill', 7, 4), 3, 'Mühle: 1 selbst + 1 je Farm daneben');
   st.improvements['7,4'] = 'mill';
   const base = R.cityIncome(st, city);
   st.terrain[3 * MAP_W + 7] = 'mountain';
   st.improvements['7,3'] = 'mine';
-  assert.strictEqual(R.improvementIncome(st, 'player_1', 'forge', 6, 3), 2 * 1, 'Schmelzhütte: 2 je Mine');
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'forge', 6, 3), 1 + 2 * 1, 'Schmelzhütte: 1 selbst + 2 je Mine');
   assert.strictEqual(R.improvementIncome(st, 'player_1', 'market', 6, 3), 2, 'Markt: je Nachbargebäude 1');
   for (const k of ['5,3', '5,4', '6,2', '7,2']) st.improvements[k] = 'farm';
-  assert.strictEqual(R.improvementIncome(st, 'player_1', 'market', 6, 3), 4, 'Markt höchstens 4');
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'market', 6, 3), 4, 'Markt zählt nur Nachbarn im eigenen Gebiet (4)');
+  st.cities[0].rewards = { 4: 'borders' };
   for (const k of ['5,3', '5,4', '6,2', '7,2']) delete st.improvements[k];
   assert.ok(R.cityIncome(st, city) > base, 'Mine zählt');
   st.techs.player_1.push('farming', 'construction', 'mills', 'planning', 'rotation');
@@ -741,13 +745,17 @@ test('Krieger vs Verteidiger: Verteidigung erhöht Vergeltung, senkt Schaden', (
   assert.strictEqual(res.retaliation, 8, '3/5 * 3 * 4.5 = 8.1 -> 8');
 });
 
-test('Ritter hat Angriff 3.5 (echte Werte sind nicht ganzzahlig)', () => {
+test('Ritter: Angriff 3, Pikenier hält ihm stand', () => {
   const st = makeState();
   const a = unit('a', 'player_1', 'knight', 5, 5);
   const d = unit('b', 'player_2', 'warrior', 5, 6);
   st.units = [a, d];
   const res = R.battleResults(st, a, d);
-  assert.ok(res.damage >= 10, 'Ritter tötet einen Krieger, war ' + res.damage);
+  assert.ok(res.damage >= 5 && res.damage < 10, 'Ritter trifft einen Krieger hart, tötet ihn aber nicht mehr sofort: ' + res.damage);
+  const p = unit('p', 'player_2', 'pikeman', 5, 6);
+  st.units = [a, p];
+  const rp = R.battleResults(st, a, p);
+  assert.ok(rp.retaliation > res.retaliation, 'Pikenier schlägt härter zurück');
 });
 
 test('Wald-Bonus erst mit Bogenschießen', () => {
@@ -2192,6 +2200,97 @@ test('Monument-Fortschritt passt zur Freischaltung', () => {
   assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), ['m_treasury']);
   st.cities.push({ q: 13, r: 5, owner: 'player_1', pop: 5 });
   assert.deepStrictEqual(R.checkMonuments(st, 'player_1'), ['m_park']);
+});
+
+// --- Neue Einheiten, Gebäude und Stammesboni ----------------------------------------
+
+test('Rammbock: dreifacher Schaden gegen Stadt, kein Gegenschlag; im Feld schwach', () => {
+  const st = makeState();
+  st.cities = [{ q: 5, r: 6, owner: 'player_2', pop: 1 }];
+  const ram = unit('r', 'player_1', 'ram', 5, 5);
+  const def = unit('d', 'player_2', 'defender', 5, 6);
+  st.units = [ram, def];
+  const inCity = R.battleResults(st, ram, def);
+  assert.strictEqual(inCity.retaliation, 0);
+  st.cities = [];
+  const field = R.battleResults(st, ram, def);
+  assert.ok(inCity.damage >= field.damage * 2.5, `Stadt ${inCity.damage} vs Feld ${field.damage}`);
+  assert.ok(field.retaliation > 0);
+});
+
+test('Bogenreiter: Reichweite 2, Pikeniere treffen ihn wie Reiterei', () => {
+  const st = makeState();
+  const h = unit('h', 'player_1', 'horsearcher', 5, 5);
+  const p = unit('p', 'player_2', 'pikeman', 5, 7);
+  st.units = [h, p];
+  assert.ok(R.attackTargets(st, h).includes(p), 'trifft auf 2 Felder');
+  const base = R.battleResults(st, unit('x', 'player_1', 'archer', 5, 5), p);
+  assert.ok(R.battleResults(st, p, h).damage > R.battleResults(st, p, unit('y', 'player_1', 'archer', 5, 5)).damage, 'Pikenier stark gegen Bogenreiter');
+  assert.ok(base.damage > 0);
+});
+
+test('Händlerkarren: Handel mit eigener Stadt, fremder nur im Frieden, erobert nicht', () => {
+  const st = makeState();
+  const home = { q: 2, r: 5, owner: 'player_1', pop: 1 };
+  const other = { q: 9, r: 5, owner: 'player_1', pop: 1 };
+  const foe = { q: 9, r: 9, owner: 'player_2', pop: 1 };
+  st.cities = [home, other, foe];
+  const cart = unit('c', 'player_1', 'cart', 8, 5, { home: { q: 2, r: 5 } });
+  st.units = [cart];
+  const o = R.tradeOption(st, cart);
+  assert.ok(o && o.city === other && !o.foreign, 'eigene Stadt daneben');
+  const s0 = st.stars.player_1;
+  assert.ok(R.trade(st, cart, 'player_1').ok);
+  assert.strictEqual(st.stars.player_1, s0 + Math.min(16, 2 + 7));
+  assert.ok(!st.units.includes(cart), 'Karren verbraucht');
+  // Fremde Stadt: nur im Frieden, nie hineinziehen.
+  const c2 = unit('c2', 'player_1', 'cart', 9, 8, { home: { q: 2, r: 5 } });
+  st.units = [c2];
+  assert.strictEqual(R.tradeOption(st, c2), null, 'kein Handel im Krieg');
+  assert.strictEqual(R.canEnter(st, c2, 'field', 9, 9), false, 'Karren erobert keine Stadt');
+  st.peace = { 'player_1|player_2': { since: 1 } };
+  const f = R.tradeOption(st, c2);
+  assert.ok(f && f.foreign, 'Handel im Frieden');
+  assert.strictEqual(f.stars, 16, 'weit entfernt und fremd: Obergrenze 16');
+  const theirs = st.stars.player_2;
+  R.trade(st, c2, 'player_1');
+  assert.strictEqual(st.stars.player_2, theirs + 2, 'Partner bekommt 2 Sterne');
+});
+
+test('Wachturm: Sicht 3 und anderthalbfache Verteidigung daneben', () => {
+  const st = makeState();
+  st.explored = { player_1: [] };
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }];
+  const d = unit('d', 'player_1', 'warrior', 6, 4);
+  st.units = [d];
+  assert.strictEqual(R.defenceBonus(st, d), 1);
+  st.improvements['6,5'] = 'watchtower';
+  assert.strictEqual(R.defenceBonus(st, d), 1.5);
+  assert.ok(R.visibleKeys(st, 'player_1').has(hk(9, 5)), 'sieht 3 Felder vom Turm');
+});
+
+test('Fischerhütte: +1 je Fischgrund daneben; Markt zählt Rohstoffe', () => {
+  const st = makeState();
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }];
+  for (const [q, r] of [[6, 4], [7, 4], [6, 5]]) st.terrain[r * MAP_W + q] = 'water';
+  st.resources['7,4'] = 'fish';
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'fishhut', 6, 4), 2);
+  st.resources['4,5'] = 'fruit';
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'market', 4, 6), 1, 'Markt neben Obst');
+});
+
+test('Stammesboni: Legion verteidigt in Städten besser, Langbogen schießt aus dem Wald weiter', () => {
+  const st = makeState();
+  st.tribes = { player_1: 'imperius', player_2: 'hoodrick' };
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }];
+  const w = unit('w', 'player_1', 'warrior', 5, 5);
+  assert.strictEqual(R.defenseOf(st, w), UNITS.warrior.def + 1);
+  w.q = 6;
+  assert.strictEqual(R.defenseOf(st, w), UNITS.warrior.def);
+  const a = unit('a', 'player_2', 'archer', 8, 8);
+  assert.strictEqual(R.rangeOf(st, a), 2);
+  st.terrain[8 * MAP_W + 8] = 'forest';
+  assert.strictEqual(R.rangeOf(st, a), 3);
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
