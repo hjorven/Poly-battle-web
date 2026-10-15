@@ -80,6 +80,8 @@ function statusText() {
 
 function refresh() {
   if (!app.state) return;
+  // Tipp der KI gilt nur für den Moment: außerhalb des eigenen Zugs schließen.
+  if (!myTurn() || app.reviewing) ui.showCoach(null);
   ui.updateStrip(app.state, ctx());
   ui.setStatus(statusText());
   ui.setEndTurn(myTurn());
@@ -278,7 +280,7 @@ function updateSelection() {
   if (!st) return;
   if (app.sel) {
     if (app.sel.kind === 'unit' && !R.findUnit(st, app.sel.id)) app.sel = null;
-    if (app.sel.kind === 'city' && !R.cityAt(st, app.sel.q, app.sel.r)) app.sel = null;
+    else if (app.sel.kind === 'city' && !R.cityAt(st, app.sel.q, app.sel.r)) app.sel = null;
   }
   if (!app.sel) {
     render.setHighlights({});
@@ -306,7 +308,7 @@ function updateSelection() {
       if (pend.kind === 'attack' && foe) {
         const res = R.battleResults(st, u, foe);
         const range = Math.max(...[u.q - tq, u.r - tr, u.q - tq + u.r - tr].map(Math.abs));
-        const back = res.damage >= foe.hp ? 0 : (UNITS[foe.type].range >= range ? res.retaliation : 0);
+        const back = res.damage >= foe.hp ? 0 : (R.rangeOf(st, foe) >= range && !UNITS[foe.type].abilities.includes('stiff') ? res.retaliation : 0);
         hint = `Nochmal tippen zum Angreifen · ${res.damage >= foe.hp ? 'besiegt ' + UNITS[foe.type].name : res.damage + ' Schaden'}${back ? ' · Gegenschlag ' + back : ''}`;
         // Kampfvorschau als Schild am Ziel: beide Einheiten vorher und nachher.
         duel = { q: tq, r: tr, foe, damage: Math.min(res.damage, foe.hp), back };
@@ -359,7 +361,7 @@ function recordProfile() {
   const me = app.mode === 'online' ? app.myRole : app.mode === 'bot' ? 'player_1' : null;
   if (!me) { ui.showProfileResult(null); return; }
   // Testpartien (Admin-Panel) zählen nur auf Wunsch fürs Profil, nie für die Bestenliste.
-  if (st.admin && !st.adminScore) {
+  if ((st.admin && !st.adminScore) || (st.coached && (st.daily || st.weekly))) {
     if (app.recordedGen !== app.gen) { app.recordedGen = app.gen; app.lastResult = null; ui.toast('Testpartie: nicht gewertet'); }
     ui.showProfileResult(null);
     return;
@@ -388,7 +390,7 @@ async function syncOnline(profile, st, me, score) {
     if (st.daily || st.weekly) ui.toast('Wähle im Menü einen Namen, dann zählen deine Punkte in der Bestenliste.');
     return;
   }
-  const kind = st.admin ? null : st.daily ? 'daily' : st.weekly ? 'weekly' : null;
+  const kind = st.admin || st.coached ? null : st.daily ? 'daily' : st.weekly ? 'weekly' : null;
   if (kind) {
     const res = await net.submitScore(kind, st.daily || st.weekly, score, st.tribes ? st.tribes[me] : null, st.round);
     if (res.data) ui.toast(`Bestenliste ${kind === 'daily' ? 'heute' : 'diese Woche'}: Platz ${res.data.rank} von ${res.data.total}`, 'good');
@@ -509,6 +511,7 @@ function announce(events) {
 }
 
 async function afterAction(events = []) {
+  ui.showCoach(null);
   app.pending = null;
   announce(events);
   app.busy = false;
@@ -698,6 +701,20 @@ async function doFound(unit) {
   app.busy = true;
   ui.toast('Stadt gegründet', 'good');
   sfx('capture');
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
+async function doTrade(unit) {
+  unit = liveUnit(unit);
+  if (!unit) return;
+  const res = R.trade(app.state, unit, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  app.busy = true;
+  app.sel = null;
+  ui.toast(`Handel ${res.foreign ? 'mit ' + needName(app.state, res.city.owner) : 'abgeschlossen'}: +${res.stars} Sterne`, 'good');
+  sfx('build');
+  render.floatAt(res.city.q, res.city.r, `+${res.stars}`, '#facc15');
   await render.syncBoard(app.state, viewer());
   await afterAction();
 }
@@ -1163,7 +1180,117 @@ function startTutorial() {
   refresh();
 }
 
+// --- KI-Lehrling ------------------------------------------------------------------
+// Fragt die KI auf einer Kopie, was sie an Stelle des Spielers täte, und erklärt es.
+function coachHint() {
+  const st = app.state;
+  if (!myTurn()) { ui.toast('Tipps gibt es in deinem Zug'); return; }
+  const me = actAs();
+  const copy = JSON.parse(JSON.stringify(st));
+  R.useMap(copy);
+  let step = null;
+  try { step = botStep(copy, me); } catch (e) { step = null; }
+  // Krieg erklären schlägt der Lehrling nie vor.
+  if (step && step.kind === 'war') step = null;
+  if (st.daily || st.weekly) ui.toast('Mit Tipps zählt diese Herausforderung nicht für die Bestenliste', 'warn');
+  st.coached = true;
+  persist();
+  const U = t => UNITS[t].name;
+  let hint;
+  const at = (q, r) => { render.cameraTo(q, r, true); };
+  if (!step) hint = { text: 'Nichts Dringendes mehr – du kannst den Zug beenden.', runnable: false };
+  else switch (step.kind) {
+    case 'attack': {
+      const res = R.battleResults(st, R.findUnit(st, step.attacker.id), R.findUnit(st, step.defender.id));
+      hint = { text: `Greife mit ${U(step.attacker.type)} den gegnerischen ${U(step.defender.type)} an.`, why: res.damage >= step.defender.hp ? 'Der Angriff besiegt ihn sofort.' : `Das macht ${res.damage} Schaden, der Gegenschlag nur ${res.retaliation}.`, runnable: true };
+      app.sel = { kind: 'unit', id: step.attacker.id }; app.panelOpen = false;
+      app.pending = { unitId: step.attacker.id, key: step.defender.q + ',' + step.defender.r, kind: 'attack' };
+      at(step.defender.q, step.defender.r);
+      break;
+    }
+    case 'move':
+      hint = { text: `Ziehe ${U(step.unit.type)} auf das markierte Feld.`, why: 'Die KI rückt so auf ein Ziel zu, erkundet oder schützt eine Stadt.', runnable: true };
+      app.sel = { kind: 'unit', id: step.unit.id }; app.panelOpen = false;
+      app.pending = { unitId: step.unit.id, key: step.q + ',' + step.r, kind: 'move' };
+      at(step.q, step.r);
+      break;
+    case 'train': hint = { text: `Bilde in dieser Stadt ${U(step.type)} aus.`, why: 'Mehr Einheiten schützen deine Städte und erobern neue.', runnable: true }; app.sel = { kind: 'city', q: step.city.q, r: step.city.r }; at(step.city.q, step.city.r); break;
+    case 'buyPop': hint = { text: 'Kaufe in dieser Stadt Bevölkerung.', why: 'Mehr Bevölkerung bringt jede Runde mehr Sterne und Belohnungen.', runnable: true }; app.sel = { kind: 'city', q: step.city.q, r: step.city.r }; at(step.city.q, step.city.r); break;
+    case 'improve': hint = { text: `Baue ${IMPROVEMENTS[step.type].name} auf dem markierten Feld.`, why: 'Gebäude bringen dauerhaft mehr Sterne pro Runde.', runnable: true }; app.sel = { kind: 'city', q: step.city.q, r: step.city.r }; at(step.q, step.r); break;
+    case 'research': hint = { text: `Erforsche ${TECHS[step.tech].name}.`, why: TECHS[step.tech].desc, runnable: true }; break;
+    case 'reward': hint = { text: `Wähle als Belohnung „${CITY_REWARDS[step.choice].name}“.`, why: CITY_REWARDS[step.choice].desc, runnable: true }; at(step.city.q, step.city.r); break;
+    case 'settle': hint = { text: 'Gründe mit dem Siedler hier eine Stadt.', runnable: true }; at(step.unit.q, step.unit.r); break;
+    case 'upgrade': hint = { text: `Rüste ${U(step.unit.type)} auf.`, runnable: true }; app.sel = { kind: 'unit', id: step.unit.id }; at(step.unit.q, step.unit.r); break;
+    case 'trade': hint = { text: 'Handle mit dem Händlerkarren.', why: 'Das bringt sofort Sterne.', runnable: true }; at(step.unit.q, step.unit.r); break;
+    case 'road': hint = { text: 'Baue einen Weg auf dem markierten Feld.', why: 'Wege verbinden Städte und machen Einheiten schneller.', runnable: true }; at(step.q, step.r); break;
+    case 'bridge': hint = { text: 'Baue mit dieser Einheit eine Brücke.', runnable: true }; at(step.unit.q, step.unit.r); break;
+    default: hint = { text: 'Die KI hat einen Vorschlag, der sich hier nicht anzeigen lässt.', runnable: false };
+  }
+  refresh();
+  ui.showCoach(hint, () => { ui.showCoach(null); runCoachStep(step); }, () => { ui.showCoach(null); app.pending = null; refresh(); });
+}
+
+async function runCoachStep(step) {
+  if (!step || !myTurn()) return;
+  const st = app.state;
+  app.pending = null;
+  const unit = u => R.findUnit(st, u.id);
+  const city = c => R.cityAt(st, c.q, c.r);
+  switch (step.kind) {
+    case 'attack': return doAttack(unit(step.attacker), unit(step.defender));
+    case 'move': return doMove(unit(step.unit), step.q, step.r);
+    case 'train': return doTrain(city(step.city), step.type);
+    case 'buyPop': return doBuyPop(city(step.city));
+    case 'improve': return doImprove(city(step.city), step.type, step.q, step.r);
+    case 'research': return doResearch(step.tech);
+    case 'reward': return doChooseReward(city(step.city), step.choice);
+    case 'settle': return doFound(unit(step.unit));
+    case 'upgrade': return doUpgrade(unit(step.unit));
+    case 'trade': return doTrade(unit(step.unit));
+    case 'road': return doBuildRoad(step.q, step.r, null);
+    case 'bridge': return doBuildBridge(unit(step.unit), step.dir);
+  }
+}
+
+// --- Wiederholung und Zeitraffer -------------------------------------------------
+function showReplay() {
+  const rp = app.replay;
+  if (!rp) { ui.setReplay(null); return; }
+  const f = app.state.replay[rp.index];
+  ui.setReplay({ count: app.state.replay.length, index: rp.index, round: f ? f.r : 1, playing: rp.playing, speed: rp.speed });
+}
+
+function replayFrame() {
+  const rp = app.replay;
+  if (!rp) return;
+  render.syncBoard(R.replayState(app.state, rp.index), null);
+  showReplay();
+}
+
+function playReplay() {
+  const rp = app.replay;
+  if (!rp) return;
+  rp.playing = true;
+  rp.timer = setInterval(() => {
+    if (!app.replay || !app.reviewing) return stopReplay();
+    if (rp.index >= app.state.replay.length - 1) { stopReplay(); showReplay(); return; }
+    rp.index++;
+    replayFrame();
+  }, rp.speed);
+}
+
+function stopReplay() {
+  const rp = app.replay;
+  if (!rp) return;
+  if (rp.timer) clearInterval(rp.timer);
+  rp.timer = null;
+  rp.playing = false;
+}
+
 function endReview() {
+  stopReplay();
+  app.replay = null;
+  ui.setReplay(null);
   app.reviewing = false;
   ui.setReview(false);
 }
@@ -1373,6 +1500,8 @@ function boot() {
     onBuildBridge: doBuildBridge,
     onLoadCargo: doLoadCargo,
     onUpgrade: doUpgrade,
+    onTrade: doTrade,
+    onCoach: coachHint,
     onUnloadCargo: doUnloadCargo,
     onBuildRoad: doBuildRoad,
     onJump: (q, r) => render.cameraTo(q, r, true),
@@ -1454,9 +1583,25 @@ function boot() {
       app.sel = null;
       ui.setReview(on);
       ui.hidePanel();
+      stopReplay();
+      const frames = (app.state.replay || []).length;
+      app.replay = on && frames >= 2 ? { index: frames - 1, playing: false, speed: (app.replay && app.replay.speed) || 550, timer: null } : null;
       render.syncBoard(app.state, viewer());
+      showReplay();
       if (on) render.resetCamera();
       refresh();
+    },
+    onReplay: (cmd, value) => {
+      const rp = app.replay;
+      if (!rp || !app.reviewing) return;
+      const last = app.state.replay.length - 1;
+      if (cmd === 'seek') { stopReplay(); rp.index = value; replayFrame(); }
+      else if (cmd === 'speed') { rp.speed = value; if (rp.playing) { stopReplay(); playReplay(); } else showReplay(); }
+      else if (cmd === 'toggle') {
+        if (rp.playing) stopReplay();
+        else { if (rp.index >= last) rp.index = 0; replayFrame(); playReplay(); }
+        showReplay();
+      }
     },
     onShare: async () => {
       const st = app.state;

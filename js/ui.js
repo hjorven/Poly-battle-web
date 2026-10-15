@@ -8,7 +8,7 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, incomeFor, tileYield, improvePreview, monumentProgress, threatenedCities, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, tradeOption, incomeFor, tileYield, improvePreview, monumentProgress, threatenedCities, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS, toWorld, hexDistance } from './hex.js';
 import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks, project } from './render.js';
@@ -59,6 +59,7 @@ export function initUI(h) {
     handlers.onHotkey(action);
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
+  $('coachBtn').addEventListener('click', () => handlers.onCoach && handlers.onCoach());
   // Die Karte reicht bis oben; Elemente darunter richten sich nach der Höhe der Kärtchen.
   const syncTop = () => document.documentElement.style.setProperty('--hud-h', $('topbar').offsetHeight + 'px');
   syncTop();
@@ -87,6 +88,9 @@ export function initUI(h) {
   try { saved = localStorage.getItem('pb_menu_tab'); } catch (e) { saved = null; }
   menuTab(tabs.some(t => t.dataset.mtab === saved) ? saved : 'play', false);
   $('winnerMap').addEventListener('click', () => handlers.onReview(true));
+  $('rpPlay').addEventListener('click', () => handlers.onReplay('toggle'));
+  $('rpSlider').addEventListener('input', e => handlers.onReplay('seek', Number(e.target.value)));
+  document.querySelectorAll('[data-rpspeed]').forEach(b => b.addEventListener('click', () => handlers.onReplay('speed', Number(b.dataset.rpspeed))));
   $('reviewBack').addEventListener('click', () => handlers.onReview(false));
   $('winnerShare').addEventListener('click', () => handlers.onShare());
   $('reviewShare').addEventListener('click', () => handlers.onShare());
@@ -671,6 +675,10 @@ export function showUnitChip(state, unit, ctx) {
 function quickActions(state, unit, ctx) {
   const out = [];
   if (unit.type === 'settler') { const f = canFound(state, unit, ctx.actAs); out.push({ label: 'Stadt gründen', reason: f.ok ? '' : f.reason, run: () => handlers.onFound(unit) }); }
+  if (UNITS[unit.type].abilities.includes('trade')) {
+    const t = tradeOption(state, unit);
+    out.push({ label: t ? `Handeln: +${t.stars}` : 'Handeln', reason: t ? '' : 'In oder neben eine andere eigene Stadt ziehen (fremde nur im Frieden)', run: () => handlers.onTrade(unit) });
+  }
   const city = cityAt(state, unit.q, unit.r);
   if (city && city.owner === ctx.actAs) out.push({ label: 'Stadtmenü', run: () => handlers.onSelectCity(unit.q, unit.r) });
   const up = upgradeOption(state, unit);
@@ -1013,11 +1021,13 @@ const IMP_EFFECT = {
   port: '+1 Stern pro Runde, Schiffe ausbilden',
   temple: '+2 Sterne pro Runde',
   airfield: '+1 Stern pro Runde, Luft-Einheiten ausbilden',
-  mill: '+1 Stern je angrenzender Farm',
-  forge: '+2 Sterne je angrenzender Mine',
-  market: '+1 Stern je angrenzendem Gebäude (bis 4)',
+  mill: '+1 Stern, +1 je angrenzender Farm',
+  forge: '+1 Stern, +2 je angrenzender Mine',
+  market: '+1 Stern je angrenzendem Gebäude oder Rohstoff (bis 5)',
   fort: 'Einheiten darauf verteidigen dreifach',
-  monastery: '+2 Sterne, Einheiten im Gebiet heilen mehr'
+  monastery: '+2 Sterne, Einheiten im Gebiet heilen mehr',
+  watchtower: 'Sicht 3 Felder, Einheiten darauf und daneben verteidigen anderthalbfach',
+  fishhut: '+1 Stern, +1 je Fischgrund daneben'
 };
 const impEffect = id => IMPROVEMENTS[id].monument ? `+${3} Bevölkerung, 200 Punkte (einmalig je Stamm)` : IMP_EFFECT[id] || '';
 
@@ -1719,6 +1729,30 @@ const TIPS = [
   'Wähle bei Stufe 3 die Stadtmauer, wenn Gegner in der Nähe sind: Verteidiger bekommen dann 4-fache Verteidigung.',
   'Greif nicht an, wenn die Vorschau mehr Gegenschlag als Schaden zeigt – warte lieber auf Verstärkung.'
 ];
+
+// KI-Lehrling: Vorschlag mit Erklärung, Ausführen oder Schließen.
+export function showCoach(hint, onRun, onClose) {
+  const box = $('coach');
+  if (!hint) { box.classList.add('hidden'); return; }
+  box.innerHTML = `<div class="co-head">Tipp der KI</div><div class="co-text">${esc(hint.text)}</div>${hint.why ? `<div class="co-why">${esc(hint.why)}</div>` : ''}
+    <div class="co-acts">${hint.runnable ? '<button class="btn primary small" data-co-run>Ausführen</button>' : ''}<button class="btn ghost small" data-co-close>Schließen</button></div>`;
+  box.classList.remove('hidden');
+  box.querySelector('[data-co-run]')?.addEventListener('click', onRun);
+  box.querySelector('[data-co-close]').addEventListener('click', onClose);
+}
+
+// Wiederholung: Regler, Abspielen/Anhalten, Tempo.
+export function setReplay(info) {
+  const bar = $('replay-bar');
+  if (!info) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  const slider = $('rpSlider');
+  slider.max = String(info.count - 1);
+  slider.value = String(info.index);
+  $('rpLabel').textContent = `Runde ${info.round}${info.index === info.count - 1 ? ' (Ende)' : ''}`;
+  $('rpPlay').textContent = info.playing ? 'Anhalten' : info.index === info.count - 1 ? 'Von vorn abspielen' : 'Abspielen';
+  bar.querySelectorAll('[data-rpspeed]').forEach(b => b.classList.toggle('active', Number(b.dataset.rpspeed) === info.speed));
+}
 
 export function setReview(on) {
   $('review-bar').classList.toggle('hidden', !on);

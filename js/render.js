@@ -1032,7 +1032,7 @@ function portNode(env) {
 }
 
 // Größe im Verhältnis zu Städten, Einheiten und Monumenten angleichen.
-const BUILDING_SCALE = { temple: 1.5, market: 1.6, forge: 1.35, sawmill: 1.3, mine: 1.3, mill: 1.2, monastery: 1.35 };
+const BUILDING_SCALE = { watchtower: 1.3, fishhut: 1.3, temple: 1.5, market: 1.6, forge: 1.35, sawmill: 1.3, mine: 1.3, mill: 1.2, monastery: 1.35 };
 
 function improvementNode(type, env = {}) {
   if (type === 'farm') return farmNode(env);
@@ -1171,6 +1171,56 @@ function buildingNode(type) {
     const wall = new THREE.Mesh(geo('moWall', () => new THREE.BoxGeometry(0.32, 0.06, 0.02)), mat(0xd6cfc0));
     wall.position.set(0, 0.03, 0.14);
     g.add(wall);
+  } else if (type === 'watchtower') {
+    // Wachturm: Steinsockel, hoher Holzturm, Plattform mit Zinnen und Wimpel.
+    const stone = mat(0x9a948a), wood = mat(WOOD), dark = mat(WOOD_DARK);
+    const base = new THREE.Mesh(geo('wtBase', () => new THREE.CylinderGeometry(0.11, 0.13, 0.08, 6)), stone);
+    base.position.y = 0.04;
+    g.add(base);
+    for (const [x, z] of [[-0.06, -0.06], [0.06, -0.06], [-0.06, 0.06], [0.06, 0.06]]) {
+      const leg = new THREE.Mesh(geo('wtLeg', () => new THREE.BoxGeometry(0.025, 0.36, 0.025)), dark);
+      leg.position.set(x, 0.26, z);
+      g.add(leg);
+    }
+    const deck = new THREE.Mesh(geo('wtDeck', () => new THREE.BoxGeometry(0.2, 0.03, 0.2)), wood);
+    deck.position.y = 0.45;
+    g.add(deck);
+    for (const [x, z] of [[-0.085, 0], [0.085, 0], [0, -0.085], [0, 0.085]]) {
+      const rail = new THREE.Mesh(geo('wtRail', () => new THREE.BoxGeometry(0.04, 0.05, 0.04)), wood);
+      rail.position.set(x, 0.49, z);
+      g.add(rail);
+    }
+    const roof = new THREE.Mesh(geo('wtRoof', () => new THREE.ConeGeometry(0.15, 0.12, 4)), mat(0x9c4a3a));
+    roof.rotation.y = Math.PI / 4;
+    roof.position.y = 0.6;
+    g.add(roof);
+    const flag = new THREE.Mesh(geo('wtFlag', () => new THREE.BoxGeometry(0.08, 0.05, 0.005)), mat(0xb91c1c));
+    flag.position.set(0.04, 0.7, 0);
+    g.add(flag);
+  } else if (type === 'fishhut') {
+    // Fischerhütte auf Pfählen über dem Wasser, Steg und Netz.
+    const dark = mat(WOOD_DARK), wood = mat(WOOD);
+    for (const [x, z] of [[-0.1, -0.08], [0.1, -0.08], [-0.1, 0.08], [0.1, 0.08]]) {
+      const pile = new THREE.Mesh(geo('fhPile', () => new THREE.CylinderGeometry(0.015, 0.015, 0.16, 5)), dark);
+      pile.position.set(x, 0.05, z);
+      g.add(pile);
+    }
+    const floor = new THREE.Mesh(geo('fhFloor', () => new THREE.BoxGeometry(0.26, 0.025, 0.22)), wood);
+    floor.position.y = 0.13;
+    g.add(floor);
+    const hut = new THREE.Mesh(geo('fhHut', () => new THREE.BoxGeometry(0.16, 0.1, 0.14)), mat(0x8b6a45));
+    hut.position.set(-0.02, 0.19, 0);
+    g.add(hut);
+    const roof = new THREE.Mesh(geo('fhRoof', () => new THREE.CylinderGeometry(0.0, 0.12, 0.2, 4, 1).rotateZ(Math.PI / 2).rotateX(Math.PI / 4)), mat(0xc9a86a));
+    roof.position.set(-0.02, 0.27, 0);
+    roof.scale.set(1, 0.6, 1);
+    g.add(roof);
+    const pier = new THREE.Mesh(geo('fhPier', () => new THREE.BoxGeometry(0.18, 0.02, 0.06)), wood);
+    pier.position.set(0.2, 0.13, 0.05);
+    g.add(pier);
+    const net = new THREE.Mesh(geo('fhNet', () => new THREE.BoxGeometry(0.003, 0.09, 0.12)), mat(0xd6d3c4));
+    net.position.set(0.1, 0.19, -0.06);
+    g.add(net);
   } else if (type === 'sawmill') {
     const base = new THREE.Mesh(geo('swBase', () => new THREE.BoxGeometry(0.3, 0.1, 0.22)), mat(0x6b4a2b));
     base.position.y = 0.05;
@@ -1705,6 +1755,40 @@ function unitBody(type, color, passenger = null, plume = null) {
     put(pp.right, box(0.62, 0.03, 0.03), mat(0xf0f3f7), 0.2, 0, 0);
     put(pp.right, cone(0.035, 0.1, 4), mat(STEEL), 0.55, 0, 0).rotation.z = -Math.PI / 2;
     put(pp.left, box(0.03, 0.18, 0.14), teamMat(), 0.03, 0, 0);
+  } else if (type === 'horsearcher') {
+    horse(0x8a6a44);
+    put(g, box(0.28, 0.04, 0.19), teamMat(), 0, 0.4, 0); // Satteldecke
+    const pp = person({ y0: 0.27, legs: false, armL: 1.2 });
+    put(pp.p, cone(0.1, 0.13, 6), mat(0x4d7c3a), 0, pp.headY + 0.07, 0);
+    const r = 0.15;
+    const bow = put(pp.left, geo('bowArc2', () => new THREE.TorusGeometry(r, 0.014, 4, 10, Math.PI)), mat(WOOD), -r + 0.03, 0, 0);
+    bow.rotation.z = -Math.PI / 2;
+    put(pp.left, box(0.006, r * 2, 0.006), mat(0xeeeeee), -r + 0.03, 0, 0);
+    put(g, cyl(0.035, 0.03, 0.2, 6), mat(WOOD_DARK), -0.2, 0.42, 0.1).rotation.z = 0.5; // Köcher am Sattel
+  } else if (type === 'ram') {
+    // Fahrgestell mit Rädern, Schutzdach in Teamfarbe und Rammbalken mit Eisenkopf.
+    put(g, box(0.5, 0.06, 0.26), mat(WOOD), 0, 0.12, 0);
+    for (const x of [-0.17, 0.17]) for (const z of [-0.15, 0.15]) {
+      put(g, cyl(0.075, 0.075, 0.04, 8), mat(0x4a4038), x, 0.075, z).rotation.x = Math.PI / 2;
+    }
+    for (const x of [-0.2, 0.2]) for (const z of [-0.11, 0.11]) put(g, box(0.035, 0.26, 0.035), mat(WOOD_DARK), x, 0.28, z);
+    const roof = put(g, box(0.52, 0.03, 0.2), teamMat(), 0, 0.43, -0.06);
+    roof.rotation.x = 0.45;
+    const roof2 = put(g, box(0.52, 0.03, 0.2), teamMat(), 0, 0.43, 0.06);
+    roof2.rotation.x = -0.45;
+    put(g, cyl(0.045, 0.045, 0.62, 7), mat(WOOD_DARK), 0.06, 0.25, 0).rotation.z = Math.PI / 2;
+    put(g, cone(0.065, 0.1, 6), mat(IRON), 0.42, 0.25, 0).rotation.z = -Math.PI / 2;
+  } else if (type === 'cart') {
+    // Karren mit zwei Rädern, Fässern und Plane, davor der Händler.
+    put(g, box(0.34, 0.05, 0.24), mat(WOOD), -0.05, 0.16, 0);
+    for (const z of [-0.14, 0.14]) put(g, cyl(0.1, 0.1, 0.03, 10), mat(WOOD_DARK), -0.05, 0.1, z).rotation.x = Math.PI / 2;
+    for (const [x, z] of [[-0.14, -0.06], [-0.14, 0.06]]) put(g, cyl(0.05, 0.05, 0.11, 8), mat(0x8b5a2b), x, 0.24, z);
+    put(g, box(0.12, 0.1, 0.18), teamMat(), 0.05, 0.24, 0); // Ballen in Teamfarbe
+    put(g, box(0.22, 0.015, 0.025), mat(WOOD_DARK), 0.22, 0.17, -0.08);
+    put(g, box(0.22, 0.015, 0.025), mat(WOOD_DARK), 0.22, 0.17, 0.08);
+    const pp = person({ scale: 0.8, armR: 0.4 });
+    pp.p.position.x = 0.3;
+    put(pp.p, cone(0.12, 0.08, 6), mat(0x6b4a2b), 0, pp.headY + 0.05, 0); // Hut
   } else if (type === 'giant') {
     const pp = person({ scale: 2.0, armR: 1.1 });
     // Keule nach vorn-oben, Griff in der Hand.
