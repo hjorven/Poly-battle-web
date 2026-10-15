@@ -349,6 +349,28 @@ await test('Wiederholung: nach Spielende abspielen, Regler, Tempo', async () => 
   await page.context().close();
 });
 
+await test('KI-Lehrling: Tipp erklärt, Ausführen spielt den Zug, keine Bestenliste', async () => {
+  const page = await open('ipadQuer');
+  await startGame(page, { rounds: 2 });
+  const before = await page.evaluate(() => JSON.stringify({ u: window.__pb.app.state.units.map(u => [u.id, u.q, u.r, u.hp]), s: window.__pb.app.state.stars.player_1, t: window.__pb.app.state.techs.player_1.length, c: window.__pb.app.state.cities.map(c => [c.pop, c.trained]) }));
+  await page.click('#coachBtn');
+  await page.waitForTimeout(300);
+  assert.ok(await page.isVisible('#coach'), 'Tipp sichtbar');
+  const text = await page.textContent('#coach .co-text');
+  assert.ok(text.length > 10, text);
+  assert.strictEqual(await page.evaluate(() => window.__pb.app.state.coached), true, 'Partie als „mit Tipps“ markiert');
+  const unchanged = await page.evaluate(() => JSON.stringify({ u: window.__pb.app.state.units.map(u => [u.id, u.q, u.r, u.hp]), s: window.__pb.app.state.stars.player_1, t: window.__pb.app.state.techs.player_1.length, c: window.__pb.app.state.cities.map(c => [c.pop, c.trained]) }));
+  assert.strictEqual(unchanged, before, 'Tipp allein ändert nichts');
+  if (await page.isVisible('[data-co-run]')) {
+    await page.click('[data-co-run]');
+    await page.waitForTimeout(1500);
+    const after = await page.evaluate(() => JSON.stringify({ u: window.__pb.app.state.units.map(u => [u.id, u.q, u.r, u.hp]), s: window.__pb.app.state.stars.player_1, t: window.__pb.app.state.techs.player_1.length, c: window.__pb.app.state.cities.map(c => [c.pop, c.trained]) }));
+    assert.notStrictEqual(after, before, 'Ausführen ändert den Spielstand');
+  }
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
