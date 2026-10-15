@@ -296,6 +296,10 @@ export function updateStrip(state, ctx) {
     tr.title = `${state.stars[me]} Sterne, nächste Runde kommen ${inc} dazu`;
   } else tr.innerHTML = '';
   $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' / ' + state.turnLimit : '');
+  // Testpartie (Admin-Panel) für alle sichtbar markieren, auch online.
+  let flag = $('test-flag');
+  if (!flag) { flag = document.createElement('span'); flag.id = 'test-flag'; flag.className = 'test-flag'; flag.textContent = 'Testpartie'; flag.title = 'In dieser Partie wurde das Admin-Panel benutzt: zählt nicht für die Bestenliste, der Server prüft die Züge nicht.'; $('round-label').after(flag); }
+  flag.classList.toggle('hidden', !state.admin);
 }
 
 // Lautsprecher als kleine Vektorgrafik (keine Emojis); durchgestrichen = stumm.
