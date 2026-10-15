@@ -20,18 +20,24 @@ npm run wiki    # Datenseiten des Wikis neu erzeugen
 | `js/hex.js` | Hex-Koordinaten (axial) |
 | `js/rules.js` | Spielregeln als reine Funktionen auf dem Spielstand |
 | `js/ai.js` | KI: `botStep` wählt einen Schritt, `applyStep` führt ihn aus |
-| `js/render.js` | Three.js-Szene: Gelände, Einheiten, Städte, Animationen |
-| `js/ui.js` | Menüs, Stadtmenü, Bau-Fenster, Forschungsbaum, Rundenbericht |
+| `js/render.js` | Three.js-Szene: Gelände, Einheiten, Städte, Animationen; zweiter kleiner Renderer für die 3D-Ansicht im Bau-Fenster |
+| `js/ui.js` | Kärtchen oben, Schild am Objekt und Werkzeugreihe, Bau-Fenster, Forschung, Rundenbericht, Menüs |
 | `js/main.js` | Verkabelung: Eingaben, Zugablauf, KI-Schleife, Speichern |
 | `js/net.js` | Online-Partien, Profile und Bestenliste über Supabase |
 | `js/save.js` | Lokaler Spielstand mit Plausibilitätsprüfung |
 | `js/profile.js` | Profil, Stufen, Erfolge, Aussehen, Tages-/Wochen-Herausforderung |
 | `js/campaign.js` | Kampagnen-Missionen |
+| `js/admin.js`, `js/admin-panel.js` | Admin-/Kreativ-Panel zum Testen (Passwort, online nur im eigenen Zug) |
 | `js/share.js` | Ergebnisbild zum Teilen |
 | `js/sound.js` | Soundeffekte (Web Audio) |
 | `test/logic.test.js` | Tests für Regeln, KI, Spielstand, Profil |
 | `scripts/gen-wiki.mjs` | erzeugt die Datenseiten dieses Wikis |
+| `scripts/set-admin-password.mjs` | setzt das Admin-Passwort (`npm run admin-passwort -- "…"`; im Code landet nur ein Prüfwert) |
 | `supabase/migrations/` | Datenbank-Schema und Server-Funktionen |
+
+## Oberfläche
+
+Angelehnt an Mini Metro: Die Karte bleibt frei, die Bedienung liegt in schwebenden Kärtchen an den Rändern, Informationen zu Stadt und Einheit als Schild am Objekt, Aktionen als Werkzeugreihe unten. Gestaltung: schlicht und eckig, eine Schrift (Systemschrift), Hauptfarbe Waldgrün, Sterne bernsteinfarben, Sechsecke nur als Marker und Abzeichen. Alle Farben liegen als CSS-Variablen in `css/style.css`, einmal hell und einmal dunkel.
 
 ## Grundsätze
 

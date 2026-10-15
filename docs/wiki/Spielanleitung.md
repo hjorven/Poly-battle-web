@@ -8,7 +8,7 @@ Im Modus **Eroberung** gewinnt, wer als Letzter noch Städte besitzt. Im Modus *
 
 1. **Sterne einnehmen.** Zu Beginn deines Zuges bringen deine Städte Sterne – je mehr Bevölkerung, Gebäude und Rohstoffe, desto mehr.
 2. **Einheiten bewegen und angreifen.** Jede Einheit darf pro Zug ziehen und angreifen (je nach Fähigkeit auch in anderer Reihenfolge).
-3. **Ausgeben.** Im Stadtmenü Einheiten ausbilden, Bevölkerung kaufen oder über **Ausbauen** Gebäude errichten; im Forschungsbaum Technologien freischalten.
+3. **Ausgeben.** Stadt antippen und in der Werkzeugreihe Einheiten ausbilden, Bevölkerung kaufen oder über **Ausbauen** Gebäude errichten; unter **Forschung** Technologien freischalten.
 4. **Zug beenden.** Danach ziehen die anderen Stämme.
 
 Es gibt kein Rückgängig – jeder Zug zählt.
@@ -17,11 +17,26 @@ Es gibt kein Rückgängig – jeder Zug zählt.
 
 Ziehen und Angreifen brauchen zwei Tipps: Der erste markiert das Ziel gelb und zeigt bei Angriffen eine Schadensvorschau, der zweite führt aus. So passiert nichts aus Versehen.
 
-Eine eigene Stadt öffnet beim Antippen das Stadtmenü. Um eine Einheit in die Stadt zu ziehen, tippe die Stadt schnell zweimal an.
+Eine eigene Stadt wird beim Antippen ausgewählt. Um eine Einheit in die Stadt zu ziehen, tippe die Stadt schnell zweimal an.
+
+## Die Oberfläche
+
+Die Karte ist die Hauptsache; alles Weitere liegt in schwebenden Kärtchen an den Rändern:
+
+| Wo | Was |
+|---|---|
+| oben links | deine Sterne (groß), darunter, wie viele nächste Runde dazukommen; die Runde |
+| oben Mitte | alle Stämme mit ihren Sternen; der Stamm am Zug ist grün umrandet |
+| oben rechts | Forschung, Übersicht, Ton, Menü, **bereit** (springt zur nächsten Einheit, die noch handeln kann) und **Zug beenden** |
+| unten rechts | Minikarte (antippen springt dorthin), darüber die Kamera-Knöpfe |
+
+**Stadt oder Einheit gewählt:** Direkt am Objekt erscheint ein Schild – bei Städten mit Stufe (fünf Sechsecke), Einkommen und Belohnungen, bei Einheiten mit Lebensbalken und Werten (Leben, Angriff, Verteidigung, Bewegung, Reichweite). Unten in der Mitte liegt die **Werkzeugreihe**: bei Städten Ausbauen, Bevölkerung +1 und alle Einheiten, die du ausbilden kannst (Kosten im Sechseck); bei Einheiten die möglichen Aktionen wie Weg bauen, Aufrüsten oder Stadt gründen, dazu „Details“. Passt nicht alles hinein, lässt sich die Reihe seitwärts wischen oder mit dem Mausrad scrollen. Gesperrte Felder nennen den Grund.
+
+**Hell oder dunkel:** im Menü unter „Spielen“, Spieleinstellungen, „Darstellung“: Wie System, Hell oder Dunkel.
 
 ## Städte ausbauen
 
-Im Stadtmenü öffnet **Ausbauen** ein Fenster mit dem Stadtgebiet. Orange umrandete Felder kannst du sofort bebauen. Tippe ein Feld an und wähle rechts das Gebäude; zu jedem steht, was es bringt und was es kostet. Was erst nach weiterer Forschung geht, steht klein darunter.
+**Ausbauen** in der Werkzeugreihe öffnet eine 3D-Ansicht des Stadtgebiets: Ziehen dreht sie, Mausrad oder zwei Finger zoomen. Über jedem Feld steht, was dort ist und was es bringt. Orange markierte Felder kannst du sofort bebauen. Tippe ein Feld an und wähle rechts das Gebäude; jedes zeigt, wie viele Sterne es pro Runde mehr bringt – auch, wenn ein Nachbar mitprofitiert (z. B. Windmühle neben einer neuen Farm, grün markiert). Tippst du das Stadtfeld selbst an, kannst du dort auch Einheiten ausbilden. Was erst nach weiterer Forschung geht, steht klein darunter.
 
 Wächst eine Stadt auf eine neue Stufe, wählst du eine Belohnung (siehe [Städte und Gebäude](Staedte-und-Gebaeude)).
 
@@ -55,8 +70,8 @@ Auf **Leicht** greift die KI dich bis Runde 12 nicht an, auf **Normal** bis Rund
 | M | Ton an/aus |
 | Esc | Auswahl aufheben, Fenster schließen |
 
-Im Bau-Fenster einer Stadt wechseln die Pfeiltasten das Feld und die Ziffern 1–9 bauen die entsprechende Möglichkeit.
+Im Bau-Fenster einer Stadt wechseln die Pfeiltasten das Feld und die Ziffern 1–9 bauen die entsprechende Möglichkeit. In der Forschung verschiebt Ziehen den Baum, Mausrad oder zwei Finger zoomen, ein Doppeltipp setzt die Ansicht zurück.
 
 ## Rundenbericht
 
-Nach den Zügen der anderen Stämme zeigt der Rundenbericht, was passiert ist – gegliedert in „Gegen dich“, „In der Welt“ und „Bei dir“. Einträge lassen sich antippen und springen zur Stelle auf der Karte. Mit **B** oder über die Übersicht holst du ihn wieder hervor.
+Nach den Zügen der anderen Stämme zeigt der Rundenbericht am rechten Rand, was passiert ist – gegliedert in „Gegen dich“, „In der Welt“ und „Bei dir“. Einträge lassen sich antippen und springen zur Stelle auf der Karte. Mit **B** oder über die Übersicht holst du ihn wieder hervor.
