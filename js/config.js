@@ -83,6 +83,8 @@ export const ABILITY_INFO = {
   fragile: { name: 'Zerbrechlich', desc: 'Ein Treffer eines Fernkämpfers (Bogenschütze, Katapult, Schiff, Luftschiff) zerstört sie sofort.' },
   flak: { name: 'Große Hülle', desc: 'Nimmt von Fernkämpfern doppelten Schaden.' },
   cargo: { name: 'Transport', desc: 'Nimmt eine benachbarte eigene Landeinheit auf und setzt sie anderswo ab.' },
+  siege: { name: 'Belagerung', desc: 'Dreifacher Schaden gegen Einheiten in Städten und auf Burgen; dort ohne Gegenschlag.' },
+  trade: { name: 'Handel', desc: 'In oder neben einer anderen Stadt: einmalig Sterne, mehr je weiter von der Heimatstadt entfernt. Erobert keine Städte.' },
   pikes: { name: 'Pikenwall', desc: 'Anderthalbfacher Schaden gegen Reiter, Ritter und Paladine – auch beim Gegenschlag.' }
 };
 
@@ -120,8 +122,20 @@ export const UNITS = {
     name: 'Gedankenbeuger', hp: 10, atk: 0, def: 1, move: 1, range: 1, cost: 5, sight: 1,
     tech: 'philosophy', abilities: ['heal', 'convert', 'stiff', 'land']
   },
+  horsearcher: {
+    name: 'Bogenreiter', hp: 10, atk: 2, def: 1, move: 2, range: 2, cost: 6, sight: 2,
+    tech: 'horseshoes', abilities: ['dash', 'escape', 'land']
+  },
+  ram: {
+    name: 'Rammbock', hp: 15, atk: 1, def: 1, move: 1, range: 1, cost: 6, sight: 1,
+    tech: 'construction', abilities: ['siege', 'land']
+  },
+  cart: {
+    name: 'Händlerkarren', hp: 6, atk: 0, def: 1, move: 2, range: 1, cost: 5, sight: 1,
+    tech: 'trade', abilities: ['trade', 'land']
+  },
   knight: {
-    name: 'Ritter', hp: 10, atk: 3.5, def: 1, move: 3, range: 1, cost: 8, sight: 1,
+    name: 'Ritter', hp: 10, atk: 3, def: 1, move: 3, range: 1, cost: 9, sight: 1,
     tech: 'chivalry', abilities: ['dash', 'persist', 'fortify', 'land']
   },
   giant: {
@@ -141,7 +155,7 @@ export const UNITS = {
     tech: 'navigation', abilities: ['dash', 'fortify', 'water']
   },
   pikeman: {
-    name: 'Pikenier', hp: 10, atk: 2, def: 2, move: 1, range: 1, cost: 4, sight: 1,
+    name: 'Pikenier', hp: 10, atk: 2, def: 3, move: 1, range: 1, cost: 4, sight: 1,
     tech: 'pikes', abilities: ['dash', 'fortify', 'land', 'pikes']
   },
   crossbow: {
@@ -180,7 +194,7 @@ export const UNITS = {
 
 export const UNIT_ORDER = [
   'warrior', 'archer', 'rider', 'defender', 'pikeman', 'swordsman', 'crossbow',
-  'catapult', 'mindbender', 'knight', 'paladin', 'giant',
+  'catapult', 'ram', 'mindbender', 'horsearcher', 'knight', 'paladin', 'cart', 'giant',
   'boat', 'ship', 'battleship', 'balloon', 'cargoballoon', 'fireballoon', 'airship', 'spy', 'settler'
 ];
 
@@ -280,12 +294,12 @@ export const TECH_TIERS = [1, 2, 3, 4, 5, 6].map(t => Object.keys(TECHS).filter(
 
 // Echte Stämme (reguläre Auswahl) mit Farbe, Start-Technologie und Starteinheit.
 export const TRIBES = {
-  imperius: { name: 'Imperius', color: 0x0000ff, startTechs: ['organization'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Ausgeglichene Fraktion des Imperiums.', perk: { id: 'legion', name: 'Legion', desc: 'Krieger kosten 1 Stern weniger, die Hauptstadt bringt +1 Stern pro Runde.' } },
+  imperius: { name: 'Imperius', color: 0x0000ff, startTechs: ['organization'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Ausgeglichene Fraktion des Imperiums.', perk: { id: 'legion', name: 'Legion', desc: 'Krieger kosten 1 Stern weniger, die Hauptstadt bringt +1 Stern pro Runde, Einheiten in eigenen Städten +1 Verteidigung.' } },
   bardur: { name: 'Bardur', color: 0x352514, startTechs: ['hunting'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Waldstämme des Nordens.', perk: { id: 'woodland', name: 'Waldvolk', desc: 'Wald kostet nur 1 Bewegung.' } },
-  xinxi: { name: 'Xin-Xi', color: 0xcc0000, startTechs: ['climbing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Bergvolk der Berge.', perk: { id: 'mountaineer', name: 'Bergsteiger', desc: 'Berge kosten nur 1 Bewegung.' } },
-  kickoo: { name: 'Kickoo', color: 0x00ff00, startTechs: ['fishing'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Inselvolk der Südsee.', perk: { id: 'seafarer', name: 'Seefahrer', desc: 'Schiffe und Boote haben +1 Bewegung.' } },
+  xinxi: { name: 'Xin-Xi', color: 0xcc0000, startTechs: ['climbing', 'mining'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Bergvolk der Berge.', perk: { id: 'mountaineer', name: 'Bergsteiger', desc: 'Berge kosten nur 1 Bewegung.' } },
+  kickoo: { name: 'Kickoo', color: 0x00ff00, startTechs: ['fishing'], startUnits: ['warrior', 'boat'], bonusStars: 0, blurb: 'Inselvolk der Südsee – startet mit einem Boot.', perk: { id: 'seafarer', name: 'Seefahrer', desc: 'Schiffe und Boote haben +1 Bewegung; Start mit einem Boot.' } },
   oumaji: { name: 'Oumaji', color: 0xffff00, startTechs: [], startUnits: ['warrior'], bonusStars: 3, blurb: 'Wüstenreiter – +3 Sterne zum Start, Reiten ist schnell erforscht.', perk: { id: 'lookouts', name: 'Späher', desc: 'Reiter und Ritter sehen 1 Feld weiter.' } },
-  hoodrick: { name: 'Hoodrick', color: 0x996600, startTechs: ['archery'], startUnits: ['archer'], bonusStars: 0, blurb: 'Waldläufer – startet mit Bogenschützen.', perk: { id: 'longbow', name: 'Langbogen', desc: 'Bogenschützen kosten 1 Stern weniger.' } },
+  hoodrick: { name: 'Hoodrick', color: 0x996600, startTechs: ['archery'], startUnits: ['archer', 'warrior'], bonusStars: 0, blurb: 'Waldläufer – startet mit Bogenschütze und Krieger.', perk: { id: 'longbow', name: 'Langbogen', desc: 'Bogenschützen kosten 1 Stern weniger und schießen aus dem Wald 1 Feld weiter.' } },
   quetzali: { name: 'Quetzali', color: 0x275c4a, startTechs: ['shields'], startUnits: ['defender'], bonusStars: 0, blurb: 'Startet mit Verteidiger.', perk: { id: 'guardians', name: 'Wächter', desc: 'Verteidiger kosten 1 Stern weniger.' } },
   vengir: { name: 'Vengir', color: 0xffffff, startTechs: ['smithery'], startUnits: ['swordsman'], bonusStars: 0, blurb: 'Kriegerisch – startet mit Schwertkämpfer.', perk: { id: 'forge', name: 'Schmiede', desc: 'Schwertkämpfer kosten 1 Stern weniger.' } },
   zebasi: { name: 'Zebasi', color: 0xff9900, startTechs: ['farming'], startUnits: ['warrior'], bonusStars: 0, blurb: 'Savannenbauern – starke Wirtschaft.', perk: { id: 'harvest', name: 'Ernte', desc: 'Farmen bringen +1 Stern zusätzlich.' } },
@@ -323,15 +337,19 @@ export const RESOURCES = {
 export const IMPROVEMENTS = {
   farm: { name: 'Farm', tech: 'farming', terrain: ['field'], cost: 6, pop: 1 },
   sawmill: { name: 'Sägewerk', tech: 'forestry', terrain: ['forest'], cost: 7, pop: 1 },
-  mine: { name: 'Mine', tech: 'mining', terrain: ['mountain'], cost: 8, pop: 1 },
+  mine: { name: 'Mine', tech: 'mining', terrain: ['mountain'], cost: 6, pop: 1 },
   port: { name: 'Hafen', tech: 'sailing', terrain: ['water', 'ocean'], cost: 7, pop: 1 },
   temple: { name: 'Tempel', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 },
   // Ballonplatz: dort steigen Luft-Einheiten auf (wie Schiffe im Hafen).
   airfield: { name: 'Ballonplatz', tech: 'ballooning', terrain: ['field'], cost: 8, pop: 1 },
   // Gebäude mit Nachbarschaftsbonus (siehe rules.js: improvementIncome).
-  mill: { name: 'Windmühle', tech: 'mills', terrain: ['field'], cost: 6, pop: 0, adjacent: { farm: 1 } },
-  forge: { name: 'Schmelzhütte', tech: 'smelting', terrain: ['field'], cost: 8, pop: 0, adjacent: { mine: 2 } },
-  market: { name: 'Markt', tech: 'markets', terrain: ['field'], cost: 10, pop: 0, adjacent: { '*': 1 }, max: 4 },
+  mill: { name: 'Windmühle', tech: 'mills', terrain: ['field'], cost: 6, pop: 1, adjacent: { farm: 1 } },
+  forge: { name: 'Schmelzhütte', tech: 'smelting', terrain: ['field'], cost: 6, pop: 1, adjacent: { mine: 2 } },
+  market: { name: 'Markt', tech: 'markets', terrain: ['field'], cost: 8, pop: 0, adjacent: { '*': 1 }, max: 5, resources: true },
+  // Wachturm: weite Sicht; Einheiten darauf und daneben verteidigen anderthalbfach.
+  watchtower: { name: 'Wachturm', tech: 'shields', terrain: ['field', 'mountain'], cost: 5, pop: 0, sight: 3 },
+  // Fischerhütte: am Wasser, lohnt neben Fischgründen.
+  fishhut: { name: 'Fischerhütte', tech: 'fishing', terrain: ['water'], cost: 5, pop: 1, adjacentRes: { fish: 1 } },
   fort: { name: 'Burg', tech: 'castles', terrain: ['field', 'forest'], cost: 10, pop: 0 },
   monastery: { name: 'Kloster', tech: 'monastic', terrain: ['field'], cost: 12, pop: 2 },
   // Monumente: kostenlos, einmal je Stamm, nach einem Erfolg (siehe MONUMENTS).

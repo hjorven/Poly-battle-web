@@ -309,6 +309,80 @@ await test('Forschung: Sprungleiste nur wenn nötig, springt zum Zweig', async (
   await page.context().close();
 });
 
+await test('Wiederholung: nach Spielende abspielen, Regler, Tempo', async () => {
+  const page = await open('pc');
+  await startGame(page);
+  // Partie von der KI für alle Stämme zu Ende spielen lassen.
+  await page.evaluate(async () => {
+    const { app, R, botStep, sync } = window.__pb;
+    const { applyStep } = await import('./js/ai.js');
+    const st = app.state;
+    for (let i = 0; i < 4 * 120 && !st.winner; i++) {
+      const pl = st.turn; let k = 0;
+      while (st.turn === pl && k++ < 300) { const s = botStep(st, pl); if (!s) break; applyStep(st, s, pl); }
+      if (st.turn === pl && !st.winner) R.endTurn(st);
+    }
+    if (!st.winner) R.finishByScore(st);
+    sync();
+  });
+  await page.waitForTimeout(500);
+  assert.ok(await page.isVisible('#winner-overlay'), 'Ergebnis erscheint');
+  await page.click('#winnerMap');
+  await page.waitForTimeout(300);
+  assert.ok(await page.isVisible('#replay-bar'), 'Wiederholungsleiste');
+  const max = Number(await page.$eval('#rpSlider', e => e.max));
+  assert.ok(max >= 5, 'mehrere Runden: ' + max);
+  await page.$eval('#rpSlider', e => { e.value = '2'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(200);
+  assert.match(await page.textContent('#rpLabel'), /Runde 3/);
+  await page.click('[data-rpspeed="200"]');
+  await page.click('#rpPlay');
+  await page.waitForTimeout(1200);
+  const v = Number(await page.$eval('#rpSlider', e => e.value));
+  assert.ok(v > 2, 'Zeitraffer läuft: ' + v);
+  await page.click('#rpPlay');
+  assert.match(await page.textContent('#rpPlay'), /Abspielen/);
+  await page.click('#reviewBack');
+  await page.waitForTimeout(200);
+  assert.ok(!(await page.isVisible('#replay-bar')), 'Leiste weg beim Zurück');
+  noErrors(page);
+  await page.context().close();
+});
+
+await test('KI-Lehrling: Tipp erklärt, Ausführen spielt den Zug, keine Bestenliste', async () => {
+  const page = await open('ipadQuer');
+  await startGame(page, { rounds: 2 });
+  const before = await page.evaluate(() => JSON.stringify({ u: window.__pb.app.state.units.map(u => [u.id, u.q, u.r, u.hp]), s: window.__pb.app.state.stars.player_1, t: window.__pb.app.state.techs.player_1.length, c: window.__pb.app.state.cities.map(c => [c.pop, c.trained]) }));
+  await page.click('#coachBtn');
+  await page.waitForTimeout(300);
+  assert.ok(await page.isVisible('#coach'), 'Tipp sichtbar');
+  const text = await page.textContent('#coach .co-text');
+  assert.ok(text.length > 10, text);
+  assert.strictEqual(await page.evaluate(() => window.__pb.app.state.coached), true, 'Partie als „mit Tipps“ markiert');
+  const unchanged = await page.evaluate(() => JSON.stringify({ u: window.__pb.app.state.units.map(u => [u.id, u.q, u.r, u.hp]), s: window.__pb.app.state.stars.player_1, t: window.__pb.app.state.techs.player_1.length, c: window.__pb.app.state.cities.map(c => [c.pop, c.trained]) }));
+  assert.strictEqual(unchanged, before, 'Tipp allein ändert nichts');
+  if (await page.isVisible('[data-co-run]')) {
+    await page.click('[data-co-run]');
+    await page.waitForTimeout(1500);
+    const after = await page.evaluate(() => JSON.stringify({ u: window.__pb.app.state.units.map(u => [u.id, u.q, u.r, u.hp]), s: window.__pb.app.state.stars.player_1, t: window.__pb.app.state.techs.player_1.length, c: window.__pb.app.state.cities.map(c => [c.pop, c.trained]) }));
+    assert.notStrictEqual(after, before, 'Ausführen ändert den Spielstand');
+  }
+  noErrors(page);
+  await page.context().close();
+});
+
+await test('Gewählte Einheit verschwindet (besiegt, gehandelt): kein Absturz', async () => {
+  const page = await open('pc');
+  await startGame(page);
+  await page.keyboard.press(' ');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { const { app, sync } = window.__pb; const id = app.sel.id; app.state.units = app.state.units.filter(u => u.id !== id); sync(); });
+  await page.waitForTimeout(200);
+  assert.strictEqual(await page.evaluate(() => window.__pb.app.sel), null);
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);

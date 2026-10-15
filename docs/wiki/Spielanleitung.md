@@ -76,6 +76,14 @@ Auf **Leicht** greift die KI dich bis Runde 12 nicht an, auf **Normal** bis Rund
 
 Im Bau-Fenster einer Stadt wechseln die Pfeiltasten das Feld und die Ziffern 1–9 bauen die entsprechende Möglichkeit. In der Forschung verschiebt Ziehen den Baum, Mausrad oder zwei Finger zoomen, ein Doppeltipp setzt die Ansicht zurück. Passt der Baum nicht ganz ins Fenster (iPad, Handy), springen die Knöpfe oben direkt zu einem der fünf Zweige.
 
+## Tipps vom KI-Lehrling
+
+Der Knopf **Tipp** oben rechts fragt die KI, was sie an deiner Stelle jetzt tun würde: Angriff, Zug, Ausbilden, Bauen oder Forschen. Der Vorschlag wird auf der Karte markiert und kurz begründet. Mit **Ausführen** wird er wie ein normaler Zug ausgeführt, mit **Schließen** entscheidest du selbst. Tages- und Wochen-Herausforderungen mit Tipps zählen nicht für die Bestenliste.
+
+## Wiederholung nach Spielende
+
+Nach dem Ende einer Partie zeigt **Karte ansehen** die ganze Welt ohne Nebel und unten eine Leiste: Mit dem Regler springst du zu jeder Runde, **Abspielen** lässt die Partie ablaufen – langsam, normal oder als **Zeitraffer**. So siehst du, wann wer welche Stadt erobert hat.
+
 ## Rundenbericht
 
 Nach den Zügen der anderen Stämme zeigt der Rundenbericht am rechten Rand, was passiert ist – gegliedert in „Gegen dich“, „In der Welt“ und „Bei dir“. Einträge lassen sich antippen und springen zur Stelle auf der Karte. Mit **B** oder über die Übersicht holst du ihn wieder hervor.
