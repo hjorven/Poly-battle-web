@@ -2293,5 +2293,36 @@ test('Stammesboni: Legion verteidigt in Städten besser, Langbogen schießt aus 
   assert.strictEqual(R.rangeOf(st, a), 3);
 });
 
+test('Wiederholung: jede Runde nachbaubar, kompakt genug für Online', () => {
+  const st = R.createGame(77, 4, { ai: ['player_1', 'player_2', 'player_3', 'player_4'], aiLevel: 'normal', mapSize: 'normal' });
+  const truth = [];
+  for (let i = 0; i < 4 * 40 && !st.winner; i++) {
+    const pl = st.turn; let k = 0;
+    while (st.turn === pl && k++ < 300) { const s = botStep(st, pl); if (!s) break; applyStep(st, s, pl); }
+    const round = st.round;
+    if (st.turn === pl && !st.winner) R.endTurn(st);
+    if (st.round !== round) truth.push({ round: st.round, cities: st.cities.map(c => `${c.q},${c.r},${c.owner},${c.pop}`).sort(), units: st.units.length, imps: { ...st.improvements }, roads: Object.keys(st.roads || {}).sort() });
+  }
+  assert.ok(st.replay.length >= 10, 'Schnappschüsse vorhanden');
+  // Die letzte Runde zeigt bei Spielende den Endstand (nach dem letzten Zug).
+  const lastRound = st.replay[st.replay.length - 1].r;
+  for (const t of truth.filter(t => t.round !== lastRound).slice(-5)) {
+    const idx = st.replay.findIndex(f => f.r === t.round);
+    assert.ok(idx >= 0, 'Runde ' + t.round);
+    const rs = R.replayState(st, idx);
+    assert.deepStrictEqual(rs.cities.map(c => `${c.q},${c.r},${c.owner},${c.pop}`).sort(), t.cities, 'Städte Runde ' + t.round);
+    assert.strictEqual(rs.units.length, t.units, 'Einheiten Runde ' + t.round);
+    assert.deepStrictEqual(rs.improvements, t.imps, 'Gebäude Runde ' + t.round);
+    assert.deepStrictEqual(Object.keys(rs.roads).sort(), t.roads, 'Wege Runde ' + t.round);
+  }
+  const bytes = JSON.stringify(st.replay).length;
+  assert.ok(bytes < 80000, 'Wiederholung ' + bytes + ' Bytes');
+  // Nach dem Laden (Kopie ohne Zwischenspeicher) geht es lückenlos weiter.
+  const loaded = JSON.parse(JSON.stringify(st));
+  if (!loaded.winner) { R.endTurn(loaded); }
+  const last = R.replayState(loaded, loaded.replay.length - 1);
+  assert.deepStrictEqual(last.improvements, loaded.improvements);
+});
+
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
 if (failed) process.exit(1);

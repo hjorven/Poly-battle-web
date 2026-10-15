@@ -87,6 +87,9 @@ export function initUI(h) {
   try { saved = localStorage.getItem('pb_menu_tab'); } catch (e) { saved = null; }
   menuTab(tabs.some(t => t.dataset.mtab === saved) ? saved : 'play', false);
   $('winnerMap').addEventListener('click', () => handlers.onReview(true));
+  $('rpPlay').addEventListener('click', () => handlers.onReplay('toggle'));
+  $('rpSlider').addEventListener('input', e => handlers.onReplay('seek', Number(e.target.value)));
+  document.querySelectorAll('[data-rpspeed]').forEach(b => b.addEventListener('click', () => handlers.onReplay('speed', Number(b.dataset.rpspeed))));
   $('reviewBack').addEventListener('click', () => handlers.onReview(false));
   $('winnerShare').addEventListener('click', () => handlers.onShare());
   $('reviewShare').addEventListener('click', () => handlers.onShare());
@@ -1725,6 +1728,19 @@ const TIPS = [
   'Wähle bei Stufe 3 die Stadtmauer, wenn Gegner in der Nähe sind: Verteidiger bekommen dann 4-fache Verteidigung.',
   'Greif nicht an, wenn die Vorschau mehr Gegenschlag als Schaden zeigt – warte lieber auf Verstärkung.'
 ];
+
+// Wiederholung: Regler, Abspielen/Anhalten, Tempo.
+export function setReplay(info) {
+  const bar = $('replay-bar');
+  if (!info) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  const slider = $('rpSlider');
+  slider.max = String(info.count - 1);
+  slider.value = String(info.index);
+  $('rpLabel').textContent = `Runde ${info.round}${info.index === info.count - 1 ? ' (Ende)' : ''}`;
+  $('rpPlay').textContent = info.playing ? 'Anhalten' : info.index === info.count - 1 ? 'Von vorn abspielen' : 'Abspielen';
+  bar.querySelectorAll('[data-rpspeed]').forEach(b => b.classList.toggle('active', Number(b.dataset.rpspeed) === info.speed));
+}
 
 export function setReview(on) {
   $('review-bar').classList.toggle('hidden', !on);
