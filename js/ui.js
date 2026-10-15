@@ -1591,6 +1591,22 @@ export function openTech(state, ctx, keepView = false) {
     ty = clamp(H * 0.4 - fy * scale, TREE_H, H);
   }
   techNav.home = { scale, tx, ty };
+  // Sprungleiste zu den fünf Zweigen, wenn der Baum nicht ganz hineinpasst.
+  const jump = $('tech-jump');
+  if (jump) {
+    jump.classList.toggle('hidden', scale <= fit + 0.001);
+    jump.innerHTML = ROOTS.map(r => `<button class="tj-btn" data-jump="${r}"><span class="tj-dot" style="background:${BRANCH_COLOR[r]}"></span>${TECHS[r].name}</button>`).join('');
+    jump.querySelectorAll('[data-jump]').forEach(b => b.addEventListener('click', () => {
+      const ids = Object.keys(TECHS).filter(id => branchOf(id) === b.dataset.jump);
+      const xs = ids.map(id => pos[id].x), ys = ids.map(id => pos[id].y);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2, top = Math.min(...ys);
+      const clampTo = (v, size, view) => size * techNav.scale <= view ? (view - size * techNav.scale) / 2 : Math.min(0, Math.max(view - size * techNav.scale, v));
+      techNav.tx = clampTo(W / 2 - cx * techNav.scale, TREE_W, W);
+      techNav.ty = clampTo(30 - (top - HEX_H / 2) * techNav.scale, TREE_H, H);
+      if (portrait) { techNav.tx = clampTo(30 - (Math.min(...xs) - HEX_W / 2) * techNav.scale, TREE_W, W); techNav.ty = clampTo(H / 2 - ((Math.min(...ys) + Math.max(...ys)) / 2) * techNav.scale, TREE_H, H); }
+      applyTechNav();
+    }));
+  }
   // Beim erneuten Öffnen (z. B. nach dem Erforschen) Ansicht und Auswahl
   // behalten, beim ersten Öffnen auf die Gesamtansicht setzen.
   if (!keepView) { resetTechNav(); selectedTech = null; }

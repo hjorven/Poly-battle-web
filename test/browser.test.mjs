@@ -289,6 +289,26 @@ await test('Einheit: Details klappen die Werkzeugreihe auf und wieder zu', async
   await page.context().close();
 });
 
+await test('Forschung: Sprungleiste nur wenn nötig, springt zum Zweig', async () => {
+  const pc = await open('pc');
+  await startGame(pc);
+  await pc.click('#techBtn');
+  await pc.waitForTimeout(300);
+  assert.ok(!(await pc.isVisible('#tech-jump')), 'PC: Baum passt, keine Leiste');
+  await pc.context().close();
+  const page = await open('ipadHoch');
+  await startGame(page);
+  await page.click('#techBtn');
+  await page.waitForTimeout(300);
+  assert.ok(await page.isVisible('#tech-jump'), 'iPad: Leiste sichtbar');
+  await page.click('[data-jump="riding"]');
+  await page.waitForTimeout(200);
+  const inView = await page.evaluate(() => { const h = document.querySelector('[data-tech="riding"]').getBoundingClientRect(); const t = document.getElementById('tech-tree').getBoundingClientRect(); return h.left >= t.left && h.right <= t.right && h.top >= t.top && h.bottom <= t.bottom; });
+  assert.ok(inView, 'Reiten nach dem Sprung sichtbar');
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
