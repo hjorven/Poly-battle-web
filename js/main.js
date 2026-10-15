@@ -702,6 +702,20 @@ async function doFound(unit) {
   await afterAction();
 }
 
+async function doTrade(unit) {
+  unit = liveUnit(unit);
+  if (!unit) return;
+  const res = R.trade(app.state, unit, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  app.busy = true;
+  app.sel = null;
+  ui.toast(`Handel ${res.foreign ? 'mit ' + needName(app.state, res.city.owner) : 'abgeschlossen'}: +${res.stars} Sterne`, 'good');
+  sfx('build');
+  render.floatAt(res.city.q, res.city.r, `+${res.stars}`, '#facc15');
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
 async function doUpgrade(unit) {
   unit = liveUnit(unit);
   if (!unit) return;
@@ -1373,6 +1387,7 @@ function boot() {
     onBuildBridge: doBuildBridge,
     onLoadCargo: doLoadCargo,
     onUpgrade: doUpgrade,
+    onTrade: doTrade,
     onUnloadCargo: doUnloadCargo,
     onBuildRoad: doBuildRoad,
     onJump: (q, r) => render.cameraTo(q, r, true),
