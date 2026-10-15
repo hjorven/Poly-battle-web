@@ -11,7 +11,7 @@ import {
   hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, incomeFor, tileYield, improvePreview, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS, toWorld, hexDistance } from './hex.js';
-import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks } from './render.js';
+import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks, project } from './render.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
@@ -514,13 +514,62 @@ export function describeUnits(units) {
 
 export function hidePanel() {
   $('panel').classList.add('hidden');
+  if (anchor.kind === 'city') clearAnchor();
 }
+
+// --- Schild am Objekt (wie bei Mini Metro): folgt der Kamera ------------------------
+const anchor = { kind: null, q: 0, r: 0, raf: 0 };
+function setAnchor(kind, q, r, html) {
+  let el = $('anchor-tag');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'anchor-tag';
+    el.setAttribute('role', 'status');
+    $('stage').appendChild(el);
+  }
+  el.innerHTML = html;
+  el.classList.remove('hidden');
+  Object.assign(anchor, { kind, q, r });
+  if (!anchor.raf) {
+    const step = () => {
+      anchor.raf = 0;
+      if (!anchor.kind) return;
+      const p = project(anchor.q, anchor.r);
+      const tag = $('anchor-tag');
+      if (p && tag) {
+        tag.style.left = p.x + 'px';
+        tag.style.top = p.y + 'px';
+        tag.style.visibility = p.x < 0 || p.y < 0 || p.x > innerWidth || p.y > innerHeight ? 'hidden' : '';
+      }
+      anchor.raf = requestAnimationFrame(step);
+    };
+    step();
+  }
+}
+function clearAnchor() {
+  anchor.kind = null;
+  if (anchor.raf) cancelAnimationFrame(anchor.raf);
+  anchor.raf = 0;
+  const el = $('anchor-tag');
+  if (el) el.classList.add('hidden');
+}
+const hpBar = (v, max, cls = '') => `<span class="at-bar ${cls}"><span style="width:${Math.max(0, Math.min(100, v / max * 100))}%"></span></span>`;
 
 function panel(html, mode = '') {
   const p = $('panel');
   p.innerHTML = html;
   p.className = mode;
   p.classList.remove('hidden');
+  p.querySelectorAll('.tb-row').forEach(wheelSideways);
+}
+
+// Mausrad scrollt eine Werkzeugreihe seitwärts (am PC ohne Querscrollen).
+function wheelSideways(row) {
+  row.addEventListener('wheel', e => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || row.scrollWidth <= row.clientWidth) return;
+    e.preventDefault();
+    row.scrollLeft += e.deltaY;
+  }, { passive: false });
 }
 
 // Kleine Symbole für Werte (SVG, keine Schriftzeichen). Bedeutung im title.
@@ -559,24 +608,60 @@ function wirePanel(p) {
 
 // Kleine Leiste für die gewählte Einheit (statt des großen Info-Menüs).
 export function showUnitChip(state, unit, ctx) {
-  const chip = $('unit-chip');
+  const bar = $('unit-chip');
   const def = UNITS[unit.carry || unit.type];
   const mine = unit.owner === ctx.actAs;
-  const opts = mine && ctx.myTurn ? unitOptions(state, unit) : [];
-  const status = !mine ? (tribeName(state, unit.owner) || NAMES[unit.owner])
-    : opts.length ? 'kann noch: ' + opts.join(', ') : 'erledigt';
-  chip.innerHTML = `
-    <span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>
-    <span class="uc-main"><b>${def.name}${unit.carry ? ' (Boot)' : ''}${unit.vet ? ' ' + STAR_ICON : ''}</b>
-      <span class="uc-stats">${stat('heart', `${unit.hp}/${hpCap(unit)}`)}${stat('sword', attackOf(state, unit))}${stat('shield', defenseOf(state, unit))}${stat('boot', `${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}`)}${def.range > 1 ? stat('bow', def.range) : ''}</span>
-      <span class="uc-sub">${ctx.hint ? `<b class="uc-hint">${esc(ctx.hint)}</b>` : esc(status)}</span></span>
-    <button class="btn ghost small" data-details>Details</button>`;
-  chip.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
-  chip.classList.remove('hidden');
+  const live = mine && ctx.myTurn;
+  const opts = live ? unitOptions(state, unit) : [];
+  const cap = hpCap(unit);
+  setAnchor('unit', unit.q, unit.r, `
+    <div class="at-head"><span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span><b>${def.name}${unit.carry ? ' (Boot)' : ''}</b>${unit.vet ? '<span class="at-vet">Veteran</span>' : ''}</div>
+    ${hpBar(unit.hp, cap, unit.hp / cap <= 0.35 ? 'low' : '')}
+    <div class="at-stats">${stat('heart', `${unit.hp}/${cap}`)}${stat('sword', attackOf(state, unit))}${stat('shield', defenseOf(state, unit))}${stat('boot', `${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}`)}${def.range > 1 ? stat('bow', def.range) : ''}</div>`);
+  const status = ctx.hint ? `<b class="uc-hint">${esc(ctx.hint)}</b>`
+    : !mine ? esc(tribeName(state, unit.owner) || NAMES[unit.owner])
+    : !ctx.myTurn ? 'Nicht am Zug'
+    : opts.length ? 'Kann noch ' + esc(opts.join(', ')) : 'Hat in diesem Zug gehandelt';
+  const acts = live ? quickActions(state, unit, ctx) : [];
+  bar.innerHTML = `
+    <div class="tb-cap">${status}</div>
+    <div class="tb-row">
+      ${acts.map((a, i) => `<button class="btn tool-tile${a.reason ? ' off' : ''}" data-act="${i}" ${a.reason ? 'aria-disabled="true"' : ''} title="${esc(a.reason || a.label)}"><b>${esc(a.label)}</b><span class="tt-foot">${a.cost != null ? `<span class="tt-cost">${a.cost}</span>` : ''}${a.reason ? `<span class="tt-why">${esc(a.reason)}</span>` : ''}</span></button>`).join('')}
+      <button class="btn tool-tile ghost" data-details><b>Details</b><span class="tt-foot"><span class="tt-why">Alle Werte und Aktionen</span></span></button>
+    </div>`;
+  bar.querySelectorAll('.tb-row').forEach(wheelSideways);
+  bar.querySelector('[data-details]').addEventListener('click', () => handlers.onUnitDetails());
+  bar.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+    const a = acts[Number(b.dataset.act)];
+    if (a.reason) toast(`${a.label}: ${a.reason}`, 'warn'); else a.run();
+  }));
+  bar.classList.remove('hidden');
+}
+
+// Häufige Aktionen der Einheit (dieselben Regeln wie im Detail-Menü).
+function quickActions(state, unit, ctx) {
+  const out = [];
+  if (unit.type === 'settler') { const f = canFound(state, unit, ctx.actAs); out.push({ label: 'Stadt gründen', reason: f.ok ? '' : f.reason, run: () => handlers.onFound(unit) }); }
+  const city = cityAt(state, unit.q, unit.r);
+  if (city && city.owner === ctx.actAs) out.push({ label: 'Stadtmenü', run: () => handlers.onSelectCity(unit.q, unit.r) });
+  const up = upgradeOption(state, unit);
+  if (up) out.push({ label: `Aufrüsten: ${UNITS[up.to].name}`, cost: up.cost, reason: up.ok ? '' : up.reason, run: () => handlers.onUpgrade(unit) });
+  for (const o of bridgeOptions(state, unit)) { const chk = canBuildBridge(state, unit, o.dir, ctx.actAs); out.push({ label: `Brücke nach ${DIR_NAMES[o.dir]}`, cost: o.cost, reason: chk.ok ? '' : chk.reason, run: () => handlers.onBuildBridge(unit, o.dir) }); }
+  if (!unit.carry && !UNITS[unit.type].abilities.includes('water') && state.techs[ctx.actAs].includes(ROAD.tech) && !roadAt(state, unit.q, unit.r)) {
+    const chk = canBuildRoad(state, ctx.actAs, unit.q, unit.r, true);
+    const spent = unit.mp <= 0 && unit.hasMoved;
+    if (chk.reason !== 'Städte sind schon angebunden') out.push({ label: 'Weg bauen', cost: ROAD.cost, reason: spent ? 'Keine Bewegung mehr' : chk.ok ? '' : chk.reason, run: () => handlers.onBuildRoad(unit.q, unit.r, unit) });
+  }
+  const dirTo = (q, r) => DIRS.findIndex(([dq, dr]) => unit.q + dq === q && unit.r + dr === r);
+  for (const [q, r] of unit.cargo ? unloadOptions(state, unit) : []) out.push({ label: `Absetzen nach ${DIR_NAMES[dirTo(q, r)]}`, run: () => handlers.onUnloadCargo(unit, q, r) });
+  for (const u of loadOptions(state, unit)) out.push({ label: `${UNITS[u.type].name} aufnehmen`, run: () => handlers.onLoadCargo(unit, u.id) });
+  for (const [q, r] of destroyableBridges(state, unit)) out.push({ label: 'Brücke einreißen', run: () => handlers.onDestroyBridge(unit, q, r) });
+  return out;
 }
 
 export function hideUnitChip() {
   $('unit-chip').classList.add('hidden');
+  if (anchor.kind === 'unit') clearAnchor();
 }
 
 export function showUnitPanel(state, unit, ctx) {
@@ -766,68 +851,52 @@ export function showCityPanel(state, city, ctx) {
   const built = tiles.filter(([q, r]) => improvementAt(state, q, r)).length;
   const res = tiles.filter(([q, r]) => resourceAt(state, q, r)).length;
 
-  // Leiste am unteren Rand: Infos | Aktionen | Ausbilden (Karte bleibt frei).
-  let acts = '', train = '';
+  // Wie bei Mini Metro: Infos als Schild an der Stadt, Werkzeuge als Reihe unten.
+  const name = city.isCapital ? 'Hauptstadt' : 'Stadt';
+  const rewards = Object.entries(city.rewards || {}).sort((a, b) => a[0] - b[0]).map(([, id]) => CITY_REWARDS[id].name);
+  setAnchor('city', city.q, city.r, `
+    <div class="at-head">${city.owner ? `<span class="dot" style="background:${hex(playerColor(state, city.owner))}"></span>` : ''}<b>${name}</b><span class="at-lvl">Stufe ${city.pop}</span></div>
+    ${hpBar(city.pop, MAX_POP, 'pop')}
+    <div class="at-stats">${city.owner ? `<span class="at-inc">+${income} pro Runde</span>` : `<span>${esc(ownerName)}</span>`}<span>${tiles.length} Felder</span></div>
+    ${rewards.length ? `<div class="at-sub">${rewards.map(esc).join(', ')}</div>` : ''}`);
+  const tiles2 = [];
+  let cap = '';
   if (city.owner && city.owner === ctx.actAs) {
-    const unlocked = UNIT_ORDER.filter(t => {
-      const u = UNITS[t];
-      if (u.reward) return false;
-      if (u.tech && !state.techs[city.owner].includes(u.tech)) return false;
-      return true;
-    });
     const lvl = pendingLevel(city);
-    if (lvl && mine) acts += `<button class="btn primary city-reward" data-reward-open>Stufe ${lvl} erreicht – Belohnung wählen</button>`;
+    if (lvl && mine) tiles2.push(`<button class="btn primary tool-tile" data-reward-open><b>Stufe ${lvl}</b><span class="tt-foot"><span class="tt-why">Belohnung wählen</span></span></button>`);
     const can = buildOptionsCount(state, city, ctx);
+    tiles2.push(`<button class="btn tool-tile tt-main" data-build-open><b>Ausbauen</b><span class="tt-foot"><span class="tt-why">${can ? `${can} ${can === 1 ? 'Möglichkeit' : 'Möglichkeiten'}` : 'Gebiet ansehen'}</span></span></button>`);
     const popReason = popReasonFor(state, city, ctx);
-    acts += `<button class="btn city-act" data-build-open>
-        <b>Ausbauen</b><span class="sub">${can ? `${can} ${can === 1 ? 'Möglichkeit' : 'Möglichkeiten'} jetzt` : 'Stadtgebiet ansehen'}</span>
-      </button>
-      <button class="btn city-act" data-buypop ${popReason ? 'disabled' : ''} title="${popReason || 'Mehr Sterne pro Runde, neue Stufe mit Belohnung'}">
-        <b>Bevölkerung +1</b><span class="sub">${popReason || popCost(city, state) + ' Sterne'}</span>
-      </button>`;
-    let note = '';
-    if (occupied) note = 'Einheit in der Stadt – zum Ausbilden zuerst wegziehen.';
-    else if (city.trained) note = `Diese Runde schon ausgebildet${cityPorts(state, city).length && !city.trainedShip ? ' – ein Schiff geht noch' : ''}.`;
-    else if (city.trainedShip) note = 'Schiff gebaut – eine Landeinheit geht noch.';
-    train = `<div class="panel-sub city-sec">Einheiten ausbilden</div>${note ? `<div class="cp-note">${note}</div>` : ''}<div class="train-grid">`;
+    tiles2.push(`<button class="btn tool-tile" data-buypop ${popReason ? 'disabled' : ''} title="${popReason || 'Mehr Sterne pro Runde, neue Stufe mit Belohnung'}"><b>Bevölkerung +1</b><span class="tt-foot">${popReason ? `<span class="tt-why">${popReason}</span>` : `<span class="tt-cost">${popCost(city, state)}</span>`}</span></button>`);
+    tiles2.push('<span class="tb-sep" aria-hidden="true"></span>');
+    const unlocked = UNIT_ORDER.filter(t => !UNITS[t].reward && (!UNITS[t].tech || state.techs[city.owner].includes(UNITS[t].tech)));
     for (const t of unlocked) {
       const u = UNITS[t];
       const reason = trainReason(state, city, t, ctx);
       const atk = attackOf(state, { type: t, owner: city.owner });
       const mv = maxMove(state, city.owner, t);
-      train += `<button class="btn train-tile" data-train="${t}" ${reason ? 'disabled' : ''} title="${reason ? reason + ': ' : ''}${u.name}, Angriff ${atk}, Verteidigung ${u.def}, Bewegung ${mv}, Reichweite ${u.range}, Leben ${u.hp}">
-        <span class="tt-name">${u.name}</span><span class="tt-cost">${unitCost(state, city.owner, t)}</span>
-        <span class="tt-stats">${stat('sword', atk)}${stat('shield', u.def)}${stat('boot', mv)}${u.range > 1 ? stat('bow', u.range) : ''}</span>
-      </button>`;
+      tiles2.push(`<button class="btn tool-tile" data-train="${t}" ${reason ? 'disabled' : ''} title="${reason ? reason + ': ' : ''}${u.name}, Angriff ${atk}, Verteidigung ${u.def}, Bewegung ${mv}, Reichweite ${u.range}, Leben ${u.hp}">
+        <b>${u.name}</b><span class="tt-stats">${stat('sword', atk)}${stat('shield', u.def)}${stat('boot', mv)}${u.range > 1 ? stat('bow', u.range) : ''}</span>
+        <span class="tt-foot"><span class="tt-cost">${unitCost(state, city.owner, t)}</span></span></button>`);
     }
-    train += '</div>';
+    if (occupied) cap = 'Einheit in der Stadt – zum Ausbilden zuerst wegziehen.';
+    else if (city.trained) cap = `Diese Runde schon ausgebildet${cityPorts(state, city).length && !city.trainedShip ? ' – ein Schiff geht noch' : ''}.`;
+    else if (city.trainedShip) cap = 'Schiff gebaut – eine Landeinheit geht noch.';
+    else if (!ctx.myTurn) cap = 'Nicht dein Zug.';
+  } else {
+    cap = !city.owner ? 'Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.'
+      : 'Feindliche Stadt – besiege die Verteidiger und rücke ein, um sie zu erobern.';
   }
-  const other = !city.owner ? 'Neutrale Stadt – rücke mit einer Einheit hinein, um sie zu erobern.'
-    : city.owner !== ctx.actAs ? 'Feindliche Stadt – besiege die Verteidiger und rücke ein, um sie zu erobern.'
-    : !ctx.myTurn ? 'Nicht dein Zug.' : '';
-
+  const u0 = unitAt(state, city.q, city.r);
   panel(`
-    <div class="cp-info">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title">${city.isCapital ? 'Hauptstadt' : 'Stadt'}</div>
-          <div class="panel-sub owner-line">${city.owner ? `<span class="dot" style="background:${hex(playerColor(state, city.owner))}"></span>` : ''}${ownerName}</div>
-        </div>
-        <button class="btn icon-btn panel-close" data-close>Schließen</button>
-      </div>
-      <div class="stat-row">
-        <div class="stat">Stufe<b>${city.pop}/${MAX_POP}</b></div>
-        <div class="stat">Einkommen<b>+${income}</b></div>
-        <div class="stat">Gebiet<b>${tiles.length}</b></div>
-      </div>
-      <div class="hint city-sum">${built} Gebäude, ${res} ${res === 1 ? 'Rohstoff' : 'Rohstoffe'}${city.owner === ctx.actAs ? '' : ` · <button class="linklike" data-build-open>Gebiet ansehen</button>`}</div>
-      ${levelChips(city)}
-      ${switchToUnit(state, city, ctx)}
-      ${other && !acts ? `<div class="hint">${other}</div>` : ''}
+    <div class="tb-cap">
+      <span>${cap ? esc(cap) : ''}</span>
+      ${u0 ? `<button class="btn ghost small" data-open-unit="${u0.id}">${u0.owner === ctx.actAs ? 'Einheit wählen' : 'Einheit ansehen'}: ${UNITS[u0.carry || u0.type].name}</button>` : ''}
+      ${city.owner !== ctx.actAs ? '<button class="btn ghost small" data-build-open>Gebiet ansehen</button>' : ''}
+      <button class="btn ghost small" data-close>Schließen</button>
     </div>
-    ${acts ? `<div class="cp-acts">${acts}</div>` : ''}
-    ${train ? `<div class="cp-train">${train}</div>` : ''}
-  `, acts ? 'city-bar' : 'city-bar small');
+    ${tiles2.length ? `<div class="tb-row">${tiles2.join('')}</div>` : ''}
+  `, 'toolbar');
   wirePanel($('panel'));
   $('panel').querySelectorAll('[data-train]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onTrain(city, btn.dataset.train));

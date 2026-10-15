@@ -1257,3 +1257,52 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
 #adminBtn { top: auto; right: 12px; bottom: 268px; }
 @media (max-width: 760px) { #adminBtn { top: calc(var(--hud-h, 68px) + 214px); bottom: auto; right: 8px; } }
 #topbar .chip .stars::after { content: ""; }
+
+/* ==== Wie Mini Metro: Schild am Objekt, Werkzeugreihe unten in der Mitte ==== */
+#anchor-tag {
+  position: fixed; z-index: 14; transform: translate(-50%, calc(-100% - 34px)); pointer-events: none;
+  min-width: 150px; max-width: 240px; padding: 7px 10px; background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2); font-size: 12px;
+}
+#anchor-tag::after { content: ''; position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); border: 7px solid transparent; border-bottom: 0; border-top-color: var(--panel); }
+#anchor-tag.hidden { display: none; }
+.at-head { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.at-head .dot { width: 9px; height: 9px; flex: none; }
+.at-lvl, .at-vet { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--muted); }
+.at-vet { color: var(--accent); }
+.at-bar { display: block; height: 5px; background: var(--hover); margin: 5px 0 4px; }
+.at-bar span { display: block; height: 100%; background: var(--ok); }
+.at-bar.low span { background: var(--danger); }
+.at-bar.pop span { background: var(--primary); }
+.at-stats { display: flex; gap: 9px; align-items: center; color: var(--muted); }
+.at-inc { font-weight: 700; color: var(--accent); font-size: 13px; }
+.at-sub { margin-top: 3px; color: var(--muted); font-size: 11px; }
+
+#panel.toolbar, #unit-chip {
+  left: 12px; right: 244px; margin: 0 auto; transform: none; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  width: fit-content; max-width: calc(100vw - 256px); max-height: none; overflow: visible;
+  display: flex; flex-direction: column; gap: 6px; padding: 8px; animation: none;
+}
+#unit-chip { align-items: stretch; }
+.tb-cap { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); padding: 0 2px; min-height: 28px; }
+.tb-cap > span:first-child { flex: 1; min-width: 0; }
+.tb-cap .btn { padding: 4px 8px; min-height: 28px; font-size: 12px; }
+.tb-row { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; scrollbar-width: thin; padding-bottom: 2px; }
+.tb-sep { flex: none; width: 1px; background: var(--border); margin: 4px 2px; }
+.tool-tile {
+  flex: none; width: 112px; min-height: 78px; padding: 8px 9px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 4px; text-align: left;
+}
+.tool-tile b { font-size: 13px; line-height: 1.15; }
+.tool-tile.tt-main { border-color: var(--primary); }
+.tool-tile .tt-foot { display: flex; align-items: center; gap: 6px; width: 100%; }
+.tool-tile .tt-cost { font-size: 15px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+.tool-tile .tt-why { font-size: 11px; font-weight: 400; color: var(--muted); line-height: 1.2; }
+.tool-tile.primary .tt-why { color: var(--on-primary-sub); }
+.tool-tile.off { color: var(--faint); border-style: dashed; }
+.tool-tile .tt-stats { display: flex; gap: 6px; }
+.tool-tile .vstat { font-size: 11px; }
+
+@media (max-width: 760px) {
+  #panel.toolbar, #unit-chip { left: 8px; right: 8px; width: auto; max-width: none; transform: none; }
+  .tool-tile { width: 104px; }
+}
