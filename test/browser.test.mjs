@@ -214,6 +214,26 @@ await test('Forschung: Schrift mindestens 12 px, Technologie erforschen', async 
   }
 });
 
+await test('Übersicht: Reiter, Stadt antippen springt hin, Monumente mit Fortschritt', async () => {
+  const page = await open('pc');
+  await startGame(page, { rounds: 4 });
+  await page.click('#overviewBtn');
+  await page.waitForTimeout(200);
+  assert.ok(await page.isVisible('.ov-table [data-city]'), 'Städte-Tabelle');
+  for (const t of ['armee', 'diplomatie', 'monumente']) {
+    await page.click(`[data-ovtab="${t}"]`);
+    assert.ok(await page.isVisible(`[data-ovtab="${t}"].active`), t);
+  }
+  assert.strictEqual(await page.$$eval('.ov-mon', l => l.length), 6, 'sechs Monumente');
+  await page.click('[data-ovtab="staedte"]');
+  await page.click('.ov-table [data-city]');
+  await page.waitForTimeout(300);
+  assert.ok(!(await page.isVisible('#overview-overlay')), 'Übersicht schließt beim Antippen einer Stadt');
+  assert.strictEqual(await page.evaluate(() => window.__pb.app.sel && window.__pb.app.sel.kind), 'city');
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);

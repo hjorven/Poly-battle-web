@@ -8,7 +8,7 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, incomeFor, tileYield, improvePreview, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, incomeFor, tileYield, improvePreview, monumentProgress, threatenedCities, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS, toWorld, hexDistance } from './hex.js';
 import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks, project } from './render.js';
@@ -1796,119 +1796,91 @@ function unitStatus(u, actAs) {
   return 'aktiv';
 }
 
+// Übersicht mit Reitern: Städte, Armee, Diplomatie, Monumente.
+let overviewTab = 'staedte';
 export function showOverview(state, ctx) {
   const actAs = ctx.actAs;
   const menu = $('overview-list');
-  menu.innerHTML = '';
   const myCities = state.cities.filter(c => c.owner === actAs);
   const myUnits = state.units.filter(u => u.owner === actAs);
-
-  const stat = document.createElement('div');
-  stat.className = 'overview-stat';
-  stat.innerHTML = `<div class="panel-head"><div class="panel-title">Übersicht</div></div>
-    <div class="stat-row">
-      <div class="stat">Städte<b>${myCities.length}</b></div>
-      <div class="stat">Einheiten<b>${myUnits.length}</b></div>
-      <div class="stat">Sterne<b>${state.stars[actAs]}</b></div>
-      <div class="stat">Runde<b>${state.round}${state.turnLimit ? '/' + state.turnLimit : ''}</b></div>
-      <div class="stat">Punkte<b>${score(state, actAs)}</b></div>
-    </div>`;
-  menu.appendChild(stat);
-  if (ctx.hasReport) {
-    const rep = document.createElement('div');
-    rep.className = 'action-list';
-    rep.innerHTML = '<button class="btn action"><span>Letzten Rundenbericht zeigen<span class="sub">Taste B</span></span></button>';
-    rep.querySelector('button').addEventListener('click', () => handlers.onShowReport());
-    menu.appendChild(rep);
-  }
-
-  // Monumente: Erfolg, Status (offen / bereit / errichtet).
-  const unlocked = (state.monumentsUnlocked && state.monumentsUnlocked[actAs]) || [];
   const built = (state.monumentsBuilt && state.monumentsBuilt[actAs]) || [];
-  const mon = document.createElement('div');
-  mon.innerHTML = `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Monumente (${built.length}/${Object.keys(MONUMENTS).length})</div></div>
-    <div class="monument-list">${Object.entries(MONUMENTS).map(([id, m]) => {
-      const st = built.includes(id) ? 'errichtet' : unlocked.includes(id) ? 'bereit – im Stadtmenü errichten' : m.goal;
-      const cls = built.includes(id) ? 'done' : unlocked.includes(id) ? 'ready' : '';
-      return `<div class="monument ${cls}"><span class="mon-dot" style="background:#${m.color.toString(16).padStart(6, '0')}"></span><b>${IMPROVEMENTS[id].name}</b><span class="sub">${esc(st)}</span></div>`;
-    }).join('')}</div>`;
-  menu.appendChild(mon);
+  const unlocked = (state.monumentsUnlocked && state.monumentsUnlocked[actAs]) || [];
+  const others = playersOf(state).filter(p => p !== actAs && alive(state, p));
+  const perk = tribeOf(state, actAs)?.perk;
+  const tabs = [['staedte', `Städte ${myCities.length}`], ['armee', `Armee ${myUnits.length}`], ['diplomatie', 'Diplomatie'], ['monumente', `Monumente ${built.length}/${Object.keys(MONUMENTS).length}`]];
+  if (!tabs.some(t => t[0] === overviewTab)) overviewTab = 'staedte';
 
-  if (myCities.length) {
-    const head = document.createElement('div');
-    head.className = 'panel-head';
-    head.innerHTML = `<div class="panel-sub">Städte (${myCities.length})</div>`;
-    menu.appendChild(head);
-    for (const c of myCities) {
-      const row = document.createElement('button');
-      row.className = 'btn action overview-row';
-      row.innerHTML = `<span>${c.isCapital ? 'Hauptstadt' : 'Stadt'} (${cityTiles(state, c).length} Gebiete)<span class="sub">Bevölkerung ${c.pop} · +${cityIncome(state, c)}/Runde</span></span>`;
-      row.addEventListener('click', () => handlers.onFocusCity(c.q, c.r));
-      menu.appendChild(row);
-    }
-  }
-
-  if (myUnits.length) {
-    const head = document.createElement('div');
-    head.className = 'panel-head';
-    head.innerHTML = `<div class="panel-sub">Einheiten (${myUnits.length})</div>`;
-    menu.appendChild(head);
-    for (const u of myUnits) {
+  let body = '';
+  if (overviewTab === 'staedte') {
+    const threatened = new Set(ctx.myTurn ? threatenedCities(state, actAs).map(c => c.q + ',' + c.r) : []);
+    body = myCities.length ? `<table class="ov-table"><thead><tr><th>Stadt</th><th>Stufe</th><th class="num">Einkommen</th><th class="num">Felder</th><th>Jetzt</th></tr></thead><tbody>${myCities.map(c => {
+      const todo = [];
+      if (pendingLevel(c)) todo.push('<span class="ov-tag good">Belohnung wählen</span>');
+      if (threatened.has(c.q + ',' + c.r)) todo.push('<span class="ov-tag bad">bedroht</span>');
+      if (ctx.myTurn && UNIT_ORDER.some(t => !UNITS[t].reward && canTrain(state, c, t, actAs).ok)) todo.push('<span class="ov-tag">kann ausbilden</span>');
+      return `<tr data-city="${c.q},${c.r}" tabindex="0"><td><b>${c.isCapital ? 'Hauptstadt' : 'Stadt'}</b></td>
+        <td><span class="ov-hexes" aria-label="Stufe ${c.pop}">${Array.from({ length: MAX_POP }, (_, i) => `<span class="${i < c.pop ? 'on' : ''}"></span>`).join('')}</span></td>
+        <td class="num ov-inc">+${cityIncome(state, c)}</td><td class="num">${cityTiles(state, c).length}</td><td>${todo.join(' ') || '<span class="ov-none">–</span>'}</td></tr>`;
+    }).join('')}</tbody></table>` : '<div class="hint">Du besitzt keine Städte.</div>';
+  } else if (overviewTab === 'armee') {
+    const order = u => (unitStatus(u, actAs) === 'aktiv' ? 0 : 1);
+    body = myUnits.length ? `<table class="ov-table"><thead><tr><th>Einheit</th><th>Werte</th><th>Status</th></tr></thead><tbody>${myUnits.slice().sort((a, b) => order(a) - order(b)).map(u => {
       const def = UNITS[u.type];
       const st = unitStatus(u, actAs);
-      const cap = hpCap(u);
-      const row = document.createElement('button');
-      row.className = 'btn action overview-row' + (st === 'aktiv' ? '' : ' dimmed');
-      row.innerHTML = `<span>${def.name}<span class="sub">${st === 'aktiv' ? 'bereit' : st} · Leben ${u.hp}/${cap}</span></span>`;
-      row.addEventListener('click', () => handlers.onFocusUnit(u.id));
-      menu.appendChild(row);
-    }
-  }
-
-  const perk = tribeOf(state, actAs)?.perk;
-  if (perk) {
-    const p = document.createElement('div');
-    p.className = 'hint';
-    p.innerHTML = `<b>Stammes-Fähigkeit – ${perk.name}:</b> ${perk.desc}`;
-    menu.insertBefore(p, menu.children[1] || null);
-  }
-
-  const others = playersOf(state).filter(p => p !== actAs && alive(state, p));
-  if (others.length) {
-    const head = document.createElement('div');
-    head.className = 'panel-head';
-    head.innerHTML = `<div class="panel-sub">Diplomatie</div>`;
-    menu.appendChild(head);
-    for (const p of others) {
-      const row = document.createElement('div');
-      row.className = 'dip-row';
+      return `<tr data-unit="${u.id}" tabindex="0" class="${st === 'aktiv' ? '' : 'ov-dim'}"><td><b>${def.name}</b>${u.vet ? ' <span class="ov-tag good">Veteran</span>' : ''}</td>
+        <td><span class="ov-stats">${stat('heart', `${u.hp}/${hpCap(u)}`)}${stat('sword', attackOf(state, u))}${stat('shield', defenseOf(state, u))}</span></td>
+        <td>${st === 'aktiv' ? '<span class="ov-tag">bereit</span>' : esc(st)}</td></tr>`;
+    }).join('')}</tbody></table>` : '<div class="hint">Du hast keine Einheiten.</div>';
+  } else if (overviewTab === 'diplomatie') {
+    body = others.length ? others.map(p => {
       const met = hasMet(state, actAs, p);
       const peace = atPeace(state, actAs, p);
       const name = met ? (tribeName(state, p) || NAMES[p]) : 'Unbekannter Stamm';
       let status = !met ? 'noch nicht begegnet' : peace ? 'Frieden' : 'Krieg';
       const persona = met && state.persona && state.persona[p] && PERSONAS[state.persona[p]];
-      if (persona) status = `${persona.name} · ${status}`;
-      if (pendingOffer(state, actAs, p)) status += ' · Angebot gesendet';
+      if (persona) status = `${persona.name}, ${status}`;
+      if (pendingOffer(state, actAs, p)) status += ', Angebot gesendet';
       let action = '';
       if (met && ctx.myTurn) {
-        if (peace) action = `<button class="btn ghost" data-war="${p}">Krieg erklären</button>`;
+        if (peace) action = `<button class="btn ghost small" data-war="${p}">Krieg erklären</button>`;
         else {
           const chk = canOfferPeace(state, actAs, p);
-          action = `<button class="btn ghost" data-peace="${p}" ${chk.ok ? '' : 'disabled'} title="${esc(chk.reason || 'Frieden anbieten')}">Frieden anbieten</button>`;
-          if (!chk.ok) status += ` · ${chk.reason}`;
+          action = `<button class="btn ghost small" data-peace="${p}" ${chk.ok ? '' : 'disabled'} title="${esc(chk.reason || 'Frieden anbieten')}">Frieden anbieten</button>`;
+          if (!chk.ok) status += `, ${chk.reason}`;
         }
       }
-      row.innerHTML = `<span><span class="dip-name"><span class="dot" style="background:${met ? hex(playerColor(state, p)) : 'var(--faint)'}"></span>${esc(name)}</span>
-        <span class="dip-state ${peace ? 'peace' : ''}">${esc(status)}</span></span>${action}`;
-      row.querySelector('[data-peace]')?.addEventListener('click', () => handlers.onOfferPeace(p));
-      row.querySelector('[data-war]')?.addEventListener('click', () => handlers.onDeclareWar(p));
-      menu.appendChild(row);
-    }
+      return `<div class="dip-row"><span><span class="dip-name"><span class="dot" style="background:${met ? hex(playerColor(state, p)) : 'var(--faint)'}"></span>${esc(name)}</span>
+        <span class="dip-state ${peace ? 'peace' : ''}">${esc(status)}</span></span>${action}</div>`;
+    }).join('') : '<div class="hint">Keine anderen Stämme mehr im Spiel.</div>';
+  } else {
+    body = `<div class="ov-mons">${Object.entries(MONUMENTS).map(([id, m]) => {
+      const [have, need] = monumentProgress(state, actAs, id);
+      const done = built.includes(id), ready = unlocked.includes(id) && !done;
+      const label = done ? 'errichtet' : ready ? 'bereit – über Ausbauen in einer Stadt errichten' : `${Math.min(have, need)} von ${need}: ${m.goal}`;
+      return `<div class="ov-mon ${done ? 'done' : ready ? 'ready' : ''}"><b>${IMPROVEMENTS[id].name}</b>
+        <span class="ov-bar"><span style="width:${done || ready ? 100 : Math.round(Math.min(1, have / need) * 100)}%"></span></span>
+        <span class="ov-mon-sub">${esc(label)}</span></div>`;
+    }).join('')}</div><div class="hint">Jedes Monument bringt der Stadt +3 Bevölkerung und 200 Punkte.</div>`;
   }
 
-  if (!myCities.length && !myUnits.length) {
-    menu.insertAdjacentHTML('beforeend', `<div class="hint">Du besitzt keine Städte oder Einheiten.</div>`);
-  }
+  menu.innerHTML = `
+    <div class="ov-sum">
+      <div class="stat">Sterne<b>${state.stars[actAs]}</b></div>
+      <div class="stat">Einkommen<b>+${incomeFor(state, actAs)}</b></div>
+      <div class="stat">Runde<b>${state.round}${state.turnLimit ? '/' + state.turnLimit : ''}</b></div>
+      <div class="stat">Punkte<b>${score(state, actAs)}</b></div>
+    </div>
+    ${perk ? `<div class="hint ov-perk"><b>${esc(perk.name)}:</b> ${esc(perk.desc)}</div>` : ''}
+    ${ctx.hasReport ? '<button class="btn ghost small ov-report" data-report>Letzten Rundenbericht zeigen (B)</button>' : ''}
+    <div class="ov-tabs" role="tablist">${tabs.map(([id, label]) => `<button class="ov-tab${id === overviewTab ? ' active' : ''}" role="tab" aria-selected="${id === overviewTab}" data-ovtab="${id}">${label}</button>`).join('')}</div>
+    <div class="ov-body">${body}</div>`;
+  menu.querySelectorAll('[data-ovtab]').forEach(b => b.addEventListener('click', () => { overviewTab = b.dataset.ovtab; showOverview(state, ctx); }));
+  menu.querySelector('[data-report]')?.addEventListener('click', () => handlers.onShowReport());
+  const go = (el, fn) => { el.addEventListener('click', fn); el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } }); };
+  menu.querySelectorAll('[data-city]').forEach(tr => go(tr, () => { const [q, r] = tr.dataset.city.split(',').map(Number); handlers.onFocusCity(q, r); }));
+  menu.querySelectorAll('[data-unit]').forEach(tr => go(tr, () => handlers.onFocusUnit(tr.dataset.unit)));
+  menu.querySelectorAll('[data-peace]').forEach(b => b.addEventListener('click', () => handlers.onOfferPeace(b.dataset.peace)));
+  menu.querySelectorAll('[data-war]').forEach(b => b.addEventListener('click', () => handlers.onDeclareWar(b.dataset.war)));
   $('overview-overlay').classList.remove('hidden');
 }
 
