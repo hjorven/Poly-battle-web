@@ -11,13 +11,17 @@ Rundenbasierte Eroberung im Browser, angelehnt an *The Battle of Polytopia*: Gr�
 - **12 Stämme** mit eigener Start-Technologie und Besonderheit, dazu KI-Gegner mit Persönlichkeit (Eroberer, Händler, Seefahrer, Baumeister).
 - **21 Einheiten** an Land, auf See und in der Luft – vom Krieger bis zum Kriegsluftschiff, mit Veteranen und Aufrüsten.
 - **55 Technologien** in einem Wabenbaum mit sechs Stufen.
-- **Städte ausbauen** in einem eigenen Fenster: Feld im Stadtgebiet antippen, Gebäude wählen. Stadtstufen bringen Belohnungen, Monumente werden durch Erfolge freigeschaltet.
+- **Städte ausbauen** in einer 3D-Ansicht des Stadtgebiets: Feld antippen, Gebäude wählen – jedes zeigt vorher, wie viele Sterne es pro Runde mehr bringt, auch durch Nachbarn wie Windmühle und Farm. Stadtstufen bringen Belohnungen, Monumente werden durch Erfolge freigeschaltet.
 - **Nebel, Diplomatie, Brücken, Häfen, Ruinen und Leuchttürme.**
 - **Spielmodi:** gegen die KI, Hotseat an einem Gerät, online per Link, Tutorial, zehn Kampagnen-Missionen, Tages- und Wochen-Herausforderung mit Bestenliste.
 - **Profil** mit Stufen, 17 Erfolgen, freischaltbarem Aussehen und Statistik; mit dem Profil-Code geht es auf jedem Gerät weiter.
+- **Freie Karte:** Die Bedienung liegt in schwebenden Kärtchen an den Rändern. Wählst du eine Stadt oder Einheit, steht ein Schild mit ihren Werten direkt daran, die Aktionen liegen als Werkzeugreihe unten – angelehnt an Mini Metro.
 - **Bedienung** mit Maus und Tastatur oder Touch; Ziehen und Angreifen brauchen zwei Tipps, damit nichts aus Versehen passiert. Kein Rückgängig – jeder Zug zählt.
+- **Hell oder dunkel:** folgt der Systemeinstellung oder ist fest wählbar.
 
-![Bau-Fenster einer Hauptstadt: Stadtgebiet als Wabenkarte, rechts die Bauoptionen für das gewählte Feld](docs/build.png)
+![Gewählte Hauptstadt: Schild mit Stufe und Einkommen an der Stadt, unten die Werkzeugreihe mit Ausbauen, Bevölkerung und Einheiten](docs/city.png)
+
+![Bau-Fenster: das Stadtgebiet in 3D mit Ertrag je Feld, rechts die Bauoptionen für das gewählte Feld](docs/build.png)
 
 Regeln, Werte und Tabellen stehen im **[Wiki](https://github.com/hjorven/Poly-battle-web/wiki)**.
 
@@ -42,8 +46,8 @@ css/style.css         Gestaltung
 js/config.js          Spieldaten und Balancing
 js/rules.js           Spielregeln (reine Funktionen, getestet)
 js/ai.js              KI
-js/render.js          3D-Darstellung mit Three.js
-js/ui.js              Menüs, Stadtmenü, Bau-Fenster, Forschungsbaum
+js/render.js          3D-Darstellung mit Three.js (auch die 3D-Ansicht im Bau-Fenster)
+js/ui.js              Kärtchen, Schild und Werkzeugreihe, Bau-Fenster, Forschung, Menüs
 js/main.js            Verkabelung, Eingabe, Zugablauf
 js/net.js             Online-Partien, Profile, Bestenliste (Supabase)
 js/save.js            Lokaler Spielstand
