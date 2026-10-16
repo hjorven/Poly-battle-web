@@ -14,7 +14,7 @@ Gewinnst du drei freie Partien gegen die KI in Folge auf derselben Stufe, bietet
 
 ## Name und Bestenliste
 
-Mit einem Namen (3–16 Zeichen) erscheinen deine Ergebnisse der Tages- und Wochen-Herausforderung in der Bestenliste aller Spieler. Es zählt jeweils dein bester Wert.
+Mit einem Namen (3–16 Zeichen) erscheinen deine Ergebnisse der Tages- und Wochen-Herausforderung in der Bestenliste aller Spieler. Es zählt jeweils dein bester Wert. Den Namen kannst du einmal am Tag ändern; in den ersten 15 Minuten nach dem ersten Namen beliebig oft, falls du dich vertippt hast. Namen von Profilen, die nie gespielt haben (Stufe 1, keine Punkte, ein halbes Jahr nichts gespeichert), werden wieder frei.
 
 ## Profil-Code
 
