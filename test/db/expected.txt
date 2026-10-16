@@ -1,0 +1,33 @@
+direkt lesen: permission denied for table matches
+anlegen: role=player_1 state=true
+fremd lesen: true state=null
+speichern vor Beitritt: Noch nicht alle Mitspieler beigetreten
+B tritt bei: player_2
+C tritt bei: Zuschauer hidden=true
+B nicht am Zug: Du bist nicht am Zug
+A zieht: {"rev": 1}
+Testpartie ohne Schlüssel: Testpartien nur mit Admin-Schlüssel
+Testpartie falscher Schlüssel: Testpartien nur mit Admin-Schlüssel
+unplausibel: Spielstand abgelehnt: Unmöglich viele Sterne
+unplausibel mit Schlüssel: {"rev": 2}
+Admin-Anlegen ohne Schlüssel: Testpartien nur mit Admin-Schlüssel
+Klingeln: 3 letzte=match-<id>
+freien Platz mit KI füllen: ["player_2"]
+Partie 2 ist A allein: abandoned=nein
+B tritt bei: player_2
+B übergibt A zu früh: Erst nach 24 Stunden ohne Zug möglich
+B übergibt A nach 25 h: ai=["player_1"]
+current_turn jetzt: player_2
+A (jetzt KI) speichert: Dein Stamm wird von der KI gespielt
+B rechnet KI und speichert: {"rev": 2}
+A sieht noch (mit Rolle): role=player_1 hidden=false
+B gibt auf: abandoned=true
+Meine Partien A: 3, C: 0
+B tritt bei: player_2
+A beendet Zug, KI dran: {"rev": 1}
+current_turn bleibt beim Rechner: player_1
+B übernimmt sofort: Du bist nicht am Zug
+B übernimmt nach 3 min: {"rev": 2}
+B tritt bei: player_2
+A gibt im eigenen Zug auf: ai=["player_1"]
+B übernimmt sofort: {"rev": 2}

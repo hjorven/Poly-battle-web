@@ -20,9 +20,16 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const store = () => { try { return globalThis.localStorage || null; } catch (e) { return null; } };
 
 let unlocked = false;
+// Geprüfter Schlüssel dieser Sitzung: der Server nimmt Testpartien online nur
+// damit an (sonst prüft er jeden Stand auf Plausibilität).
+let currentKey = null;
 
 export function isUnlocked() {
   return unlocked;
+}
+
+export function adminKey() {
+  return unlocked ? currentKey : null;
 }
 
 // Gemerkten Schlüssel prüfen (asynchron; ein abgeschriebener Prüfwert reicht nicht).
@@ -30,12 +37,14 @@ async function restore() {
   let key = null;
   try { key = store().getItem(KEY); store().removeItem('pb_admin_v1'); } catch (e) { key = null; }
   unlocked = await A.checkKey(key);
+  currentKey = unlocked ? key : null;
   if (!unlocked && key) { try { store().removeItem(KEY); } catch (e) { /* ignore */ } }
   $('adminBtn').classList.toggle('hidden', !unlocked);
 }
 
 function lock() {
   unlocked = false;
+  currentKey = null;
   try { store().removeItem(KEY); } catch (e) { /* ignore */ }
   setTool(null);
   $('admin-panel').classList.add('hidden');
@@ -76,6 +85,7 @@ export function open() {
     const key = await A.checkCode(code);
     if (!key) return 'Falsches Passwort.';
     unlocked = true;
+    currentKey = key;
     try { store().setItem(KEY, key); } catch (e) { /* nur für diese Sitzung freigeschaltet */ }
     $('adminBtn').classList.remove('hidden');
     show();

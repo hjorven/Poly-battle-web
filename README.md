@@ -37,6 +37,7 @@ git clone https://github.com/hjorven/Poly-battle-web.git
 cd Poly-battle-web
 npm run serve   # http://localhost:8080
 npm test        # Logiktests
+npm run test:db # Datenbank-Tests (braucht lokales Postgres, siehe scripts/test-db.sh)
 ```
 
 Three.js und supabase-js liegen unter `vendor/` im Repository, es wird nichts von fremden Servern nachgeladen. Ein Service Worker (`sw.js`) merkt sich die Dateien, so läuft das Spiel nach dem ersten Besuch auch ohne Verbindung. Gegen KI, Hotseat, Kampagne und Herausforderungen laufen ohne Server; Online-Partien und die Bestenliste nutzen Supabase.
@@ -67,7 +68,7 @@ Mehr dazu auf der Wiki-Seite [Technik](https://github.com/hjorven/Poly-battle-we
 
 ## Online und Datenschutz
 
-Clients haben keinen direkten Zugriff auf die Tabellen. Gelesen und geschrieben wird nur über Datenbank-Funktionen, die prüfen, wer mitspielt, wer am Zug ist und ob Namen und Punkte plausibel sind. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Gespeichert werden Spielstände, Name, Profildaten und Punkte – keine E-Mail-Adressen, kein Konto.
+Clients haben keinen direkten Zugriff auf die Tabellen. Gelesen und geschrieben wird nur über Datenbank-Funktionen, die prüfen, wer mitspielt, wer am Zug ist und ob Namen und Punkte plausibel sind. Laufende Partien sieht nur, wer mitspielt; nach jedem Zug schickt die Datenbank über Realtime nur eine Klingel, den Stand holt sich der Client geprüft ab. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Gespeichert werden Spielstände, Name, Profildaten und Punkte – keine E-Mail-Adressen, kein Konto.
 
 ## Mitmachen
 

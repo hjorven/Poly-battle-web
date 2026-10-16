@@ -23,6 +23,8 @@ const app = {
   panelOpen: false,
   busy: false,
   online: false,
+  // Online: Zeitpunkt des letzten gespeicherten Zuges (vom Server).
+  lastMoveAt: null,
   // Wird bei jedem neuen/geladenen Spiel erhöht; eine noch laufende
   // KI-Schleife des alten Spiels erkennt daran, dass sie aufhören muss.
   gen: 0
@@ -55,7 +57,7 @@ function myTurn() {
   if (!st || st.winner || app.busy) return false;
   if (app.mode === 'bot') return st.turn === 'player_1';
   if (app.mode === 'hotseat') return true;
-  if (app.mode === 'online') return !!app.myRole && app.hasOpponent && st.turn === app.myRole;
+  if (app.mode === 'online') return !!app.myRole && app.hasOpponent && st.turn === app.myRole && !R.isBot(st, app.myRole) && !st.abandoned;
   return false;
 }
 
@@ -68,14 +70,25 @@ function statusText() {
       : `${needName(st, st.winner)} hat alle Städte erobert und gewinnt.`;
   }
   if (app.mode === 'online') {
+    if (st.abandoned) return 'Partie beendet: alle Menschen haben aufgegeben.';
     if (!app.myRole) return `Zuschauer · Am Zug: ${needName(st, st.turn)}`;
+    if (R.isBot(st, app.myRole)) return `Dein Stamm wird von der KI gespielt · Am Zug: ${needName(st, st.turn)}`;
     if (!app.hasOpponent) return `Warte auf Mitspieler (${app.seated || 1}/${app.humanSeats || 2} da) – teile den Link (im Menü auf „Link zum Spiel kopieren“).`;
     if (myTurn()) return `Du bist am Zug (${needName(st, app.myRole)})`;
     if (R.isBot(st, st.turn)) return `KI zieht (${needName(st, st.turn)}) …`;
-    return `Gegner ist am Zug (${needName(st, st.turn)})`;
+    return `Gegner ist am Zug (${needName(st, st.turn)}${sinceText()})`;
   }
   if (app.mode === 'bot') return myTurn() ? 'Du bist am Zug' : 'Die KI denkt nach …';
   return `Am Zug: ${needName(st, st.turn)}`;
+}
+
+// „, seit 5 Std.“: wie lange der Gegner schon für seinen Zug braucht.
+function sinceText() {
+  const t = Date.parse(app.lastMoveAt || '');
+  if (!t) return '';
+  const h = Math.floor((Date.now() - t) / 3600000);
+  if (h < 1) return '';
+  return h < 48 ? `, seit ${h} Std.` : `, seit ${Math.floor(h / 24)} Tagen`;
 }
 
 function refresh() {
@@ -455,7 +468,9 @@ function showMenu() {
   ui.renderLooks(profile, P.COSMETICS, P.cosmeticUnlocked, P.cosmeticHint, P.lookOf(profile));
   ui.renderCampaign(profile, K.MISSIONS, K.missionUnlocked, K.campaignStars(profile));
   ui.setContinue(saveInfo());
+  ui.renderOnlineActions(onlineActions());
   ui.showMenu();
+  loadMyMatches();
 }
 
 async function saveOnline() {
@@ -466,13 +481,22 @@ async function saveOnline() {
     app.state.looks[app.myRole] = P.lookOf(P.loadProfile());
   }
   app.state.rev = (app.state.rev || 0) + 1;
-  const { error, rejected } = await net.saveMatch(app.gameId, app.state);
-  if (!error) return;
+  clearTimeout(app.saveRetry);
+  const gen = app.gen;
+  const { error, rejected } = await net.saveMatch(app.gameId, app.state, app.state.admin ? AP.adminKey() : null);
+  if (!error) { app.lastMoveAt = new Date().toISOString(); return; }
   ui.toast(error, 'warn');
+  // Keine Verbindung: gleich noch einmal versuchen, sonst ginge ein beendeter
+  // Zug verloren und alle warteten.
+  if (!rejected) {
+    app.saveRetry = setTimeout(() => { if (app.online && app.gen === gen) saveOnline(); }, 5000);
+    return;
+  }
   // Server hat den Zug abgelehnt: auf den gültigen Stand der Datenbank zurück.
   if (rejected) {
     const { match } = await net.fetchMatch(app.gameId);
     if (match && validState(match.game_state)) {
+      app.lastMoveAt = match.last_move_at || app.lastMoveAt;
       adopt(match.game_state);
       app.sel = null;
       render.syncBoard(app.state, viewer());
@@ -526,7 +550,10 @@ async function afterAction(events = []) {
   }
   persist();
   if (botsToRun()) {
-    // KI-Züge laufen hier; maybeBot speichert online am Ende selbst.
+    // Online den beendeten Zug sofort speichern: schließt jemand den Tab,
+    // während die KI rechnet, übernimmt ein Mitspieler (siehe save_match).
+    if (app.online) await saveOnline();
+    // KI-Züge laufen hier; maybeBot speichert online selbst.
     await maybeBot();
     return;
   }
@@ -958,6 +985,10 @@ async function maybeBot() {
       await render.syncBoard(app.state, viewer());
       ui.updateStrip(app.state, ctx());
     }
+    // Online nach jeder KI speichern: zeigt den anderen den Fortschritt und
+    // hält die Partie lebendig, auch wenn mehrere KIs lange rechnen.
+    if (app.online && R.isBot(app.state, app.state.turn) && !app.state.winner) await saveOnline();
+    if (stale()) return;
   }
   app.busy = false;
   persist();
@@ -1342,10 +1373,7 @@ function startLocal(mode, override = null) {
 }
 
 function enterLocal() {
-  if (app.channel) {
-    try { net.unsubscribe(app.channel); } catch (e) { /* ignore */ }
-    app.channel = null;
-  }
+  leaveOnline();
   history.replaceState(null, '', location.pathname);
   ui.hideNews();
   ui.hideMenu();
@@ -1416,21 +1444,26 @@ async function startOnline() {
   app.online = true;
   app.sel = null;
   app.busy = false;
+  app.botDriver = false;
   const hashId = location.hash.slice(1);
 
   if (hashId) {
     app.gameId = hashId;
     const { match, role, error } = await net.joinMatch(hashId);
-    if (error) { ui.toast(error, 'warn'); showMenu(); return; }
-    if (!validState(match.game_state)) { ui.toast('Dieses Spiel ist beschädigt und kann nicht geladen werden.', 'warn'); showMenu(); return; }
+    if (error) { ui.toast(error, 'warn'); leaveOnline(); showMenu(); return; }
+    // Laufende Partien sehen nur Mitspieler (sonst ließe sich der Nebel mit
+    // einem zweiten Fenster umgehen).
+    if (match.hidden) { ui.toast('Diese Partie ist voll und läuft noch. Zuschauen geht erst nach dem Ende.', 'warn'); leaveOnline(); showMenu(); return; }
+    if (!validState(match.game_state)) { ui.toast('Dieses Spiel ist beschädigt und kann nicht geladen werden.', 'warn'); leaveOnline(); showMenu(); return; }
     adopt(match.game_state);
     app.myRole = role;
+    app.lastMoveAt = match.last_move_at || null;
     app.hasOpponent = allSeated(match);
     ui.hideMenu();
     render.syncBoard(app.state, viewer());
     focusHome();
     refresh();
-    if (!app.myRole) ui.toast('Spiel läuft bereits – du schaust zu.');
+    if (!app.myRole) ui.toast('Partie beendet – du siehst sie dir an.');
   } else {
     const settings = ui.getSettings();
     const humans = settings.humans;
@@ -1441,9 +1474,10 @@ async function startOnline() {
       ai: Array.from({ length: bots }, (_, k) => 'player_' + (k + humans + 1))
     });
     const { match, error } = await net.createMatch(state);
-    if (error) { ui.toast(error, 'warn'); showMenu(); return; }
+    if (error) { ui.toast(error, 'warn'); leaveOnline(); showMenu(); return; }
     adopt(match.game_state);
     app.myRole = 'player_1';
+    app.lastMoveAt = match.last_move_at || null;
     app.hasOpponent = allSeated(match);
     app.gameId = match.id;
     location.hash = match.id;
@@ -1459,22 +1493,132 @@ async function startOnline() {
     try { net.unsubscribe(app.channel); } catch (e) { /* ignore */ }
     app.channel = null;
   }
+  const gen = app.gen;
   app.channel = net.subscribe(app.gameId, match => {
-    if (!app.online || !match.game_state) return;
-    if (allSeated(match)) app.hasOpponent = true;
+    if (!app.online || app.gen !== gen) return;
+    if (match.last_move_at) app.lastMoveAt = match.last_move_at;
+    if (match.game_state && allSeated(match)) app.hasOpponent = true;
     // Nur echte Neuerungen übernehmen. Das Echo des eigenen Zuges (gleiche
     // rev) würde den Stand durch eine identische Kopie ersetzen und offene
     // Panels/Dialoge auf verwaiste Objekte zeigen lassen.
     if (!validState(match.game_state)) return;
     if ((match.game_state.rev || 0) > (app.state?.rev || 0)) {
       const wasMine = myTurn();
+      announceHanded(app.state, match.game_state);
       adopt(match.game_state);
       app.busy = false;
+      app.botDriver = false;
       render.syncBoard(app.state, viewer());
       if (!wasMine && myTurn()) notifyTurn();
+      checkWinnerUI();
     }
     refresh();
+    watchStalledAi();
   });
+  clearInterval(app.stallTimer);
+  app.stallTimer = setInterval(watchStalledAi, 20000);
+}
+
+// Online-Partie verlassen (Menü, lokales Spiel): Kanal und Zeitgeber aufräumen.
+function leaveOnline() {
+  clearInterval(app.stallTimer);
+  clearTimeout(app.saveRetry);
+  if (app.channel) {
+    try { net.unsubscribe(app.channel); } catch (e) { /* ignore */ }
+    app.channel = null;
+  }
+  app.online = false;
+  app.botDriver = false;
+}
+
+// Eine KI ist dran, aber das Gerät, das sie rechnet, meldet sich seit über
+// zwei Minuten nicht (Tab geschlossen): dann rechnet dieses Gerät sie weiter.
+// Der Server lässt das erst nach zwei Minuten zu; kommen zwei Geräte
+// gleichzeitig, gewinnt das schnellere, das andere lädt den neuen Stand.
+function watchStalledAi() {
+  const st = app.state;
+  if (!app.online || !st || st.winner || st.abandoned || app.busy || app.botDriver) return;
+  if (!app.myRole || R.isBot(st, app.myRole) || !R.isBot(st, st.turn) || !app.hasOpponent) return;
+  const t = Date.parse(app.lastMoveAt || '');
+  if (!t || Date.now() - t < 125000) return;
+  app.botDriver = true;
+  maybeBot();
+}
+
+// Hinweis, wenn ein Stamm an die KI ging (Aufgeben, Zeit abgelaufen).
+function announceHanded(before, after) {
+  const was = (before && before.handed) || {};
+  for (const [role, why] of Object.entries(after.handed || {})) {
+    if (was[role]) continue;
+    const name = role === app.myRole ? 'Dein Stamm' : needName(after, role);
+    ui.toast(why === 'resign' ? `${name} hat aufgegeben – die KI übernimmt.`
+      : why === 'timeout' ? `${name} hat 24 Stunden nicht gezogen – die KI übernimmt.`
+      : `Freier Platz: ${needName(after, role)} spielt jetzt die KI.`, 'warn');
+  }
+}
+
+// Stamm an die KI geben (Aufgeben, freier Platz, Abwesender).
+async function handToAi(role) {
+  const res = await net.handToAi(app.gameId, role);
+  if (res.error) { ui.toast(res.error, 'warn'); return; }
+  const st = res.match.game_state;
+  if (!validState(st)) return;
+  announceHanded(app.state, st);
+  adopt(st);
+  app.lastMoveAt = res.match.last_move_at || app.lastMoveAt;
+  app.hasOpponent = allSeated(res.match);
+  app.sel = null;
+  render.syncBoard(app.state, viewer());
+  ui.hideMenu();
+  refresh();
+  // Ist der übergebene Stamm gerade dran, rechnet dieses Gerät die KI.
+  if (role !== app.myRole && R.isBot(app.state, app.state.turn)) { app.botDriver = true; maybeBot(); }
+  else watchStalledAi();
+}
+
+// Knöpfe im Menü einer laufenden Online-Partie: Aufgeben, freie Plätze und
+// Abwesende an die KI geben.
+function onlineActions() {
+  const st = app.state;
+  if (!app.online || !st || st.winner || st.abandoned || !app.myRole || R.isBot(st, app.myRole)) return [];
+  const acts = [];
+  const humans = st.players.filter(p => !R.isBot(st, p));
+  if (!app.hasOpponent && app.joined) {
+    for (const p of humans) if (!app.joined.includes(p)) acts.push({ label: `Freien Platz mit KI füllen (${needName(st, p)})`, role: p });
+  }
+  const t = Date.parse(app.lastMoveAt || '');
+  if (app.hasOpponent && st.turn !== app.myRole && humans.includes(st.turn) && t && Date.now() - t > 24 * 3600000) {
+    acts.push({ label: `${needName(st, st.turn)} ist seit 24 Stunden weg: an die KI geben`, role: st.turn });
+  }
+  acts.push({ label: 'Aufgeben', role: app.myRole, resign: true });
+  return acts;
+}
+
+function onOnlineAction(act) {
+  const text = act.resign
+    ? 'Wirklich aufgeben? Dein Stamm wird ab sofort von der KI gespielt, das lässt sich nicht rückgängig machen.'
+    : act.label + '? Das lässt sich nicht rückgängig machen.';
+  ui.showConfirm(text, () => handToAi(act.role), { yes: act.resign ? 'Aufgeben' : 'An die KI geben' });
+}
+
+async function loadMyMatches() {
+  ui.renderMyMatches(null);
+  const res = await net.myMatches();
+  if (res.error || !Array.isArray(res.data)) { ui.renderMyMatches([]); return; }
+  ui.renderMyMatches(res.data.map(m => ({
+    ...m,
+    me: m.role,
+    open: !m.winner && !m.abandoned,
+    waiting: (m.humans || []).some(h => !(m.joined || []).includes(h)),
+    myTurn: !m.winner && !m.abandoned && m.turn === m.role && !(m.ai || []).includes(m.role) && (m.humans || []).every(h => (m.joined || []).includes(h)),
+    turnName: m.turn ? (R.tribeName({ tribes: m.tribes || {} }, m.turn) || NAMES[m.turn]) : ''
+  })));
+}
+
+function openMatch(id) {
+  if (app.online && app.gameId === id) { ui.hideMenu(); return; }
+  history.replaceState(null, '', location.pathname + location.search + '#' + id);
+  startOnline();
 }
 
 // Haben alle menschlichen Plätze einen Spieler? (Öffentliche Antwort der
@@ -1487,6 +1631,7 @@ function allSeated(match) {
   const joined = Array.isArray(match.joined) ? match.joined
     : match.seats && typeof match.seats === 'object' ? Object.keys(match.seats)
     : [match.player_1 ? 'player_1' : null, match.player_2 ? 'player_2' : null].filter(Boolean);
+  app.joined = joined;
   app.seated = humans.filter(h => joined.includes(h)).length;
   app.humanSeats = humans.length;
   return humans.every(h => joined.includes(h));
@@ -1684,7 +1829,9 @@ function boot() {
     onContinue: continueGame,
     onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : mode === 'daily' ? startDaily() : mode === 'weekly' ? startWeekly() : mode.startsWith('mission:') ? startMission(mode.slice(8)) : startLocal(mode),
     onTutor,
-    onCopyLink: copyLink
+    onCopyLink: copyLink,
+    onOnlineAction,
+    onOpenMatch: openMatch
   });
 
   document.getElementById('copyLinkBtn').addEventListener('click', copyLink);
