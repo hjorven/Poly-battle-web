@@ -337,6 +337,8 @@ button:focus-visible {
 }
 .overlay > .card { margin: auto; flex: none; }
 .overlay.hidden { display: none; }
+.name-extra { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 4px 0 8px; }
+.name-extra.hidden { display: none; }
 
 .card {
   background: var(--panel);

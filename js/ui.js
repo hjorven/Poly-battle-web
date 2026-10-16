@@ -412,8 +412,13 @@ function renderStats(profile) {
 
 // Namensdialog; `onSave(name)` liefert eine Fehlermeldung oder null.
 const NAME_TEXT = 'Mit diesem Namen erscheinst du in der Bestenliste. 3–16 Zeichen, Buchstaben, Ziffern, Leerzeichen, _ und -.';
-export function askName(current, onSave, { title = 'Wähle deinen Namen', text = NAME_TEXT, max = 16, ok = 'Speichern' } = {}) {
+export function askName(current, onSave, { title = 'Wähle deinen Namen', text = NAME_TEXT, max = 16, ok = 'Speichern', extra = [] } = {}) {
   $('name-title').textContent = title;
+  // Zusätzliche Knöpfe unter dem Feld (Profil-Code: speichern, erneuern).
+  const ex = $('name-extra');
+  ex.innerHTML = extra.map((b, i) => `<button class="btn ghost" data-nx="${i}">${esc(b.label)}</button>`).join('');
+  ex.classList.toggle('hidden', !extra.length);
+  ex.querySelectorAll('[data-nx]').forEach(btn => btn.addEventListener('click', () => extra[+btn.dataset.nx].run(close)));
   $('name-text').textContent = text;
   $('nameOk').textContent = ok;
   const input = $('name-input');
@@ -422,7 +427,7 @@ export function askName(current, onSave, { title = 'Wähle deinen Namen', text =
   $('name-error').textContent = '';
   $('name-overlay').classList.remove('hidden');
   input.focus();
-  const close = () => { $('name-overlay').classList.add('hidden'); $('nameOk').onclick = null; input.onkeydown = null; };
+  function close() { $('name-overlay').classList.add('hidden'); $('nameOk').onclick = null; input.onkeydown = null; }
   const save = async () => {
     $('nameOk').disabled = true;
     const err = await onSave(input.value);
