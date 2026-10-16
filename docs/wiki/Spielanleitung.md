@@ -44,9 +44,13 @@ Die Karte ist die Hauptsache; alles Weitere liegt in schwebenden Kärtchen an de
 
 Wächst eine Stadt auf eine neue Stufe, wählst du eine Belohnung (siehe [Städte und Gebäude](Staedte-und-Gebaeude)).
 
+## Söldnerlager
+
+Auf jeder Karte stehen ein paar Zeltlager abseits der Startstädte. Jedes bietet eine bestimmte Einheit an, zum Beispiel einen Ritter oder einen Armbrustschützen. Zieh eine eigene Landeinheit auf das Lager und wähle **Anwerben**: Die Einheit erscheint daneben, auch wenn du die passende Technologie noch nicht hast. Jeder Stamm kann jedes Lager einmal nutzen; der Preis steht auf dem Knopf (siehe [Städte und Gebäude](Staedte-und-Gebaeude)).
+
 ## Nebel
 
-Unentdecktes Land liegt unter Nebel. Einheiten und Städte decken ihre Umgebung auf; Berge geben mehr Sicht. Entdecktes, aber gerade unbeobachtetes Land ist abgedunkelt – dort siehst du keine fremden Einheiten, und Städte zeigen den Stand, in dem du sie zuletzt gesehen hast.
+Unentdecktes Land liegt unter Nebel. Einheiten und Städte decken ihre Umgebung auf; Berge und Hügel geben mehr Sicht. Entdecktes, aber gerade unbeobachtetes Land ist abgedunkelt – dort siehst du keine fremden Einheiten, und Städte zeigen den Stand, in dem du sie zuletzt gesehen hast.
 
 ## Schonfrist und Diplomatie
 
