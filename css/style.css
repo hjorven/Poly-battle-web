@@ -1415,3 +1415,11 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
 #coach .co-why { font-size: 12px; color: var(--muted); margin-top: 3px; }
 #coach .co-acts { display: flex; gap: 6px; margin-top: 8px; }
 @media (max-width: 430px) { #topbar .top-actions { gap: 0; } #topbar .top-actions #coachBtn, #topbar .top-actions #techBtn, #topbar .top-actions #overviewBtn, #topbar .top-actions #menuBtn { padding: 6px 5px; font-size: 12px; } #topbar .top-actions #endTurnBtn { padding: 8px 8px; } }
+
+/* Meldung, wenn das Spiel nicht starten konnte (siehe index.html). */
+.boot-failed {
+  position: fixed; left: 16px; right: 16px; top: 50%; transform: translateY(-50%);
+  max-width: 420px; margin: 0 auto; padding: 16px 18px; z-index: 1000;
+  background: var(--panel); color: var(--danger); border: 1px solid var(--border-strong);
+  font-size: 15px; line-height: 1.4;
+}

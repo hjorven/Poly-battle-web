@@ -1,6 +1,6 @@
 # Technik
 
-Poly Battle ist reines HTML, CSS und JavaScript (ES-Module) ohne Build-Schritt. Die 3D-Ansicht nutzt [Three.js](https://threejs.org/) 0.160 über eine Importmap; der Online-Modus nutzt [Supabase](https://supabase.com/).
+Poly Battle ist reines HTML, CSS und JavaScript (ES-Module) ohne Build-Schritt. Die 3D-Ansicht nutzt [Three.js](https://threejs.org/) 0.160 über eine Importmap (die Datei liegt unter `vendor/` im Repository, kein CDN nötig); der Online-Modus nutzt [Supabase](https://supabase.com/).
 
 ## Starten
 
@@ -17,6 +17,8 @@ npm run wiki         # Datenseiten des Wikis neu erzeugen
 | Datei | Aufgabe |
 |---|---|
 | `index.html` | Einstieg, Importmap, alle Dialoge |
+| `sw.js` | Service Worker: Spiel offline verfügbar |
+| `vendor/` | Three.js und supabase-js als Dateien |
 | `css/style.css` | Gestaltung |
 | `js/config.js` | Spieldaten und Balancing: Einheiten, Stämme, Technologien, Gebäude |
 | `js/hex.js` | Hex-Koordinaten (axial) |
