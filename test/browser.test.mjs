@@ -439,6 +439,38 @@ await test('Online am Zug: Mitteilung und blinkender Titel im Hintergrund', asyn
   await page.context().close();
 });
 
+await test('Nachrichten online: Kurzantwort senden, fremde Nachricht mit Zähler', async () => {
+  const page = await open('pc');
+  const msgs = [];
+  await page.route(/supabase\.co\/rest\/v1\/rpc\/pb_(send_message|messages_since)/, async route => {
+    const body = JSON.parse(route.request().postData() || '{}');
+    if (route.request().url().includes('send_message')) {
+      msgs.push({ id: msgs.length + 1, role: 'player_1', text: body.p_text, at: new Date().toISOString() });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: msgs.length }) });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(msgs.filter(m => m.id > (body.p_after || 0))) });
+  });
+  await startGame(page);
+  await page.evaluate(() => { const a = window.__pb.app; a.online = true; a.mode = 'online'; a.gameId = 'g1'; a.myRole = 'player_1'; window.__pb.startChat(); });
+  await page.waitForTimeout(400);
+  assert.ok(await page.isVisible('#chatBtn'), 'Knopf online sichtbar');
+  await page.click('#chatBtn');
+  await page.click('[data-quick="Gut gespielt"]');
+  await page.waitForTimeout(400);
+  assert.match(await page.textContent('#chatList'), /Gut gespielt/);
+  await page.click('#chatClose');
+  msgs.push({ id: msgs.length + 1, role: 'player_2', text: 'Danke, du auch', at: new Date().toISOString() });
+  // Neue Nachricht über das nächste Laden (wie bei der Klingel).
+  await page.evaluate(() => window.__pb.loadChat());
+  await page.waitForTimeout(400);
+  assert.strictEqual(await page.textContent('#chatBadge'), '1', 'Zähler für ungelesene');
+  await page.click('#chatBtn');
+  assert.match(await page.textContent('#chatList'), /Danke, du auch/);
+  assert.ok(await page.$eval('#chatBadge', e => e.classList.contains('hidden')), 'Zähler weg nach Öffnen');
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
