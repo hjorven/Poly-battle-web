@@ -418,6 +418,27 @@ await test('Nach drei Siegen in Folge: schwerere Stufe angeboten und gestartet',
   await page.context().close();
 });
 
+await test('Online am Zug: Mitteilung und blinkender Titel im Hintergrund', async () => {
+  const page = await open('pc');
+  await page.context().grantPermissions(['notifications']);
+  await page.click('[data-mtab="play"]');
+  await page.click('[data-notify="1"]');
+  assert.ok(await page.$eval('[data-notify="1"]', e => e.classList.contains('active')), 'Einstellung an');
+  await startGame(page);
+  const shown = await page.evaluate(async () => {
+    const seen = [];
+    window.Notification = class { constructor(title, opts) { seen.push(opts.body); } static get permission() { return 'granted'; } };
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    window.__pb.notifyTurn();
+    await new Promise(r => setTimeout(r, 1100));
+    return { seen, title: document.title };
+  });
+  assert.ok(shown.seen.length === 1 && /am Zug/.test(shown.seen[0]), 'Mitteilung: ' + JSON.stringify(shown.seen));
+  assert.match(shown.title, /am Zug|Poly Battle/);
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);

@@ -159,6 +159,22 @@ function loadSettings() {
 function buildSettings() {
   const wrap = $('settings-box');
   if (!wrap) return;
+  // Mitteilung bei Online-Zug: „An“ fragt den Browser um Erlaubnis.
+  const notifyBtns = wrap.querySelectorAll('[data-notify]');
+  const markNotify = () => { let on = false; try { on = localStorage.getItem('pb_notify') === '1'; } catch (e) { on = false; } notifyBtns.forEach(b => b.classList.toggle('active', (b.dataset.notify === '1') === on)); };
+  notifyBtns.forEach(b => b.addEventListener('click', async () => {
+    let on = b.dataset.notify === '1';
+    if (on) {
+      if (!('Notification' in window)) { toast('Dieser Browser zeigt keine Mitteilungen – du hörst aber einen Ton, und der Tab-Titel blinkt.', 'warn'); }
+      else if (Notification.permission !== 'granted') {
+        try { on = (await Notification.requestPermission()) === 'granted'; } catch (e) { on = false; }
+        if (!on) toast('Mitteilungen wurden nicht erlaubt – Ton und blinkender Tab-Titel bleiben.', 'warn');
+      }
+    }
+    try { localStorage.setItem('pb_notify', on ? '1' : '0'); } catch (e) { /* ignore */ }
+    markNotify();
+  }));
+  markNotify();
   // Darstellung (gilt sofort, gemerkt im Browser).
   const themeBtns = wrap.querySelectorAll('[data-theme-pick]');
   let theme = 'system';
