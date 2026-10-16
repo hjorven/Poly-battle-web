@@ -125,7 +125,10 @@ export const ACHIEVEMENTS = {
   streak3: { name: 'Stammgast', desc: 'Spiele die Tagesherausforderung 3 Tage in Folge.', check: (r, p) => p.daily.streak >= 3 },
   tribes5: { name: 'Vielseitig', desc: 'Gewinne mit 5 verschiedenen Stämmen.', check: (r, p) => Object.keys(p.tribeWins).length >= 5 },
   online: { name: 'Gemeinsam stark', desc: 'Gewinne ein Online-Spiel.', check: r => r.won && r.mode === 'online' },
-  weekly: { name: 'Wochenkämpfer', desc: 'Schließe eine Wochen-Herausforderung ab.', check: r => !!r.weekly }
+  weekly: { name: 'Wochenkämpfer', desc: 'Schließe eine Wochen-Herausforderung ab.', check: r => !!r.weekly },
+  trader: { name: 'Kaufmann', desc: 'Handle 5-mal in einem Spiel mit Händlerkarren.', check: r => r.trades >= 5 },
+  breaker: { name: 'Mauerbrecher', desc: 'Erobere eine Stadt mit einem Rammbock.', check: r => r.siegeCaptures >= 1 },
+  selfmade: { name: 'Aus eigener Kraft', desc: 'Gewinne auf Schwer, ohne einen Tipp zu benutzen.', check: r => r.won && r.vsAi && r.aiLevel === 'hard' && !r.coached }
 };
 
 // --- Kosmetik -------------------------------------------------------------------
@@ -267,7 +270,10 @@ export function gameFacts(state, me, { won, mode, score }) {
     daily: state.daily || null,
     weekly: state.weekly || null,
     mission: state.mission || null,
-    missionStars: state.missionStars || 0
+    missionStars: state.missionStars || 0,
+    trades: (state.tradesBy && state.tradesBy[me]) || 0,
+    siegeCaptures: (state.siegeCapturesBy && state.siegeCapturesBy[me]) || 0,
+    coached: !!state.coached
   };
 }
 

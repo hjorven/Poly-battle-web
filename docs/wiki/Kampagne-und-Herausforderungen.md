@@ -4,7 +4,7 @@
 
 ## Kampagne
 
-Zehn Missionen mit festem Aufbau. Ziel erreicht = 1 Stern, schneller als die Vorgaben = 2 oder 3 Sterne. Jede Mission schaltet die nächste frei.
+Missionen mit festem Aufbau. Ziel erreicht = 1 Stern, schneller als die Vorgaben = 2 oder 3 Sterne. Jede Mission schaltet die nächste frei.
 
 | Nr. | Mission | Ziel | Stamm | Karte | Gegner | 2 / 3 Sterne bis Runde |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -16,8 +16,11 @@ Zehn Missionen mit festem Aufbau. Ziel erreicht = 1 Stern, schneller als die Vor
 | 6 | **Feuertaufe** | Besiege 8 gegnerische Einheiten. | Vengir | Klein, Pangäa | 2, Normal, ohne Schonfrist | 15 / 11 |
 | 7 | **Belagerung** | Erobere eine gegnerische Hauptstadt. | Oumaji | Klein, Kontinente | 1, Normal | 20 / 14 |
 | 8 | **Gelehrte** | Erforsche 15 Technologien. | Ai-Mo | Normal, Kontinente | 2, Normal | 22 / 17 |
-| 9 | **Standhaft** | Überlebe 20 Runden. | Quetzali | Klein, Pangäa | 2, Normal, ohne Schonfrist | 3 bzw. 5 Städte am Ende |
+| 9 | **Standhaft** | Überlebe 20 Runden. | Quetzali | Klein, Pangäa | 2, Normal, ohne Schonfrist | Sterne für 3 bzw. 5 Städte am Ende |
 | 10 | **Großreich** | Besiege alle Gegner. | Yădakk | Normal, Kontinente | 3, Normal | 50 / 35 |
+| 11 | **Handelsweg** | Verdiene 25 Sterne durch Handel mit Händlerkarren. | Yădakk | Klein, Kontinente | 1, Leicht | 18 / 13 |
+| 12 | **Mauern brechen** | Erobere die ummauerte Hauptstadt des Gegners. | Imperius | Klein, Pangäa | 1, Normal, ohne Schonfrist | 22 / 15 |
+| 13 | **Wacht an der Grenze** | Überlebe 15 Runden. | Quetzali | Klein, Pangäa | 2, Normal, ohne Schonfrist | Sterne: keine Stadt verlieren, mindestens 2 Wachtürme |
 
 ## Wochen-Herausforderung
 

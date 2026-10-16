@@ -383,6 +383,21 @@ await test('Gewählte Einheit verschwindet (besiegt, gehandelt): kein Absturz', 
   await page.context().close();
 });
 
+await test('Kampagne: neue Mission startet mit Rammbock und Ziel-Leiste', async () => {
+  const page = await open('pc');
+  await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('pb_profile_v1') || '{"v":1}'); p.v = 1; p.campaign = Object.fromEntries(Array.from({ length: 11 }, (_, i) => ['m' + (i + 1), 1])); localStorage.setItem('pb_profile_v1', JSON.stringify(p)); });
+  await page.reload();
+  await page.waitForTimeout(300);
+  await page.click('[data-mtab="campaign"]');
+  await page.click('[data-mission="m12"]');
+  await page.waitForFunction(() => window.__pb && window.__pb.app.state);
+  await page.waitForTimeout(300);
+  assert.ok(await page.evaluate(() => window.__pb.app.state.units.some(u => u.owner === 'player_1' && u.type === 'ram')), 'Rammbock da');
+  assert.match(await page.textContent('#mission-bar'), /Mauern brechen/);
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);

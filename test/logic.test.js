@@ -631,7 +631,7 @@ test('Kosmetik: Freischaltung über Stufe/Erfolg, gesperrte Wahl fällt auf Stan
 });
 
 test('Kampagne: Fortschritt, Sterne nach Runden, Freischaltung, Profil', () => {
-  assert.strictEqual(K.MISSIONS.length, 10);
+  assert.strictEqual(K.MISSIONS.length, 13);
   const st = R.createGame(4, 2, { mapSize: 'small' });
   K.prepareMission(st, K.missionById('m1'));
   let s = K.missionStatus(st);
@@ -2332,6 +2332,33 @@ test('Schmelzhütte: +1 je Berg daneben, +2 wenn dort eine Mine steht', () => {
   assert.strictEqual(R.improvementIncome(st, 'player_1', 'forge', 5, 4), 1 + 2);
   st.improvements['6,4'] = 'mine';
   assert.strictEqual(R.improvementIncome(st, 'player_1', 'forge', 5, 4), 1 + 1 + 2);
+});
+
+test('Neue Missionen: Vorbereitung, Handel, Mauern, Wacht; neue Erfolge', () => {
+  for (const id of ['m11', 'm12', 'm13']) {
+    const m = K.missionById(id);
+    const st = R.createGame(500, m.setup.count, { tribe: m.setup.tribe, ai: Array.from({ length: m.setup.count - 1 }, (_, k) => 'player_' + (k + 2)), aiLevel: m.setup.aiLevel, mapSize: m.setup.mapSize, mapType: m.setup.mapType });
+    K.prepareMission(st, m);
+    const s = K.missionStatus(st);
+    assert.ok(s && !s.done, id + ' läuft');
+    if (id === 'm11') {
+      assert.ok(st.techs.player_1.includes('trade'), 'Handel erforscht');
+      st.tradeStarsBy = { player_1: 25 };
+      assert.ok(K.missionStatus(st).done);
+    }
+    if (id === 'm12') {
+      assert.ok(st.units.some(u => u.owner === 'player_1' && u.type === 'ram'), 'Rammbock zum Start');
+      assert.ok(st.cities.some(c => c.owner === 'player_2' && c.isCapital && c.rewards && c.rewards[3] === 'wall'), 'Mauer');
+    }
+    if (id === 'm13') {
+      st.round = 16;
+      assert.ok(K.missionStatus(st).done);
+      assert.strictEqual(K.missionStatus(st).stars, 2, 'ohne Verlust, ohne Türme');
+    }
+  }
+  const p = P.emptyProfile();
+  const res = P.recordGame(p, { won: true, vsAi: true, aiLevel: 'hard', mode: 'bot', score: 1, round: 30, trades: 5, siegeCaptures: 1, coached: false, techs: 1, techTotal: 99, peakCities: 1, kills: 0, captures: 0, trained: 0, monuments: 0, lighthouses: 0, ruins: 0 });
+  for (const a of ['trader', 'breaker', 'selfmade']) assert.ok(res.achievements.includes(a), a);
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);

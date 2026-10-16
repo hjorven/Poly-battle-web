@@ -1146,7 +1146,7 @@ function missionTick() {
   const s = K.missionStatus(st);
   if (!s) { ui.showMission(null); return; }
   const m = s.mission;
-  const par = m.par ? ` · 2 Sterne bis Runde ${m.par[0]}, 3 bis Runde ${m.par[1]}` : ' · Sterne für 3 bzw. 5 Städte am Ende';
+  const par = m.par ? ` · 2 Sterne bis Runde ${m.par[0]}, 3 bis Runde ${m.par[1]}` : ' · ' + (m.starHint || 'Sterne für 3 bzw. 5 Städte am Ende');
   ui.showMission(`<b>${esc2(m.title)}</b>: ${esc2(m.goal)} (${Math.min(s.have, s.need)}/${s.need})${par}`, s.have / s.need);
   if (s.done && !st.winner) {
     st.missionStars = s.stars;
