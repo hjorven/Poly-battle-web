@@ -307,6 +307,10 @@ export function improvementIncome(state, owner, type, q, r) {
       const each = def.adjacent[imp] ?? (def.adjacent['*'] && imp !== type && !IMPROVEMENTS[imp].monument ? def.adjacent['*'] : 0);
       n += each;
     }
+    // Schmelzhütte: auch ein Berg ohne Mine daneben bringt etwas.
+    if (def.adjacentTerrain) for (const [nq, nr] of neighbors(q, r)) {
+      if (!improvementAt(state, nq, nr) && ownLand(state, owner, nq, nr)) n += def.adjacentTerrain[terrainAt(state, nq, nr)] || 0;
+    }
     // Markt: genutzte Rohstoffe daneben zählen wie Gebäude.
     if (def.resources) for (const [nq, nr] of neighbors(q, r)) if (resourceAt(state, nq, nr) && ownLand(state, owner, nq, nr)) n += def.adjacent['*'];
     s += def.max ? Math.min(def.max, n) : n;

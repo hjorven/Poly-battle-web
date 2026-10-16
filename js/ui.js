@@ -1022,7 +1022,7 @@ const IMP_EFFECT = {
   temple: '+2 Sterne pro Runde',
   airfield: '+1 Stern pro Runde, Luft-Einheiten ausbilden',
   mill: '+1 Stern, +1 je angrenzender Farm',
-  forge: '+1 Stern, +2 je angrenzender Mine',
+  forge: '+1 Stern, +1 je angrenzendem Berg, +2 wenn dort eine Mine steht',
   market: '+1 Stern je angrenzendem Gebäude oder Rohstoff (bis 5)',
   fort: 'Einheiten darauf verteidigen dreifach',
   monastery: '+2 Sterne, Einheiten im Gebiet heilen mehr',
