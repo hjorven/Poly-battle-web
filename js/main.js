@@ -1452,9 +1452,11 @@ async function startOnline() {
     // Panels/Dialoge auf verwaiste Objekte zeigen lassen.
     if (!validState(match.game_state)) return;
     if ((match.game_state.rev || 0) > (app.state?.rev || 0)) {
+      const wasMine = myTurn();
       adopt(match.game_state);
       app.busy = false;
       render.syncBoard(app.state, viewer());
+      if (!wasMine && myTurn()) notifyTurn();
     }
     refresh();
   });
@@ -1474,6 +1476,26 @@ function allSeated(match) {
   app.humanSeats = humans.length;
   return humans.every(h => joined.includes(h));
 }
+
+// --- Online: Bescheid geben, wenn man am Zug ist ----------------------------------
+const BASE_TITLE = document.title;
+function notifyTurn() {
+  sfx('promote');
+  if (!document.hidden) { ui.toast('Du bist am Zug', 'good'); return; }
+  // Im Hintergrund: Tab-Titel blinkt, dazu eine Mitteilung, wenn erlaubt.
+  let on = false;
+  clearInterval(app.titleBlink);
+  app.titleBlink = setInterval(() => { on = !on; document.title = on ? 'Du bist am Zug – Poly Battle' : BASE_TITLE; }, 1000);
+  try {
+    if (P.notifyEnabled() && 'Notification' in window && Notification.permission === 'granted') {
+      const n = new Notification('Poly Battle', { body: `Du bist am Zug (Runde ${app.state.round})`, tag: 'pb-turn' });
+      n.onclick = () => { window.focus(); n.close(); };
+    }
+  } catch (e) { /* manche Browser erlauben Mitteilungen nur für installierte Web-Apps */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && app.titleBlink) { clearInterval(app.titleBlink); app.titleBlink = null; document.title = BASE_TITLE; }
+});
 
 async function copyLink() {
   try {
@@ -1685,7 +1707,7 @@ function boot() {
     AP.open();
   });
 
-  window.__pb = { app, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera };
+  window.__pb = { app, notifyTurn, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera };
 }
 
 boot();

@@ -24,6 +24,8 @@ Zwischen den Zügen erscheint ein Übergabe-Bildschirm, damit niemand die Karte 
 
 KI-Gegner in Online-Partien rechnet das Gerät des Spielers, der gerade seinen Zug beendet hat.
 
+**Wenn du dran bist:** Kommt der Zug deines Mitspielers an, hörst du einen Ton. Liegt der Tab im Hintergrund, blinkt sein Titel „Du bist am Zug“. Unter Spieleinstellungen, „Mitteilung, wenn du online am Zug bist“, kannst du zusätzlich Browser-Mitteilungen einschalten. Auf iPad und iPhone zeigt Safari Mitteilungen nur für installierte Web-Apps, dort bleiben Ton und Titel.
+
 ## Herausforderungen und Kampagne
 
 Details zu Missionen und Wochenregeln: [Kampagne und Herausforderungen](Kampagne-und-Herausforderungen).
