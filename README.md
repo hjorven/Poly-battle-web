@@ -76,7 +76,7 @@ More on the wiki page [Technical Overview](https://github.com/hjorven/Poly-battl
 
 ## Online and privacy
 
-Clients have no direct access to the tables. Reading and writing only happens through database functions that check who is playing, whose turn it is and whether names are plausible. Running matches are only visible to their players; after each move the database only sends a ping via Realtime, and the client then fetches the state through a checked function. Challenge scores only count once `scripts/verify-scores.mjs` (GitHub Actions, every 10 minutes, secret `SUPABASE_SERVICE_ROLE_KEY`) has replayed the game from the submitted move log (`js/actionlog.js`). Player IDs are stored in the database only as SHA-256 checksums. Stored are game states, name, profile data and scores – no email addresses, no account.
+Clients have no direct access to the tables. Reading and writing only happens through database functions that check who is playing, whose turn it is and whether names are plausible. Running matches are only visible to their players; after each move the database only sends a ping via Realtime, and the client then fetches the state through a checked function. Challenge scores only count once `scripts/verify-scores.mjs` (GitHub Actions, every 10 minutes, secret `SUPABASE_SERVICE_ROLE_KEY`) has replayed the game from the submitted move log (`js/actionlog.js`). Player IDs are stored in the database only as SHA-256 checksums. Stored are game states, name, profile data and scores – no email addresses, no account. The privacy policy for players is [datenschutz.html](datenschutz.html) (German, linked in the game under "Anleitung").
 
 ## Contributing
 

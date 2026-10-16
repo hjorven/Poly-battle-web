@@ -353,6 +353,7 @@ button:focus-visible {
 .card h2 { font-size: 20px; letter-spacing: -0.02em; }
 .tagline { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
 .footnote { color: var(--muted); font-size: 12px; margin-top: 16px; text-align: center; }
+.footnote a { color: inherit; }
 
 .menu-buttons { display: flex; flex-direction: column; gap: 10px; }
 
