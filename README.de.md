@@ -76,7 +76,7 @@ Die Doku gibt es auf Englisch (Hauptsprache) und Deutsch. Das Spiel selbst ist a
 
 ## Online und Datenschutz
 
-Clients haben keinen direkten Zugriff auf die Tabellen. Gelesen und geschrieben wird nur über Datenbank-Funktionen, die prüfen, wer mitspielt, wer am Zug ist und ob Namen plausibel sind. Laufende Partien sieht nur, wer mitspielt; nach jedem Zug schickt die Datenbank über Realtime nur eine Klingel, den Stand holt sich der Client geprüft ab. Punkte der Herausforderungen zählen erst, wenn `scripts/verify-scores.mjs` (GitHub Actions, alle 10 Minuten, Secret `SUPABASE_SERVICE_ROLE_KEY`) die Partie aus dem mitgeschickten Zugprotokoll (`js/actionlog.js`) nachgespielt hat. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Gespeichert werden Spielstände, Name, Profildaten und Punkte – keine E-Mail-Adressen, kein Konto.
+Clients haben keinen direkten Zugriff auf die Tabellen. Gelesen und geschrieben wird nur über Datenbank-Funktionen, die prüfen, wer mitspielt, wer am Zug ist und ob Namen plausibel sind. Laufende Partien sieht nur, wer mitspielt; nach jedem Zug schickt die Datenbank über Realtime nur eine Klingel, den Stand holt sich der Client geprüft ab. Punkte der Herausforderungen zählen erst, wenn `scripts/verify-scores.mjs` (GitHub Actions, alle 10 Minuten, Secret `SUPABASE_SERVICE_ROLE_KEY`) die Partie aus dem mitgeschickten Zugprotokoll (`js/actionlog.js`) nachgespielt hat. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Gespeichert werden Spielstände, Name, Profildaten und Punkte – keine E-Mail-Adressen, kein Konto. Die Datenschutzerklärung für Spieler steht in [datenschutz.html](datenschutz.html) (im Spiel verlinkt unter „Anleitung“).
 
 ## Mitmachen
 
