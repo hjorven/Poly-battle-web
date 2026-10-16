@@ -344,7 +344,7 @@ export const IMPROVEMENTS = {
   airfield: { name: 'Ballonplatz', tech: 'ballooning', terrain: ['field'], cost: 8, pop: 1 },
   // Gebäude mit Nachbarschaftsbonus (siehe rules.js: improvementIncome).
   mill: { name: 'Windmühle', tech: 'mills', terrain: ['field'], cost: 6, pop: 1, adjacent: { farm: 1 } },
-  forge: { name: 'Schmelzhütte', tech: 'smelting', terrain: ['field'], cost: 6, pop: 1, adjacent: { mine: 2 } },
+  forge: { name: 'Schmelzhütte', tech: 'smelting', terrain: ['field'], cost: 6, pop: 1, adjacent: { mine: 2 }, adjacentTerrain: { mountain: 1 } },
   market: { name: 'Markt', tech: 'markets', terrain: ['field'], cost: 8, pop: 0, adjacent: { '*': 1 }, max: 5, resources: true },
   // Wachturm: weite Sicht; Einheiten darauf und daneben verteidigen anderthalbfach.
   watchtower: { name: 'Wachturm', tech: 'shields', terrain: ['field', 'mountain'], cost: 5, pop: 0, sight: 3 },

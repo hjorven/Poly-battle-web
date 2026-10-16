@@ -2,11 +2,15 @@ import * as R from './rules.js';
 import { UNITS, IMPROVEMENTS, TECHS, BRIDGE, ROAD } from './config.js';
 import { hexDistance, hk, forEachHex } from './hex.js';
 
-const UNIT_VALUE = {
+const UNIT_VALUE_BASE = {
   warrior: 2, archer: 3, rider: 3, defender: 3, swordsman: 5,
   catapult: 5, mindbender: 4, knight: 6, giant: 7,
   boat: 3, ship: 5, battleship: 7, settler: 1, spy: 2
 };
+// Wert einer Einheit für die KI; fehlende Arten nach ihren Kosten (nie NaN).
+const UNIT_VALUE = new Proxy(UNIT_VALUE_BASE, {
+  get: (t, k) => t[k] ?? (UNITS[k] ? Math.max(1, Math.round(UNITS[k].cost * 0.7)) : 2)
+});
 
 function attackScore(state, attacker, defender) {
   if (UNITS[attacker.type].abilities.includes('convert')) {
@@ -210,6 +214,34 @@ function bestSettleMove(state, s) {
   return best;
 }
 
+// Gedankenbeuger: neben möglichst viele verletzte eigene Einheiten (heilt sie zu
+// Rundenbeginn) oder neben einen bekehrbaren Gegner; sonst bei der Armee bleiben.
+function healerMove(state, mb) {
+  const reach = R.reachableMap(state, mb);
+  const friends = state.units.filter(u => u.owner === mb.owner && u !== mb && UNITS[u.type].atk > 0);
+  const foes = state.units.filter(e => R.hostile(state, mb.owner, e.owner) && e.owner && !R.graceProtects(state, mb.owner, e.owner));
+  let best = null;
+  const here = [[mb.q, mb.r, 0], ...[...reach.keys()].map(k => [...k.split(',').map(Number), 1])];
+  for (const [q, r] of here) {
+    if ((q !== mb.q || r !== mb.r) && R.unitAt(state, q, r)) continue;
+    let score = 0;
+    for (const f of friends) {
+      const d = hexDistance(q, r, f.q, f.r);
+      if (d === 1) score += 1 + (R.hpCap(f) - f.hp) * 0.5;
+    }
+    for (const e of foes) {
+      const d = hexDistance(q, r, e.q, e.r);
+      if (d === 1) score += UNIT_VALUE[e.type] * 0.8 - (UNITS[e.type].atk > 0 ? 1.5 : 0);
+      if (d === 0) score -= 99;
+    }
+    // Nicht allein vorpreschen: Nähe zur Armee zählt.
+    const near = friends.length ? Math.min(...friends.map(f => hexDistance(q, r, f.q, f.r))) : 0;
+    score -= Math.max(0, near - 1) * 1.2;
+    if (!best || score > best.score) best = { unit: mb, q, r, score };
+  }
+  return best && (best.q !== mb.q || best.r !== mb.r) ? best : null;
+}
+
 // Händlerkarren: zur lohnendsten Stadt fahren (eigene, nicht die Heimat, oder
 // fremde im Frieden) und dort handeln.
 function cartMove(state, cart) {
@@ -377,10 +409,13 @@ export function botStep(state, player) {
     if (u.acted) continue;
     for (const t of R.attackTargets(state, u)) {
       if (R.graceProtects(state, player, t.owner)) continue;
-      const res = R.battleResults(state, u, t);
-      if (res.damage < t.hp && res.retaliation >= u.hp) continue;
+      const converts = UNITS[u.type].abilities.includes('convert');
+      const res = converts ? null : R.battleResults(state, u, t);
+      // Bekehren hat keinen Gegenschlag: nur wertlose Ziele auslassen.
+      if (converts && UNIT_VALUE[t.type] < 2) continue;
+      if (!converts && res.damage < t.hp && res.retaliation >= u.hp) continue;
       // Leichte KI greift nur an, wenn sie dabei mehr austeilt als einsteckt.
-      if (easy && res.damage < t.hp && res.damage <= res.retaliation) continue;
+      if (!converts && easy && res.damage < t.hp && res.damage <= res.retaliation) continue;
       const s = attackScore(state, u, t);
       if (!bestAttack || s > bestAttack.score) bestAttack = { kind: 'attack', attacker: u, defender: t, score: s };
     }
@@ -425,6 +460,11 @@ export function botStep(state, player) {
       !R.graceProtects(state, player, e.owner));
     if (enemyCityNear && unlocked.includes('ram') && !mine.some(u => u.type === 'ram') && stars >= R.unitCost(state, player, 'ram') + 2 &&
       R.canTrain(state, c, 'ram', player).ok) return { kind: 'train', city: c, type: 'ram' };
+    // Ab 6 Kämpfern ein Gedankenbeuger als Heiler und Bekehrer.
+    if (army.length >= 6 && unlocked.includes('mindbender') && !mine.some(u => u.type === 'mindbender') &&
+      stars >= R.unitCost(state, player, 'mindbender') + 2 && R.canTrain(state, c, 'mindbender', player).ok) {
+      return { kind: 'train', city: c, type: 'mindbender' };
+    }
     // Händlerkarren: einer zur Zeit, wenn es eine zweite Stadt gibt.
     if (unlocked.includes('cart') && !mine.some(u => u.type === 'cart') && R.citiesFor(state, player).length >= 2 &&
       stars >= R.unitCost(state, player, 'cart') + (persona === 'merchant' ? 2 : 8) && R.canTrain(state, c, 'cart', player).ok) {
@@ -468,6 +508,11 @@ export function botStep(state, player) {
       if (mv) return mv;
       continue;
     }
+    if (u.type === 'mindbender') {
+      const mv = healerMove(state, u);
+      if (mv) return { kind: 'move', unit: mv.unit, q: mv.q, r: mv.r };
+      continue;
+    }
     if (u.type === 'cart') {
       if (R.tradeOption(state, u)) return { kind: 'trade', unit: u };
       const mv = cartMove(state, u);
@@ -500,10 +545,9 @@ export function botStep(state, player) {
     'climbing', 'mining', 'shields', 'forestry', 'mathematics', 'meditation',
     'philosophy', 'smithery', 'construction', 'freespirit', 'chivalry', 'crossbows', 'pikes',
     'trade', 'mills', 'smelting', 'markets', 'spiritualism', 'fishing', 'sailing', 'ramming', 'navigation', 'aquatism',
-    'scholarship', 'horseshoes', 'engineering', 'cartography', 'fishfarming', 'diplomacy',
+    'scholarship', 'horseshoes', 'engineering', 'ballooning', 'cartography', 'fishfarming', 'diplomacy',
     'banking', 'steel', 'planning', 'medicine', 'tournaments', 'printing', 'seapower', 'harbors', 'espionage',
-    'paladins', 'plate', 'rotation', 'guilds', 'marksmen', 'monastic', 'castles', 'naval', 'shipyards',
-    'ballooning', 'airships'
+    'paladins', 'airships', 'plate', 'rotation', 'guilds', 'marksmen', 'monastic', 'castles', 'naval', 'shipyards'
   ];
   if (R.citiesFor(state, player).some(c => R.coastal(state, c))) {
     techOrder.splice(techOrder.indexOf('roads') + 1, 0, ...techOrder.splice(techOrder.indexOf('fishing'), 2));
