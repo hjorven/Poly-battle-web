@@ -24,6 +24,8 @@ Rundenbasierte Eroberung im Browser, angelehnt an *The Battle of Polytopia*: Gr�
 - **Bedienung** mit Maus und Tastatur oder Touch; Ziehen und Angreifen brauchen zwei Tipps, damit nichts aus Versehen passiert. Kein Rückgängig – jeder Zug zählt.
 - **Hell oder dunkel:** folgt der Systemeinstellung oder ist fest wählbar.
 
+![Hauptmenü in der dunklen Darstellung: Spielmodi, Tages- und Wochen-Herausforderung, Stammwahl und Spieleinstellungen](docs/menu.png)
+
 ![Gewählte Hauptstadt: Schild mit Stufe und Einkommen an der Stadt, unten die Werkzeugreihe mit Ausbauen, Bevölkerung und Einheiten](docs/city.png)
 
 ![Bau-Fenster: das Stadtgebiet in 3D mit Ertrag je Feld, rechts die Bauoptionen für das gewählte Feld](docs/build.png)
