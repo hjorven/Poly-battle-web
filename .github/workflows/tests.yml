@@ -1,0 +1,25 @@
+# Bei jedem Pull Request und jedem Push auf main: Logik- und Browser-Tests.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Logiktests
+        run: npm test
+      - name: Chromium für die Browser-Tests
+        run: npx playwright install --with-deps chromium
+      - name: Browser-Tests
+        run: npm run test:browser

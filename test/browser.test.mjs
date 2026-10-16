@@ -95,6 +95,11 @@ async function test(name, fn) {
   } catch (e) {
     failed++;
     console.log(`FAIL  ${name}\n      ${String(e.message).split('\n')[0]}`);
+    // Auf GitHub als Hinweis an den Lauf hängen, dann steht der Fehler direkt im PR.
+    if (process.env.GITHUB_ACTIONS) {
+      const msg = String(e.message).replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A').slice(0, 1500);
+      console.log(`::error title=${name.replace(/[,:]/g, ' ')}::${msg}`);
+    }
   }
 }
 
@@ -146,12 +151,65 @@ await test('Obere Leiste: alle Knöpfe sichtbar von 360 bis 1400 px', async () =
     await page.route(/supabase\.co/, r => r.fulfill({ status: 200, body: '[]' }));
     await page.goto(URL_);
     await startGame(page);
-    for (const id of ['techBtn', 'overviewBtn', 'menuBtn', 'endTurnBtn']) {
-      const r = await page.$eval('#' + id, e => { const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, w: b.width }; });
-      assert.ok(r.w > 0 && r.l >= 0 && r.r <= w + 0.5, `${w} px: ${id} nicht ganz sichtbar`);
-    }
+    const box = id => page.$eval('#' + id, e => { const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, w: b.width }; });
+    const visible = async ids => {
+      for (const id of ids) {
+        const r = await box(id);
+        assert.ok(r.w > 0 && r.l >= 0 && r.r <= w + 0.5, `${w} px: ${id} nicht ganz sichtbar`);
+      }
+    };
+    // Handy: zugeklappt alles in einer Zeile, der Rest hinter „Mehr“.
+    if (await page.evaluate(() => document.documentElement.classList.contains('phone'))) {
+      await visible(['techBtn', 'moreBtn', 'endTurnBtn']);
+      assert.strictEqual((await box('techBtn')).t, (await box('endTurnBtn')).t, `${w} px: Leiste bricht um`);
+      await page.click('#moreBtn');
+      await visible(['overviewBtn', 'menuBtn', 'coachBtn', 'mapToggleBtn', 'camToggleBtn']);
+    } else await visible(['techBtn', 'overviewBtn', 'menuBtn', 'endTurnBtn']);
     await ctx.close();
   }
+});
+
+await test('Handy-Ansicht: nach Gerät, nicht nach Fensterbreite oder Drehung', async () => {
+  const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36';
+  const cases = [
+    ['PC, schmales Fenster', { viewport: { width: 390, height: 800 } }, false],
+    ['iPad quer', DEVICES.ipadQuer, false],
+    ['iPad hoch', DEVICES.ipadHoch, false],
+    ['Handy hoch', DEVICES.handy, true],
+    ['Handy quer', { viewport: { width: 760, height: 360 }, screen: { width: 760, height: 360 }, hasTouch: true, isMobile: true, userAgent: android }, true]
+  ];
+  for (const [name, opts, want] of cases) {
+    const ctx = await browser.newContext(opts);
+    const page = await ctx.newPage();
+    await page.goto(URL_);
+    assert.strictEqual(await page.evaluate(() => document.documentElement.classList.contains('phone')), want, name);
+    await ctx.close();
+  }
+});
+
+await test('Handy: Minikarte auf Wunsch, Ansicht im Menü umstellbar', async () => {
+  const page = await open('handy');
+  await startGame(page);
+  assert.ok(!(await page.isVisible('#minimap')), 'Minikarte zuerst aus');
+  assert.ok(!(await page.isVisible('#camera-pad')), 'Kamera-Knöpfe zuerst aus');
+  assert.ok(!(await page.isVisible('#player-strip')), 'Stämme zuerst eingeklappt');
+  await page.click('#moreBtn');
+  assert.ok(await page.isVisible('#player-strip'), 'Stämme unter „Mehr“');
+  await page.click('#mapToggleBtn');
+  assert.ok(await page.isVisible('#minimap'), 'Minikarte eingeschaltet');
+  await page.click('#menuBtn');
+  assert.ok(!(await page.$eval('#topbar', e => e.classList.contains('more-open'))), 'Mehr klappt nach Menü zu');
+  await page.click('[data-mtab="play"]').catch(() => {});
+  await page.click('[data-view-pick="large"]');
+  assert.ok(!(await page.evaluate(() => document.documentElement.classList.contains('phone'))), 'Groß gewählt');
+  await page.reload();
+  await page.waitForTimeout(300);
+  assert.ok(!(await page.evaluate(() => document.documentElement.classList.contains('phone'))), 'Wahl bleibt nach Neuladen');
+  await page.click('[data-mtab="play"]').catch(() => {});
+  await page.click('[data-view-pick="auto"]');
+  assert.ok(await page.evaluate(() => document.documentElement.classList.contains('phone')), 'Automatisch erkennt das Handy');
+  noErrors(page);
+  await page.context().close();
 });
 
 await test('Stadt: Schild und Werkzeugreihe, Bau-Fenster in 3D, Farm bauen', async () => {
@@ -355,8 +413,14 @@ await test('Wiederholung: nach Spielende abspielen, Regler, Tempo', async () => 
   await page.waitForTimeout(1200);
   const v = Number(await page.$eval('#rpSlider', e => e.value));
   assert.ok(v > 2, 'Zeitraffer läuft: ' + v);
-  await page.click('#rpPlay');
-  assert.match(await page.textContent('#rpPlay'), /Abspielen/);
+  // Bei kurzen Partien kann der Zeitraffer schon am Ende stehen und hat
+  // selbst angehalten; dann würde ein Klick ihn neu starten. Endet er genau
+  // zwischen Lesen und Klick, startet der Klick ihn neu – dann noch einmal anhalten.
+  for (let i = 0; i < 3 && /Anhalten/.test(await page.textContent('#rpPlay')); i++) {
+    await page.click('#rpPlay');
+    await page.waitForTimeout(100);
+  }
+  assert.match(await page.textContent('#rpPlay'), /bspielen/);
   await page.click('#reviewBack');
   await page.waitForTimeout(200);
   assert.ok(!(await page.isVisible('#replay-bar')), 'Leiste weg beim Zurück');

@@ -8,6 +8,25 @@
   <script>
     // Darstellung vor dem ersten Zeichnen setzen (kein Aufblitzen): System, Hell oder Dunkel.
     try { var t = localStorage.getItem('pb_theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+    // Handy-Ansicht: entscheidet das Gerät, nicht die Fensterbreite oder Drehung. So bleiben
+    // PC (auch im schmalen Fenster) und Tablet unverändert, ein Handy quer bleibt Handy.
+    // Erkennung: Handy-Browser laut Kennung oder Touch-Gerät mit kurzer Bildschirmseite unter 600 px.
+    // Wahl im Menü (pb_view: auto, phone, large) geht vor.
+    window.pbView = function (pref) {
+      var phone;
+      if (pref === 'phone') phone = true;
+      else if (pref === 'large') phone = false;
+      else {
+        var ua = navigator.userAgent || '';
+        var uaPhone = /iPhone|iPod|Windows Phone|IEMobile|Opera Mini/.test(ua) || (/Android/.test(ua) && /Mobile/.test(ua));
+        var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+        var shortSide = Math.min(screen.width || 9999, screen.height || 9999);
+        phone = uaPhone || (coarse && shortSide < 600);
+      }
+      document.documentElement.classList.toggle('phone', phone);
+      return phone;
+    };
+    try { window.pbView(localStorage.getItem('pb_view') || 'auto'); } catch (e) { window.pbView('auto'); }
   </script>
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,6 89,28 89,72 50,94 11,72 11,28' fill='%2318181b'/></svg>">
@@ -37,6 +56,9 @@
       <button id="soundBtn" class="btn ghost small" title="Ton an/aus" aria-label="Ton an/aus"></button>
       <button id="menuBtn" class="btn ghost small" title="Menü">Menü</button>
       <button id="coachBtn" class="btn ghost" title="Tipp: Was würde die KI an deiner Stelle tun? (zählt dann nicht für die Bestenliste)">Tipp</button>
+      <button id="mapToggleBtn" class="btn ghost phone-only" aria-pressed="false">Minikarte</button>
+      <button id="camToggleBtn" class="btn ghost phone-only" aria-pressed="false">Kamera</button>
+      <button id="moreBtn" class="btn ghost phone-only" aria-expanded="false" aria-label="Mehr" title="Weitere Knöpfe"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <button id="idleBtn" class="btn ghost idle-btn hidden" title="Zur nächsten Einheit, die noch handeln kann">Bereit</button>
       <button id="endTurnBtn" class="btn primary" disabled>Zug beenden</button>
     </div>
@@ -184,6 +206,14 @@
             </div>
           </div>
           <div class="setting-row">
+            <span class="setting-label">Ansicht</span>
+            <div class="seg">
+              <button data-view-pick="auto" class="chip-btn">Automatisch</button>
+              <button data-view-pick="phone" class="chip-btn">Handy</button>
+              <button data-view-pick="large" class="chip-btn">Groß</button>
+            </div>
+          </div>
+          <div class="setting-row">
             <span class="setting-label">Darstellung</span>
             <div class="seg">
               <button data-theme-pick="system" class="chip-btn">Wie System</button>
@@ -266,6 +296,7 @@
           <li><b>Sieg:</b> Im Modus Eroberung erbeutest du alle Städte der Gegner. Im Modus Perfektion gewinnt nach 30 Runden die höchste Punktzahl (Städte, Bevölkerung, Technologien, Einheiten, Erkundung, Gebäude, Ruinen, Leuchttürme, Monumente).</li>
         </ul>
         <p class="footnote">Karte verschieben: Ziehen · Zoomen: Rad/zwei Finger · Drehen/Neigen: rechte Maustaste, Zwei-Finger-Drehung, Knöpfe oder Q/E/R/F · Auswählen: Antippen · Tech-Baum: Doppeltipp setzt die Ansicht zurück</p>
+        <p class="footnote"><a href="datenschutz.html" target="_blank" rel="noopener">Datenschutz</a></p>
       </section>
     </div>
   </div>
@@ -352,6 +383,7 @@
       <p class="confirm-text" id="name-text">Mit diesem Namen erscheinst du in der Bestenliste. 3–16 Zeichen, Buchstaben, Ziffern, Leerzeichen, _ und -.</p>
       <input id="name-input" class="name-input" maxlength="16" autocomplete="nickname" />
       <div class="hint" id="name-error"></div>
+      <div class="name-extra hidden" id="name-extra"></div>
       <div class="menu-buttons">
         <button id="nameOk" class="btn primary big">Speichern</button>
         <button id="nameCancel" class="btn big">Abbrechen</button>

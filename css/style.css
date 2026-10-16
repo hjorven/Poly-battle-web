@@ -337,6 +337,8 @@ button:focus-visible {
 }
 .overlay > .card { margin: auto; flex: none; }
 .overlay.hidden { display: none; }
+.name-extra { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 4px 0 8px; }
+.name-extra.hidden { display: none; }
 
 .card {
   background: var(--panel);
@@ -351,6 +353,7 @@ button:focus-visible {
 .card h2 { font-size: 20px; letter-spacing: -0.02em; }
 .tagline { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
 .footnote { color: var(--muted); font-size: 12px; margin-top: 16px; text-align: center; }
+.footnote a { color: inherit; }
 
 .menu-buttons { display: flex; flex-direction: column; gap: 10px; }
 
@@ -1435,3 +1438,109 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
   background: var(--panel); color: var(--danger); border: 1px solid var(--border-strong);
   font-size: 15px; line-height: 1.4;
 }
+
+/* ==== Handy-Ansicht (Klasse „phone“ am <html>, gesetzt nach Gerät in index.html) ====
+   Gilt nur auf Handys, egal ob hoch oder quer. PC und Tablet bleiben wie oben.
+   Ziel: die Karte frei lassen. Oben eine schmale Leiste mit Sternen, Runde, Forschung und
+   Zug beenden; alles Weitere hinter „Mehr“. Minikarte und Kamera-Knöpfe nur auf Wunsch. */
+html:not(.phone) #topbar .phone-only { display: none; }
+html.phone #topbar { flex-wrap: nowrap; align-items: stretch; gap: 6px; padding: 6px 6px 0; padding-left: max(6px, env(safe-area-inset-left, 0px)); padding-right: max(6px, env(safe-area-inset-right, 0px)); }
+html.phone #topbar .hud-card { min-height: 44px; }
+html.phone #topbar .hud-left { order: 1; flex: none; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding: 2px 8px; }
+html.phone #topbar .hud-left .treasury { padding-right: 0; border-right: 0; gap: 5px; }
+html.phone .tr-txt { display: none; }
+html.phone .tr-num { font-size: 20px; }
+html.phone .tr-hex { width: 15px; height: 17px; }
+html.phone #topbar .round-box { display: flex; }
+html.phone #topbar #round-label { font-size: 11px; font-weight: 600; color: var(--muted); }
+html.phone #topbar #status { display: none; }
+html.phone #topbar #player-strip { display: none; }
+html.phone #topbar .top-actions {
+  order: 2; flex: 1 1 0; min-width: 0; margin-left: 0; flex-wrap: wrap; justify-content: flex-end; align-content: center; gap: 2px; padding: 2px;
+}
+html.phone #topbar .top-actions :is(.btn, #techBtn, #overviewBtn, #menuBtn, #coachBtn) { min-height: 40px; padding: 6px 8px; font-size: 14px; }
+html.phone #topbar .top-actions #endTurnBtn { order: 1; margin-left: 2px; padding: 8px 10px; font-size: 14px; }
+html.phone #topbar .top-actions :is(#techBtn, #idleBtn, #moreBtn) { order: 1; }
+html.phone #topbar .top-actions #moreBtn { width: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+html.phone #topbar .top-actions #idleBtn { padding: 6px 7px; }
+html.phone .top-actions .lbl { display: none; }
+/* Schmale Handys (bis 380 px): enger, damit alles in eine Zeile passt */
+@media (max-width: 380px) {
+  html.phone #topbar { gap: 4px; padding: 4px 4px 0; }
+  html.phone #topbar .hud-left { padding: 2px 6px; }
+  html.phone #topbar .top-actions { gap: 1px; padding: 2px 1px; }
+  html.phone #topbar .top-actions :is(.btn, #techBtn, #overviewBtn, #menuBtn, #coachBtn) { padding: 6px 6px; font-size: 13px; }
+  html.phone #topbar .top-actions #endTurnBtn { margin-left: 1px; padding: 8px 8px; font-size: 13px; }
+  html.phone #topbar .top-actions #moreBtn { width: 36px; }
+}
+/* Zugeklappt: nur Forschung, Bereit, Mehr und Zug beenden */
+html.phone #topbar:not(.more-open) :is(#overviewBtn, #soundBtn, #menuBtn, #coachBtn, #mapToggleBtn, #camToggleBtn) { display: none; }
+/* Aufgeklappt: die übrigen Knöpfe in eigener Zeile darunter, dazu die Stämme */
+html.phone #topbar.more-open { flex-wrap: wrap; }
+html.phone #topbar.more-open .top-actions::after { content: ''; order: 2; flex: 1 1 100%; height: 0; }
+html.phone #topbar.more-open .top-actions :is(#overviewBtn, #soundBtn, #menuBtn, #coachBtn, #mapToggleBtn, #camToggleBtn) { order: 3; display: inline-flex; flex: 1 1 auto; justify-content: center; }
+html.phone #topbar.more-open #player-strip { display: flex; order: 4; flex: 1 1 100%; min-width: 0; overflow-x: auto; min-height: 40px; }
+html.phone #topbar #moreBtn.active, html.phone #topbar.more-open #moreBtn { background: var(--primary-soft); }
+html.phone #topbar :is(#mapToggleBtn, #camToggleBtn).active { background: var(--primary-soft); }
+
+/* Minikarte und Kamera-Knöpfe: aus, bis man sie unter „Mehr“ einschaltet */
+html.phone:not(.show-map) #minimap, html.phone:not(.show-cam) #camera-pad { display: none; }
+html.phone #minimap { top: calc(var(--hud-h, 56px) + 6px); bottom: auto; right: 8px; width: 132px; height: 90px; }
+html.phone #camera-pad { top: calc(var(--hud-h, 56px) + 6px); bottom: auto; right: 8px; grid-template-columns: repeat(3, 40px); }
+html.phone.show-map #camera-pad { top: calc(var(--hud-h, 56px) + 104px); }
+html.phone .cam-btn { width: 40px; height: 40px; }
+html.phone #adminBtn { top: calc(var(--hud-h, 56px) + 6px); bottom: auto; right: auto; left: 8px; }
+
+/* Leisten unten über die ganze Breite, nie höher als gut die Hälfte */
+html.phone #panel.toolbar, html.phone #unit-chip {
+  left: 8px; right: 8px; width: auto; max-width: none; transform: none; margin: 0;
+  bottom: calc(6px + env(safe-area-inset-bottom, 0px)); padding: 6px;
+}
+html.phone .tool-tile { width: 100px; min-height: 70px; padding: 6px 8px; }
+/* Aufgeklappte Details nie unter die obere Leiste: innen scrollen */
+html.phone #unit-chip, html.phone #panel.toolbar { max-height: calc(100% - var(--hud-h, 56px) - 16px); overflow-y: auto; overscroll-behavior: contain; }
+html.phone #panel.city-bar, html.phone #panel.city-bar.small {
+  left: 8px; right: 8px; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); grid-template-columns: minmax(0, 1fr);
+  max-height: 50vh; max-height: 50dvh; overflow-y: auto; padding: 10px; gap: 8px;
+}
+html.phone #panel.city-bar .cp-train { grid-column: auto; }
+
+/* Hinweise und Berichte schmal halten */
+html.phone #news, html.phone #news:not(.hidden) { top: calc(var(--hud-h, 56px) + 6px); left: 8px; right: 8px; width: auto; max-height: 42%; }
+html.phone #tutor { top: auto; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); width: calc(100% - 16px); font-size: 13px; padding: 10px 12px; }
+html.phone #coach { width: calc(100% - 16px); }
+html.phone #mission-bar { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); font-size: 12px; padding: 6px 10px; }
+html.phone #review-bar { top: calc(var(--hud-h, 56px) + 6px); }
+html.phone #replay-bar { width: calc(100% - 16px); padding: 6px 8px; gap: 6px; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+html.phone #admin-panel { top: calc(var(--hud-h, 56px) + 6px); right: 8px; max-width: calc(100vw - 16px); max-height: calc(100% - var(--hud-h, 56px) - 100px); }
+
+/* Handy quer: wenig Höhe. Stadtleiste nebeneinander statt untereinander, Berichte rechts. */
+@media (orientation: landscape) {
+  html.phone #topbar .hud-card { min-height: 40px; }
+  html.phone #topbar .top-actions :is(.btn, #techBtn, #overviewBtn, #menuBtn, #coachBtn) { min-height: 36px; padding: 4px 10px; }
+  html.phone #topbar .top-actions #endTurnBtn { padding: 6px 14px; }
+  html.phone #panel.city-bar, html.phone #panel.city-bar.small {
+    grid-template-columns: minmax(180px, 230px) minmax(150px, 190px) minmax(0, 1fr); max-height: 58vh; max-height: 58dvh;
+  }
+  html.phone #panel.city-bar.small { grid-template-columns: minmax(200px, 320px); right: auto; }
+  html.phone .tool-tile { min-height: 62px; }
+  html.phone #news, html.phone #news:not(.hidden) { left: auto; width: min(320px, 45%); max-height: calc(100% - var(--hud-h, 56px) - 110px); }
+  html.phone #tutor { top: calc(var(--hud-h, 56px) + 6px); bottom: auto; width: min(460px, 60%); }
+  html.phone #coach { width: min(420px, 60%); }
+}
+
+/* Fenster (Forschung, Übersicht, Menü) auf dem Handy: fast randlos, damit mehr Inhalt passt */
+html.phone .overlay { padding: 6px; }
+html.phone .overlay > .card { padding: 12px; }
+html.phone .card-head { margin-bottom: 8px; }
+html.phone #tech-overlay .card { height: calc(100dvh - 12px); max-height: none; width: 100%; padding: 10px 12px; }
+html.phone #tech-tree { min-height: 120px; }
+@media (orientation: landscape) {
+  html.phone .card-head { margin-bottom: 4px; }
+  html.phone .card-head h2 { font-size: 18px; }
+  html.phone #tech-tree { min-height: 90px; }
+}
+/* Eigene Online-Partien: lange Stammesnamen umbrechen statt das Menü zu verbreitern */
+html.phone .match-row { flex-wrap: wrap; row-gap: 0; }
+html.phone .match-row .match-state { white-space: normal; min-width: 0; }
+html.phone .match-row .match-what { flex: 1 0 auto; }

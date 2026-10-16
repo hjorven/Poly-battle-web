@@ -1,44 +1,44 @@
-name: Idee vorschlagen
-description: Eine neue Funktion oder eine Verbesserung.
-title: "Idee: "
+name: Suggest an idea · Idee vorschlagen
+description: A new feature or an improvement. · Eine neue Funktion oder eine Verbesserung.
+title: "Idea: "
 labels: ["enhancement"]
 body:
   - type: textarea
     id: problem
     attributes:
-      label: Was fehlt dir oder stört dich?
-      description: Beschreibe die Situation im Spiel, nicht gleich die Lösung.
-      placeholder: Bei vielen Städten verliere ich den Überblick, welche noch etwas ausbilden kann.
+      label: What is missing or bothering you? · Was fehlt dir oder stört dich?
+      description: Describe the situation in the game, not the solution right away. · Beschreibe die Situation im Spiel, nicht gleich die Lösung.
+      placeholder: With many cities I lose track of which ones can still train something.
     validations:
       required: true
   - type: textarea
     id: vorschlag
     attributes:
-      label: Dein Vorschlag
-      placeholder: Ein Zeichen über Städten, die in dieser Runde noch nichts ausgebildet haben.
+      label: Your suggestion · Dein Vorschlag
+      placeholder: A marker above cities that have not trained anything this turn.
     validations:
       required: true
   - type: dropdown
     id: bereich
     attributes:
-      label: Bereich
+      label: Area · Bereich
       options:
-        - Spielregeln und Einheiten
-        - Städte und Gebäude
-        - KI
-        - Bedienung und Menüs
-        - Grafik und Animation
-        - Online und Bestenliste
-        - Kampagne und Herausforderungen
-        - Sonstiges
+        - Rules and units · Spielregeln und Einheiten
+        - Cities and buildings · Städte und Gebäude
+        - AI · KI
+        - Controls and menus · Bedienung und Menüs
+        - Graphics and animation · Grafik und Animation
+        - Online and leaderboard · Online und Bestenliste
+        - Campaign and challenges · Kampagne und Herausforderungen
+        - Other · Sonstiges
     validations:
       required: true
   - type: textarea
     id: alternativen
     attributes:
-      label: Andere Lösungen, an die du gedacht hast
+      label: Other solutions you have considered · Andere Lösungen, an die du gedacht hast
   - type: textarea
     id: bilder
     attributes:
-      label: Skizzen oder Beispiele
-      description: Bilder aus anderen Spielen oder eine schnelle Skizze helfen beim Verstehen.
+      label: Sketches or examples · Skizzen oder Beispiele
+      description: Images from other games or a quick sketch help to understand. · Bilder aus anderen Spielen oder eine schnelle Skizze helfen beim Verstehen.
