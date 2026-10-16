@@ -10,6 +10,7 @@ import { saveGame, loadGame, saveInfo, clearSave, validState } from '../js/save.
 import * as P from '../js/profile.js';
 import * as K from '../js/campaign.js';
 import * as A from '../js/admin.js';
+import * as L from '../js/actionlog.js';
 
 let passed = 0;
 let failed = 0;
@@ -2544,6 +2545,60 @@ test('Wiederholung: neue Einheiten stehen hinten, alte Aufzeichnungen bleiben le
   const keys = Object.keys(UNITS);
   assert.deepStrictEqual(keys.slice(-3), ['ranger', 'bannerman', 'fireship']);
   assert.strictEqual(keys.indexOf('settler'), keys.length - 4);
+});
+
+console.log('\n-- Bestenliste: Zugprotokoll --');
+
+// Herausforderung spielen, als ob ein Mensch die Tipps der KI befolgt, und
+// dabei mitschreiben wie main.js.
+function playLogged(kind, key, maxRounds = 99) {
+  const { state: st } = L.challengeGame(kind, key);
+  const toEntry = s => ({
+    attack: () => L.entry.attack(s.attacker, s.defender), move: () => L.entry.move(s.unit, s.q, s.r),
+    train: () => L.entry.train(s.city, s.type), buyPop: () => L.entry.buyPop(s.city),
+    improve: () => L.entry.improve(s.city, s.type, s.q, s.r), settle: () => L.entry.found(s.unit),
+    research: () => L.entry.research(s.tech), reward: () => L.entry.reward(s.city, s.choice),
+    upgrade: () => L.entry.upgrade(s.unit), trade: () => L.entry.trade(s.unit), hire: () => L.entry.hire(s.unit),
+    road: () => L.entry.road(s.q, s.r), bridge: () => L.entry.bridge(s.unit, s.dir)
+  }[s.kind]);
+  while (!st.winner && !R.isEliminated(st, 'player_1') && st.round <= maxRounds) {
+    let k = 0;
+    while (st.turn === 'player_1' && k++ < 150) {
+      const step = botStep(st, 'player_1');
+      if (!step || step.kind === 'war') break;
+      const e = toEntry(step)();
+      const res = applyStep(st, step, 'player_1');
+      if (res && res.ok === false) continue;
+      L.logAction(st, e);
+    }
+    L.logAction(st, L.entry.end());
+    R.endTurn(st);
+    L.runBots(st);
+  }
+  return st;
+}
+
+test('Zugprotokoll: Herausforderung lässt sich nachspielen, Punkte stimmen', () => {
+  const st = playLogged('daily', '2026-10-16');
+  assert.ok(st.winner, 'Partie zu Ende');
+  const me = st.finalScores && st.finalScores.player_1 != null ? st.finalScores.player_1 : R.score(st, 'player_1');
+  const re = L.replayChallenge('daily', '2026-10-16', JSON.parse(JSON.stringify(st.actions)));
+  assert.ok(!re.error, re.error);
+  assert.strictEqual(re.score, me, 'gleiche Punktzahl');
+  assert.strictEqual(re.round, st.round, 'gleiche Runde');
+  console.log(`      (${st.actions.length} Einträge, ${JSON.stringify(st.actions).length} Bytes, ${me} Punkte, ${st.actions.filter(e => e.k === 'hire').length}× angeworben)`);
+});
+
+test('Zugprotokoll: gefälschte oder unvollständige Protokolle fallen auf', () => {
+  const st = playLogged('weekly', '2026-W42');
+  const log = JSON.parse(JSON.stringify(st.actions));
+  assert.ok(!L.replayChallenge('weekly', '2026-W42', log).error, 'echtes Protokoll gilt');
+  assert.match(L.replayChallenge('weekly', '2026-W42', log.slice(0, log.length - 3)).error, /nicht zu Ende/);
+  const i = log.findIndex(e => e.k === 'train');
+  const fake = log.slice(); fake.splice(i, 0, { k: 'research', t: Object.keys(TECHS).find(t => TECHS[t].tier === 6) });
+  assert.match(L.replayChallenge('weekly', '2026-W42', fake).error, /nicht möglich/);
+  assert.match(L.replayChallenge('daily', '2026-W42', log).error || 'falsche Karte', /./, 'andere Herausforderung passt nicht');
+  assert.ok(L.replayChallenge('weekly', '2026-W42', 'kaputt').error);
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
