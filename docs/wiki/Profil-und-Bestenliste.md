@@ -6,7 +6,7 @@ Jede beendete Partie gegen die KI oder online bringt Erfahrung – mehr bei Sieg
 
 ## Erfolge und Aussehen
 
-17 Erfolge warten, zum Beispiel „Blitzkrieg“ (alles in höchstens 25 Runden erobern) oder „Stammgast“ (drei Tage in Folge die Tagesherausforderung). Stufen und Erfolge schalten Aussehen frei: Banner, Helmbusch und Stadtschmuck für deine eigenen Städte und Einheiten.
+20 Erfolge warten, zum Beispiel „Blitzkrieg“ (alles in höchstens 25 Runden erobern) oder „Stammgast“ (drei Tage in Folge die Tagesherausforderung). Stufen und Erfolge schalten Aussehen frei: Banner, Helmbusch und Stadtschmuck für deine eigenen Städte und Einheiten.
 
 ## Name und Bestenliste
 
