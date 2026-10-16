@@ -1,6 +1,7 @@
 // Nimmt die Bilder für README und Wiki im echten Spiel auf (Chromium über Playwright).
 // Fester Zufall, damit die Bilder bei jedem Lauf gleich aussehen.
-// Aufruf: npm run screenshots   → schreibt docs/screenshot.png, docs/city.png, docs/build.png
+// Aufruf: npm run screenshots   → schreibt docs/menu.png, docs/screenshot.png, docs/city.png, docs/build.png
+// Dunkle Darstellung, so wie das Spiel bei dunkler Systemeinstellung aussieht.
 // PB_CHROMIUM: eigener Chromium-Pfad, falls Playwrights eigener fehlt.
 
 import { chromium } from 'playwright';
@@ -28,7 +29,7 @@ await new Promise(r => server.listen(0, '127.0.0.1', r));
 const URL_ = `http://127.0.0.1:${server.address().port}/`;
 
 const browser = await chromium.launch({ executablePath: process.env.PB_CHROMIUM || undefined, args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
-const ctx = await browser.newContext({ viewport: { width: 1400, height: 860 }, deviceScaleFactor: 1, colorScheme: 'light' });
+const ctx = await browser.newContext({ viewport: { width: 1400, height: 860 }, deviceScaleFactor: 1, colorScheme: 'dark' });
 const page = await ctx.newPage();
 page.on('pageerror', e => console.error('Fehler auf der Seite:', e.message));
 await page.route(/supabase\.co/, route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
@@ -89,6 +90,11 @@ async function shoot(file) {
 
 await page.goto(URL_);
 await page.waitForTimeout(500);
+
+// 0. Hauptmenü, Reiter „Spielen“.
+await page.click('[data-mtab="play"]').catch(() => {});
+await page.waitForTimeout(600);
+await shoot('menu.png');
 
 // Partie gegen die KI starten und 17 Runden lang alle Stämme (auch den eigenen) von der KI spielen lassen.
 await page.click('[data-mtab="play"]').catch(() => {});

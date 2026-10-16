@@ -26,6 +26,8 @@ Turn-based conquest in the browser, inspired by *The Battle of Polytopia*: found
 - **Controls** with mouse and keyboard or touch; moving and attacking take two taps so nothing happens by accident. No undo – every move counts.
 - **Light or dark:** follows the system setting or can be set manually.
 
+![Main menu in dark mode: game modes, daily and weekly challenge, tribe selection and game settings](docs/menu.png)
+
 ![Selected capital: sign with level and income at the city, the toolbar at the bottom with Build, Population and units](docs/city.png)
 
 ![Build window: the city area in 3D with the yield of each tile, on the right the building options for the selected tile](docs/build.png)
