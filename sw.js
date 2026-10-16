@@ -3,7 +3,7 @@
 // die neue Version läuft; nur wenn das Netz fehlt, die gemerkte Kopie nehmen.
 // Online-Partien und Bestenliste (Supabase) laufen nie über den Cache.
 
-const CACHE = 'pb-v2';
+const CACHE = 'pb-v3';
 const CORE = [
   './', 'index.html', 'css/style.css',
   'js/main.js', 'js/ui.js', 'js/render.js', 'js/rules.js', 'js/ai.js', 'js/config.js', 'js/hex.js',
