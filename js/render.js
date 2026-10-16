@@ -289,6 +289,80 @@ function resourceNode(type) {
   return g;
 }
 
+// Hügel: zwei flache Kuppen am Rand, Sumpf: Tümpel und Schilf. Die Mitte
+// bleibt frei für Einheiten, Wege und Gebäude.
+function landscapeDecor(t, q, r) {
+  let s = (q * 92837111) ^ (r * 689287499);
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  const out = [];
+  const turn = rnd() * Math.PI * 2;
+  const at = (k, rad) => [Math.cos(turn + k * 2.3) * rad, Math.sin(turn + k * 2.3) * rad];
+  if (t === 'hills') {
+    const moundMat = mat(0x8c9142);
+    for (let k = 0; k < 2; k++) {
+      const m = new THREE.Mesh(geo('hillMound', () => new THREE.IcosahedronGeometry(0.26, 0)), moundMat);
+      const [x, z] = at(k, 0.5);
+      const sc = 0.8 + rnd() * 0.35;
+      m.scale.set(sc, 0.45 * sc, sc);
+      m.position.set(x, 0, z);
+      m.rotation.y = rnd() * Math.PI;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      out.push(m);
+    }
+  } else {
+    const pondMat = mat(0x3f6b5c);
+    const reedMat = mat(0x8a9a4b);
+    for (let k = 0; k < 3; k++) {
+      const [x, z] = at(k, 0.42 + rnd() * 0.12);
+      const pond = new THREE.Mesh(geo('swampPond', () => new THREE.CylinderGeometry(0.16, 0.16, 0.012, 7)), pondMat);
+      pond.position.set(x, 0.006, z);
+      pond.scale.set(1 + rnd() * 0.4, 1, 0.7 + rnd() * 0.3);
+      pond.rotation.y = rnd() * Math.PI;
+      out.push(pond);
+      for (let i = 0; i < 3; i++) {
+        const reed = new THREE.Mesh(geo('swampReed', () => new THREE.BoxGeometry(0.015, 0.16, 0.015)), reedMat);
+        reed.position.set(x + (rnd() - 0.5) * 0.18, 0.08, z + (rnd() - 0.5) * 0.18);
+        reed.rotation.z = (rnd() - 0.5) * 0.4;
+        out.push(reed);
+      }
+    }
+  }
+  return out;
+}
+
+// Söldnerlager: zwei Zelte und ein Feldzeichen ohne Teamfarbe.
+function campNode() {
+  const g = new THREE.Group();
+  const canvas = mat(0xd6c7a1);
+  const canvas2 = mat(0xb9a77c);
+  const wood = mat(0x5c4033);
+  const tent = new THREE.Mesh(geo('campTent', () => new THREE.ConeGeometry(0.2, 0.28, 4)), canvas);
+  tent.position.set(-0.08, 0.14, -0.06);
+  tent.rotation.y = Math.PI / 4;
+  g.add(tent);
+  const small = new THREE.Mesh(geo('campTent2', () => new THREE.ConeGeometry(0.14, 0.2, 4)), canvas2);
+  small.position.set(0.16, 0.1, 0.1);
+  small.rotation.y = 0.3;
+  g.add(small);
+  const pole = new THREE.Mesh(geo('campPole', () => new THREE.CylinderGeometry(0.012, 0.012, 0.5, 5)), wood);
+  pole.position.set(0.1, 0.25, -0.16);
+  g.add(pole);
+  const flag = new THREE.Mesh(geo('campFlag', () => new THREE.BoxGeometry(0.14, 0.09, 0.01)), mat(0x7f1d1d));
+  flag.position.set(0.17, 0.44, -0.16);
+  g.add(flag);
+  // Feuerstelle aus Steinen.
+  for (let k = 0; k < 5; k++) {
+    const st = new THREE.Mesh(geo('campStone', () => new THREE.IcosahedronGeometry(0.025, 0)), mat(0x78716c));
+    st.position.set(-0.12 + Math.cos(k * 1.26) * 0.06, 0.015, 0.16 + Math.sin(k * 1.26) * 0.06);
+    g.add(st);
+  }
+  for (const m of g.children) m.castShadow = true;
+  // Etwas größer als Ruinen, damit das Lager aus der Ferne auffällt.
+  g.scale.setScalar(1.5);
+  return g;
+}
+
 function ruinNode() {
   const g = new THREE.Group();
   const stone = mat(0xa8a29e);
@@ -1384,6 +1458,19 @@ function buildTiles(state) {
         snow.userData.snow = true;
         mesh.add(snow);
         decor.push(snow);
+      } else if (t === 'hills' || t === 'swamp') {
+        for (const d of landscapeDecor(t, q, r)) {
+          d.position.y += def.height / 2;
+          mesh.add(d);
+          decor.push(d);
+        }
+      }
+      const camp = state.camps ? state.camps[hk(q, r)] : null;
+      if (camp) {
+        const cn = campNode();
+        cn.position.y = def.height / 2 + 0.01;
+        mesh.add(cn);
+        decor.push(cn);
       }
       const res = state.resources ? state.resources[hk(q, r)] : null;
       if (res) {
@@ -1831,6 +1918,36 @@ function unitBody(type, color, passenger = null, plume = null) {
     put(pp.p, cyl(0.045, 0.045, 0.2, 6), mat(0xd8cfb8), -0.15, 0.44, 0).rotation.x = Math.PI / 2;
     put(pp.right, box(0.02, 0.6, 0.02), mat(WOOD_DARK), 0, 0.12, 0);
     put(pp.right, box(0.12, 0.08, 0.015), teamMat(), 0.07, 0.38, 0);
+  } else if (type === 'ranger') {
+    // Kapuzenmantel in Waldgrün, Kurzbogen auf dem Rücken, Speer in der Hand.
+    const pp = person({ armR: 0.5, torso: mat(0x3f5f2e) });
+    put(pp.p, cone(0.11, 0.17, 6), mat(0x3f5f2e), 0, pp.headY + 0.06, -0.01); // Kapuze
+    put(pp.p, box(0.12, 0.08, 0.2), teamMat(), 0.01, 0.38, 0); // Schulterband in Teamfarbe
+    spear(pp.right, 0.5);
+    const r = 0.13;
+    const bow = put(pp.p, geo('bowArcR', () => new THREE.TorusGeometry(r, 0.012, 4, 10, Math.PI)), mat(WOOD), -0.13, 0.32, 0);
+    bow.rotation.y = Math.PI / 2;
+  } else if (type === 'bannerman') {
+    // Hohe Stange mit großem Banner in Teamfarbe, sichtbar über der Gruppe.
+    const pp = person({ armR: 0.15 });
+    helmet(pp, 0x9ca3af, 0.12);
+    put(pp.p, box(0.13, 0.15, 0.19), teamMat(), 0.01, 0.27, 0); // Wappenrock
+    put(pp.right, box(0.025, 0.95, 0.025), mat(WOOD_DARK), 0, 0.38, 0);
+    put(pp.right, box(0.02, 0.26, 0.3), teamMat(), 0, 0.7, 0.16);
+    put(pp.right, cone(0.03, 0.08, 4), mat(0xe0b84d), 0, 0.89, 0);
+  } else if (type === 'fireship') {
+    // Kleiner, dunkler Kahn mit Reisigbündeln und Flammen an Deck.
+    const top = hull(0.46, 0.22, 0.1, 0x3b2a1c);
+    mast(-0.06, top, 0.38, 0.18, 0.2);
+    for (const [x, z] of [[0.1, -0.05], [0.12, 0.06], [-0.18, 0]]) {
+      put(g, cyl(0.04, 0.05, 0.08, 6), mat(0x8a6a44), x, top + 0.04, z);
+    }
+    const flame = new THREE.MeshBasicMaterial({ color: 0xff8a1f });
+    for (const [x, z, h] of [[0.1, -0.05, 0.12], [0.12, 0.06, 0.09], [-0.18, 0, 0.1]]) {
+      const f = new THREE.Mesh(cone(0.035, h, 5), flame);
+      f.position.set(x, top + 0.08 + h / 2, z);
+      g.add(f);
+    }
   } else if (hasAbility(type, 'air')) {
     airBody(type, g, put, teamMat);
     if (passenger) rider(AIR_Y + 0.1, 0);
@@ -2522,6 +2639,18 @@ export function playCombat(events) {
   if (a && d) turnNode(d, a.group.position.x - d.group.position.x, a.group.position.z - d.group.position.z);
   const t1 = hit ? strike(hit.from, hit.to, hit.dmg, '#ff8080') : 0;
   let total = t1 + 420;
+  // Brandsatz: Flammen springen auf die Nachbarn des Ziels über.
+  const splash = events.filter(ev => ev.kind === 'splash');
+  if (splash.length) {
+    setTimeout(() => {
+      for (const ev of splash) {
+        const n = unitNodes.get(ev.to);
+        if (n) n.flashUntil = performance.now() + 280;
+        floatText(nodePos(ev.to), '-' + ev.dmg, '#ff8a1f');
+      }
+    }, t1 + 140);
+    total = Math.max(total, t1 + 560);
+  }
   if (back) {
     const delay = t1 + 260;
     setTimeout(() => strike(back.from, back.to, back.dmg, '#ffd24d'), delay);

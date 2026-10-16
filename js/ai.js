@@ -393,6 +393,41 @@ function ruinStep(state, unit) {
   return null;
 }
 
+// Söldnerlager: anwerben, wenn eine Einheit darauf steht, sonst ein
+// erreichbares, noch ungenutztes Lager ansteuern (nur mit genug Sternen).
+function campStep(state, unit) {
+  if (!state.camps || unit.type === 'settler' || unit.type === 'cart') return null;
+  const stars = state.stars[unit.owner];
+  const here = R.hireOption(state, unit);
+  if (here && here.ok && stars >= here.cost + 2) return { kind: 'hire', unit };
+  if (unit.mp <= 0 || here) return null;
+  const open = Object.entries(state.camps).filter(([k, c]) => {
+    if (c.used.includes(unit.owner) || stars < R.mercCost(c.type) + 2) return false;
+    const [q, r] = k.split(',').map(Number);
+    return hexDistance(unit.q, unit.r, q, r) <= unit.mp;
+  });
+  if (!open.length) return null;
+  const reach = R.reachableMap(state, unit);
+  for (const [k] of open) {
+    if (!reach.has(k)) continue;
+    const [q, r] = k.split(',').map(Number);
+    return { kind: 'move', unit, q, r };
+  }
+  return null;
+}
+
+// Der Brander opfert sich: nur, wenn er dabei mehr zerstört, als er kostet.
+function fireshipWorth(state, ship, target) {
+  const res = R.battleResults(state, ship, target);
+  let value = res.damage >= target.hp ? UNIT_VALUE[target.type] : 0;
+  const splash = Math.max(1, Math.round(res.damage / 2));
+  for (const e of state.units) {
+    if (e === target || hexDistance(e.q, e.r, target.q, target.r) !== 1 || !R.hostile(state, ship.owner, e.owner)) continue;
+    value += e.hp <= splash ? UNIT_VALUE[e.type] : 1;
+  }
+  return value >= UNIT_VALUE.fireship;
+}
+
 export function botStep(state, player) {
   if (state.winner || state.turn !== player) return null;
   const mine = state.units.filter(u => u.owner === player);
@@ -410,6 +445,7 @@ export function botStep(state, player) {
     for (const t of R.attackTargets(state, u)) {
       if (R.graceProtects(state, player, t.owner)) continue;
       const converts = UNITS[u.type].abilities.includes('convert');
+      if (UNITS[u.type].abilities.includes('fireship') && !fireshipWorth(state, u, t)) continue;
       const res = converts ? null : R.battleResults(state, u, t);
       // Bekehren hat keinen Gegenschlag: nur wertlose Ziele auslassen.
       if (converts && UNIT_VALUE[t.type] < 2) continue;
@@ -450,7 +486,7 @@ export function botStep(state, player) {
     const stars = state.stars[player];
     const order = [
       'giant', 'paladin', 'knight', 'horsearcher', 'battleship', 'airship', 'ship', 'swordsman', 'catapult', 'crossbow', 'fireballoon',
-      'boat', 'mindbender', 'archer', 'pikeman', 'defender', 'rider', 'warrior'
+      'boat', 'mindbender', 'ranger', 'archer', 'pikeman', 'defender', 'rider', 'warrior'
     ];
     // Gemischte Armee: keine Einheitenart über 35 % der Landtruppen.
     const army = mine.filter(u => !UNITS[u.type].abilities.includes('water') && UNITS[u.type].atk > 0);
@@ -464,6 +500,11 @@ export function botStep(state, player) {
     if (army.length >= 6 && unlocked.includes('mindbender') && !mine.some(u => u.type === 'mindbender') &&
       stars >= R.unitCost(state, player, 'mindbender') + 2 && R.canTrain(state, c, 'mindbender', player).ok) {
       return { kind: 'train', city: c, type: 'mindbender' };
+    }
+    // Ab 5 Kämpfern ein Bannerträger, der die Truppe stärkt.
+    if (army.length >= 5 && unlocked.includes('bannerman') && !mine.some(u => u.type === 'bannerman') &&
+      stars >= R.unitCost(state, player, 'bannerman') + 3 && R.canTrain(state, c, 'bannerman', player).ok) {
+      return { kind: 'train', city: c, type: 'bannerman' };
     }
     // Händlerkarren: einer zur Zeit, wenn es eine zweite Stadt gibt.
     if (unlocked.includes('cart') && !mine.some(u => u.type === 'cart') && R.citiesFor(state, player).length >= 2 &&
@@ -496,6 +537,11 @@ export function botStep(state, player) {
     if (u.mp <= 0) continue;
     const r = ruinStep(state, u);
     if (r) return r;
+  }
+  for (const u of mine) {
+    if (u.acted) continue;
+    const c = campStep(state, u);
+    if (c) return c;
   }
 
   const bridge = bridgeStep(state, player);
@@ -587,6 +633,7 @@ export function applyStep(state, step, player) {
     case 'war': return R.declareWar(state, player, step.target);
     case 'upgrade': return R.upgradeUnit(state, step.unit, player);
     case 'trade': return R.trade(state, step.unit, player);
+    case 'hire': return R.hireMercenary(state, step.unit, player);
     case 'road': {
       const res = R.buildRoad(state, player, step.q, step.r);
       if (res.ok) { if (!state.aiRoadRound) state.aiRoadRound = {}; state.aiRoadRound[player] = state.round; }

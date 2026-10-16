@@ -8,7 +8,7 @@ import {
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
   canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
-  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, tradeOption, incomeFor, tileYield, improvePreview, monumentProgress, threatenedCities, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
+  hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, tradeOption, hireOption, incomeFor, tileYield, improvePreview, monumentProgress, threatenedCities, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS, toWorld, hexDistance } from './hex.js';
 import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks, project } from './render.js';
@@ -654,7 +654,7 @@ export function showUnitChip(state, unit, ctx) {
   } else setAnchor('unit', unit.q, unit.r, `
     <div class="at-head"><span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span><b>${def.name}${unit.carry ? ' (Boot)' : ''}</b>${unit.vet ? '<span class="at-vet">Veteran</span>' : ''}</div>
     ${hpBar(unit.hp, cap, unit.hp / cap <= 0.35 ? 'low' : '')}
-    <div class="at-stats">${stat('heart', `${unit.hp}/${cap}`)}${stat('sword', attackOf(state, unit))}${stat('shield', defenseOf(state, unit))}${stat('boot', `${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}`)}${def.range > 1 ? stat('bow', def.range) : ''}</div>`);
+    <div class="at-stats">${stat('heart', `${unit.hp}/${cap}`)}${stat('sword', fmtMp(attackOf(state, unit)))}${stat('shield', defenseOf(state, unit))}${stat('boot', `${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}`)}${def.range > 1 ? stat('bow', def.range) : ''}</div>`);
   const status = ctx.hint ? `<b class="uc-hint">${esc(ctx.hint)}</b>`
     : !mine ? esc(tribeName(state, unit.owner) || NAMES[unit.owner])
     : !ctx.myTurn ? 'Nicht am Zug'
@@ -664,7 +664,7 @@ export function showUnitChip(state, unit, ctx) {
   let more = '';
   if (ctx.expanded) {
     const tile = TERRAIN[terrainAt(state, unit.q, unit.r)];
-    const info = [`Gelände: ${tile.name}, Verteidigung ${defenceBonus(state, unit)}-fach`];
+    const info = [`Gelände: ${tile.name}, Verteidigung ${fmtMp(defenceBonus(state, unit))}-fach`];
     if (!unit.vet && !UNITS[unit.type].reward) info.push(`Siege ${unit.kills || 0} von 3 bis zum Veteranen (+5 Leben)`);
     if (unit.hp < cap) info.push(canRegenerate(state, unit) ? 'Heilt zu Beginn des nächsten Zuges' : 'Heilt nicht: hat angegriffen oder ein Gegner ist in Reichweite');
     if (unit.cargo) info.push(`Fracht: ${UNITS[unit.cargo.type].name}`);
@@ -696,6 +696,8 @@ function quickActions(state, unit, ctx) {
     const t = tradeOption(state, unit);
     out.push({ label: t ? `Handeln: +${t.stars}` : 'Handeln', reason: t ? '' : 'In oder neben eine andere eigene Stadt ziehen (fremde nur im Frieden)', run: () => handlers.onTrade(unit) });
   }
+  const hire = hireOption(state, unit);
+  if (hire) out.push({ label: `Anwerben: ${UNITS[hire.type].name}`, cost: hire.cost, reason: hire.ok ? '' : hire.reason, run: () => handlers.onHire(unit) });
   const city = cityAt(state, unit.q, unit.r);
   if (city && city.owner === ctx.actAs) out.push({ label: 'Stadtmenü', run: () => handlers.onSelectCity(unit.q, unit.r) });
   const up = upgradeOption(state, unit);
@@ -782,6 +784,12 @@ export function showUnitPanel(state, unit, ctx) {
           <span class="cost">${ROAD.cost} Sterne</span></button></div>`;
       }
     }
+    const hire = hireOption(state, unit);
+    if (hire) {
+      extra += `<div class="action-list"><button class="btn action" data-hire ${hire.ok ? '' : 'disabled'}>
+        <span>Söldner anwerben: ${esc(UNITS[hire.type].name)}<span class="sub">${hire.ok ? 'Ohne Technologie, einmal je Lager · verbraucht den Zug' : esc(hire.reason)}</span></span>
+        <span class="cost">${hire.cost} Sterne</span></button></div>`;
+    }
     const up = upgradeOption(state, unit);
     if (up) {
       extra += `<div class="action-list"><button class="btn action" data-upgrade ${up.ok ? '' : 'disabled'}>
@@ -835,7 +843,7 @@ export function showUnitPanel(state, unit, ctx) {
     <div class="hp-bar ${unit.hp / cap <= 0.35 ? 'low' : ''}"><div style="width:${hpPct}%"></div></div>
     <div class="stat-row">
       <div class="stat">Leben<b>${unit.hp}/${cap}</b></div>
-      <div class="stat">Angriff<b>${attackOf(state, unit)}</b></div>
+      <div class="stat">Angriff<b>${fmtMp(attackOf(state, unit))}</b></div>
       <div class="stat">Verteidigung<b>${defenseOf(state, unit)}</b></div>
       <div class="stat">Bewegung<b>${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}</b></div>
       <div class="stat">Reichweite<b>${def.range}</b></div>
@@ -843,7 +851,7 @@ export function showUnitPanel(state, unit, ctx) {
     <div class="ability-row">${abilityChips(unit.type)}</div>
     ${unit.vet ? '' : `<div class="hint">Siege: ${unit.kills || 0}/3 bis zur Beförderung (+5 Leben)</div>`}
     ${land ? '<div class="hint">Fährt als Boot; an Land gehen beendet die Bewegung.</div>' : ''}
-    <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ${tb}-fach</div>
+    <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ${fmtMp(tb)}-fach</div>
     ${switchToCity(state, unit, ctx)}
     ${todo}
     ${found}
@@ -854,6 +862,8 @@ export function showUnitPanel(state, unit, ctx) {
   wirePanel($('panel'));
   const upBtn = $('panel').querySelector('[data-upgrade]');
   if (upBtn) upBtn.addEventListener('click', () => handlers.onUpgrade(unit));
+  const hireBtn = $('panel').querySelector('[data-hire]');
+  if (hireBtn) hireBtn.addEventListener('click', () => handlers.onHire(unit));
   $('panel').querySelectorAll('[data-load]').forEach(btn => btn.addEventListener('click', () => handlers.onLoadCargo(unit, btn.dataset.load)));
   $('panel').querySelectorAll('[data-unload]').forEach(btn => btn.addEventListener('click', () => {
     const [q, r] = btn.dataset.unload.split(',').map(Number);
@@ -1933,7 +1943,7 @@ export function showOverview(state, ctx) {
       const def = UNITS[u.type];
       const st = unitStatus(u, actAs);
       return `<tr data-unit="${u.id}" tabindex="0" class="${st === 'aktiv' ? '' : 'ov-dim'}"><td><b>${def.name}</b>${u.vet ? ' <span class="ov-tag good">Veteran</span>' : ''}</td>
-        <td><span class="ov-stats">${stat('heart', `${u.hp}/${hpCap(u)}`)}${stat('sword', attackOf(state, u))}${stat('shield', defenseOf(state, u))}</span></td>
+        <td><span class="ov-stats">${stat('heart', `${u.hp}/${hpCap(u)}`)}${stat('sword', fmtMp(attackOf(state, u)))}${stat('shield', defenseOf(state, u))}</span></td>
         <td>${st === 'aktiv' ? '<span class="ov-tag">bereit</span>' : esc(st)}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="hint">Du hast keine Einheiten.</div>';
   } else if (overviewTab === 'diplomatie') {

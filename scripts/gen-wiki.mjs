@@ -5,7 +5,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import {
   UNITS, UNIT_ORDER, ABILITY_INFO, TRIBES, TRIBE_POOL, TECHS, IMPROVEMENTS, MONUMENTS, MONUMENT_POP,
-  TERRAIN, RESOURCES, CITY_REWARDS, REWARD_CHOICES, UPGRADES, ROAD, BRIDGE, WEEKLY_RULES, AI_LEVELS, PERSONAS, MAP_TYPES, MAP_SIZES
+  TERRAIN, RESOURCES, CITY_REWARDS, REWARD_CHOICES, UPGRADES, ROAD, BRIDGE, WEEKLY_RULES, AI_LEVELS, PERSONAS, MAP_TYPES, MAP_SIZES, MERC
 } from '../js/config.js';
 import { MISSIONS } from '../js/campaign.js';
 
@@ -99,9 +99,15 @@ const fmt = n => String(n).replace('.', ',');
   md += `\n## Monumente\n\nMonumente sind kostenlos, jeder Stamm baut jedes einmal, auf Feld oder Wald im Stadtgebiet. Jedes bringt der Stadt +${MONUMENT_POP} Bevölkerung und 200 Punkte.\n\n`;
   md += row(['Monument', 'Freigeschaltet durch']) + '\n' + row(['---', '---']) + '\n';
   for (const [id, m] of Object.entries(MONUMENTS)) md += row([`**${IMPROVEMENTS[id].name}**`, m.goal]) + '\n';
-  md += '\n## Gelände und Rohstoffe\n\n' + row(['Gelände', 'Begehbar', 'Bewegung', 'Verteidigung', 'Betreten mit']) + '\n' + row(Array(5).fill('---')) + '\n';
-  for (const t of Object.values(TERRAIN)) md += row([t.name, t.walkable ? 'ja' : 'nein (Schiffe)', t.move, `${fmt(t.def)}-fach`, techName(t.enterTech)]) + '\n';
+  md += '\n## Gelände und Rohstoffe\n\n' + row(['Gelände', 'Begehbar', 'Bewegung', 'Verteidigung', 'Betreten mit', 'Besonderheit']) + '\n' + row(Array(6).fill('---')) + '\n';
+  for (const t of Object.values(TERRAIN)) {
+    const note = [t.stop ? 'Betreten beendet die Bewegung' : '', t.sight ? `Einheiten darauf sehen ${t.sight} Feld weiter` : ''].filter(Boolean).join(', ') || '–';
+    md += row([t.name, t.walkable ? 'ja' : 'nein (Schiffe)', t.move, `${fmt(t.def)}-fach`, techName(t.enterTech), note]) + '\n';
+  }
   md += '\nRohstoffe im Stadtgebiet bringen Ertrag, solange nichts darauf gebaut ist: ' + Object.values(RESOURCES).map(r => `${r.name} (${terr(r.terrain)})`).join(', ') + '.\n';
+  md += '\n## Söldnerlager\n\nJe nach Kartengröße gibt es ' + Object.entries(MAP_SIZES).map(([k, v]) => `${MERC.count[k]} (${v.label.toLowerCase()})`).join(', ') + ' Lager. Eine eigene Landeinheit auf dem Lager wirbt die angebotene Einheit an, ohne die nötige Technologie. Jeder Stamm nutzt jedes Lager einmal, das verbraucht den Zug der Einheit. Preis: normale Kosten + ' + MERC.extra + ' Sterne.\n\n';
+  md += row(['Mögliches Angebot', 'Preis']) + '\n' + row(['---', '---']) + '\n';
+  for (const t of MERC.types) md += row([UNITS[t].name, UNITS[t].cost + MERC.extra]) + '\n';
   write('Staedte-und-Gebaeude', md);
 }
 

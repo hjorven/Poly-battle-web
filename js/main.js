@@ -722,6 +722,19 @@ async function doTrade(unit) {
   await afterAction();
 }
 
+async function doHire(unit) {
+  unit = liveUnit(unit);
+  if (!unit) return;
+  const res = R.hireMercenary(app.state, unit, actAs());
+  if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  app.busy = true;
+  ui.toast(`${UNITS[res.type].name} angeworben`, 'good');
+  sfx('coin');
+  render.celebrate(res.unit.q, res.unit.r, 0xd6c7a1);
+  await render.syncBoard(app.state, viewer());
+  await afterAction();
+}
+
 async function doUpgrade(unit) {
   unit = liveUnit(unit);
   if (!unit) return;
@@ -1225,6 +1238,7 @@ function coachHint() {
     case 'settle': hint = { text: 'Gründe mit dem Siedler hier eine Stadt.', runnable: true }; at(step.unit.q, step.unit.r); break;
     case 'upgrade': hint = { text: `Rüste ${U(step.unit.type)} auf.`, runnable: true }; app.sel = { kind: 'unit', id: step.unit.id }; at(step.unit.q, step.unit.r); break;
     case 'trade': hint = { text: 'Handle mit dem Händlerkarren.', why: 'Das bringt sofort Sterne.', runnable: true }; at(step.unit.q, step.unit.r); break;
+    case 'hire': hint = { text: 'Wirb im Söldnerlager eine Einheit an.', why: 'So bekommst du eine starke Einheit ohne die passende Technologie.', runnable: true }; at(step.unit.q, step.unit.r); break;
     case 'road': hint = { text: 'Baue einen Weg auf dem markierten Feld.', why: 'Wege verbinden Städte und machen Einheiten schneller.', runnable: true }; at(step.q, step.r); break;
     case 'bridge': hint = { text: 'Baue mit dieser Einheit eine Brücke.', runnable: true }; at(step.unit.q, step.unit.r); break;
     default: hint = { text: 'Die KI hat einen Vorschlag, der sich hier nicht anzeigen lässt.', runnable: false };
@@ -1250,6 +1264,7 @@ async function runCoachStep(step) {
     case 'settle': return doFound(unit(step.unit));
     case 'upgrade': return doUpgrade(unit(step.unit));
     case 'trade': return doTrade(unit(step.unit));
+    case 'hire': return doHire(unit(step.unit));
     case 'road': return doBuildRoad(step.q, step.r, null);
     case 'bridge': return doBuildBridge(unit(step.unit), step.dir);
   }
@@ -1526,6 +1541,7 @@ function boot() {
     onLoadCargo: doLoadCargo,
     onUpgrade: doUpgrade,
     onTrade: doTrade,
+    onHire: doHire,
     onCoach: coachHint,
     onUnloadCargo: doUnloadCargo,
     onBuildRoad: doBuildRoad,
