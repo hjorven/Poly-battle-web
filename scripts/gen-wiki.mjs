@@ -87,6 +87,7 @@ const fmt = n => String(n).replace('.', ',');
     let y = d.pop ? `+${d.pop} pro Runde` : '';
     if (d.adjacent) y = Object.entries(d.adjacent).map(([k, v]) => `+${v} je angrenzende${k === '*' ? 'm Gebäude' : 'r ' + IMPROVEMENTS[k].name}`).join(', ') + (d.max ? ` (bis ${d.max})` : '');
     if (d.adjacent) y = (d.pop ? `+${d.pop}, ` : '') + y + (d.resources ? ', Rohstoffe zählen mit' : '');
+    if (d.adjacentTerrain) y += ', ' + Object.entries(d.adjacentTerrain).map(([k, v]) => `+${v} je angrenzendem ${TERRAIN[k].name} ohne Gebäude`).join(', ');
     if (d.adjacentRes) y += ', ' + Object.entries(d.adjacentRes).map(([k, v]) => `+${v} je angrenzendem Fischgrund`).join(', ');
     if (d.sight) y = `Sicht ${d.sight} Felder; Einheiten darauf und daneben verteidigen anderthalbfach`;
     if (id === 'fort') y = 'Einheiten darauf verteidigen dreifach';
