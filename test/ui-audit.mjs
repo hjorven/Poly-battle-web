@@ -169,7 +169,8 @@ const AUDIT = () => {
     if (worst > 1.5) issues.push({ kind: 'text ragt heraus', el: n, info: `${worst.toFixed(0)} px über den Knopfrand` });
     // 5. Wort mitten im Wort umgebrochen? (nur Knöpfe mit sichtbarem Text)
     const txt = (el.innerText || '').trim();
-    if (txt && el.tagName === 'BUTTON') {
+    // Mit weichem Trennstrich (Forschungsbaum) ist der Umbruch gewollt.
+    if (txt && el.tagName === 'BUTTON' && !el.textContent.includes('\u00ad')) {
       const words = txt.split(/\s+/).filter(w => w.length >= 4);
       const lines = [];
       const w2 = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
@@ -247,6 +248,12 @@ const ui = page => page.evaluate(async () => { window.__ui = await import('./js/
 
 async function closeAll(page) {
   await page.evaluate(() => document.querySelectorAll('.overlay').forEach(o => o.classList.add('hidden')));
+}
+
+// Knopf der oberen Leiste drücken; in der Handy-Ansicht liegen manche hinter „Mehr“.
+async function tapTop(page, id) {
+  if (!(await page.isVisible('#' + id)) && await page.isVisible('#moreBtn')) await page.click('#moreBtn');
+  await page.click('#' + id);
 }
 
 async function runDevice(dev) {
@@ -358,7 +365,7 @@ async function runDevice(dev) {
   await page.evaluate(() => { const { app, sync } = window.__pb; app.state.units = app.state.units.filter(u => u.id !== 'audit'); app.sel = null; sync(); });
   // Forschung
   await page.evaluate(() => { const { app, sync } = window.__pb; const st = app.state; st.techs.player_1 = st.techs.player_1.slice(0, 3); sync(); });
-  await page.click('#techBtn');
+  await tapTop(page, 'techBtn');
   await page.waitForTimeout(400);
   await record(page, dev, 'Forschung');
   const hex = await page.$('.tech-hex.ready') || await page.$('.tech-hex');
@@ -373,7 +380,7 @@ async function runDevice(dev) {
   }
   await page.click('#techClose').catch(() => {});
   // Übersicht
-  await page.click('#overviewBtn');
+  await tapTop(page, 'overviewBtn');
   await page.waitForTimeout(300);
   for (const t of ['staedte', 'armee', 'diplomatie', 'monumente']) {
     await page.click(`[data-ovtab="${t}"]`).catch(() => {});
@@ -384,7 +391,7 @@ async function runDevice(dev) {
   if (war) { await war.click().catch(() => {}); await page.waitForTimeout(200); await record(page, dev, 'Rückfrage: Krieg erklären'); await page.click('#confirmNo').catch(() => {}); }
   await page.click('#overviewClose').catch(() => {});
   // Menü im Spiel
-  await page.click('#menuBtn');
+  await tapTop(page, 'menuBtn');
   await page.waitForTimeout(300);
   await record(page, dev, 'Menü im Spiel');
   // Online-Partie: Aufgeben und Plätze abgeben, Liste der eigenen Partien (nachgebildet).
@@ -415,7 +422,7 @@ async function runDevice(dev) {
   }
   await page.click('#continueBtn').catch(() => closeAll(page));
   // Tipp der KI
-  await page.click('#coachBtn').catch(() => {});
+  await tapTop(page, 'coachBtn').catch(() => {});
   await page.waitForTimeout(400);
   await record(page, dev, 'Tipp der KI');
   await page.click('[data-co-close]').catch(() => {});
