@@ -128,6 +128,8 @@ async function rpc(fn, args) {
   if (!sb) return { error: 'Keine Verbindung zum Server.' };
   try {
     const { data, error } = await sb.rpc(fn, args);
+    // Abgebrochene Verbindung meldet supabase-js als Fehlermeldung, nicht als Ausnahme.
+    if (error && /Failed to fetch|NetworkError|Load failed|network/i.test(error.message || '')) return { error: 'Keine Verbindung zum Server.' };
     if (error) return { error: error.message || 'Serverfehler' };
     return { data };
   } catch (e) {
