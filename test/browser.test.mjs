@@ -95,6 +95,11 @@ async function test(name, fn) {
   } catch (e) {
     failed++;
     console.log(`FAIL  ${name}\n      ${String(e.message).split('\n')[0]}`);
+    // Auf GitHub als Hinweis an den Lauf hängen, dann steht der Fehler direkt im PR.
+    if (process.env.GITHUB_ACTIONS) {
+      const msg = String(e.message).replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A').slice(0, 1500);
+      console.log(`::error title=${name.replace(/[,:]/g, ' ')}::${msg}`);
+    }
   }
 }
 
@@ -355,8 +360,10 @@ await test('Wiederholung: nach Spielende abspielen, Regler, Tempo', async () => 
   await page.waitForTimeout(1200);
   const v = Number(await page.$eval('#rpSlider', e => e.value));
   assert.ok(v > 2, 'Zeitraffer läuft: ' + v);
-  await page.click('#rpPlay');
-  assert.match(await page.textContent('#rpPlay'), /Abspielen/);
+  // Bei kurzen Partien kann der Zeitraffer schon am Ende stehen und hat
+  // selbst angehalten; dann würde ein Klick ihn neu starten.
+  if (/Anhalten/.test(await page.textContent('#rpPlay'))) await page.click('#rpPlay');
+  assert.match(await page.textContent('#rpPlay'), /bspielen/);
   await page.click('#reviewBack');
   await page.waitForTimeout(200);
   assert.ok(!(await page.isVisible('#replay-bar')), 'Leiste weg beim Zurück');
