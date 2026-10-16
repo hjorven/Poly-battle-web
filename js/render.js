@@ -699,7 +699,7 @@ let fogClear = new Set();
 function buildFog() {
   if (fog) {
     scene.remove(fog.mesh);
-    fog.mesh.material.map.dispose();
+    fog.mesh.material.alphaMap?.dispose();
     fog.mesh.material.dispose();
     fog.mesh.geometry.dispose();
   }
