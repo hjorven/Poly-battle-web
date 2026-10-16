@@ -99,6 +99,10 @@ export async function saveMatch(gameId, state, adminKey = null) {
   if (!sb) return { error: 'Offline' };
   try {
     const { error } = await sb.rpc('save_match', { p_id: gameId, p_token: getToken(), p_state: state, ...adminArg(adminKey) });
+    // supabase-js meldet eine abgebrochene Verbindung als Fehler, nicht als Ausnahme.
+    if (error && /Failed to fetch|NetworkError|Load failed|network/i.test(error.message || '')) {
+      return { error: 'Zug nicht gespeichert: keine Verbindung zum Server.' };
+    }
     if (error) return { error: 'Zug nicht gespeichert: ' + error.message, rejected: true };
   } catch (e) {
     return { error: 'Zug nicht gespeichert: keine Verbindung zum Server.' };
