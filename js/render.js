@@ -23,6 +23,8 @@ let selectedMesh = null;
 let targetMesh = null;
 let selectedKey = null;
 let tweens = [];
+let shadowDirty = true;
+let frameNo = 0;
 let effects = [];
 let onPick = null;
 let pointerDownAt = null;
@@ -79,6 +81,10 @@ export function initRender(canvas, opts = {}) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // Die Schattenkarte zeichnet jedes Objekt ein zweites Mal. Sonne und Karte
+  // stehen still, also nur neu berechnen, wenn sich etwas bewegt (siehe loop).
+  renderer.shadowMap.autoUpdate = false;
+  shadowDirty = true;
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x8fc9ea);
@@ -179,7 +185,14 @@ export function initRender(canvas, opts = {}) {
     controls.update();
     clampTarget();
     // Solange das Bau-Fenster seine eigene 3D-Ansicht zeigt, ruht das Hauptbild.
-    if (!contextLost && !cityCam) renderer.render(scene, camera);
+    if (!contextLost && !cityCam) {
+      // Schatten: bei Bewegung (Einheiten, Kampf, neuer Stand) jedes Bild,
+      // sonst jedes vierte (Windmühlen, Masten und Leuchttürme drehen sich langsam).
+      frameNo++;
+      renderer.shadowMap.needsUpdate = shadowDirty || tweens.length > 0 || frameNo % 4 === 0;
+      shadowDirty = false;
+      renderer.render(scene, camera);
+    }
   }
   requestAnimationFrame(loop);
   return true;
@@ -1039,7 +1052,8 @@ function farmNode(env) {
     plants.setMatrixAt(i, m4);
     plants.setColorAt(i, tint.setHex((Math.round(x * 50) + Math.round(z * 30)) % 3 ? 0x6fbf3f : 0x54a63a));
   });
-  plants.castShadow = true;
+  // Die 6 cm hohen Pflanzen werfen keinen sichtbaren Schatten, kosteten in der
+  // Schattenkarte aber hunderttausende Dreiecke.
   g.add(plants);
   return g;
 }
@@ -2344,6 +2358,7 @@ function reportOnce(e) {
 export function syncBoard(state, viewer = null) {
   if (!initialized) return Promise.resolve();
   lastSync = { state, viewer };
+  shadowDirty = true;
   // Kartengröße immer passend zum Stand (z. B. direkt nach einem neuen Spiel).
   if (state.terrain && state.mapW && state.mapH && (state.mapW !== MAP_W || state.mapH !== MAP_H)) useMap(state);
   colorMap = {};
@@ -3004,6 +3019,7 @@ export function snapshotMap(state, w = 1720, h = 1000) {
   scene.fog = null;
   renderer.setPixelRatio(1);
   renderer.setSize(w, h, false);
+  renderer.shadowMap.needsUpdate = true;
   renderer.render(scene, cam);
   const out = document.createElement('canvas');
   out.width = w; out.height = h;
