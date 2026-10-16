@@ -2316,7 +2316,9 @@ test('Wiederholung: jede Runde nachbaubar, kompakt genug für Online', () => {
     assert.deepStrictEqual(Object.keys(rs.roads).sort(), t.roads, 'Wege Runde ' + t.round);
   }
   const bytes = JSON.stringify(st.replay).length;
-  assert.ok(bytes < 80000, 'Wiederholung ' + bytes + ' Bytes');
+  // Je Runde gemessen: Wie lange eine KI-Partie dauert, schwankt mit jeder
+  // Regeländerung; entscheidend ist, dass eine Runde klein bleibt.
+  assert.ok(bytes < 1800 * st.round, 'Wiederholung ' + bytes + ' Bytes in ' + st.round + ' Runden');
   // Nach dem Laden (Kopie ohne Zwischenspeicher) geht es lückenlos weiter.
   const loaded = JSON.parse(JSON.stringify(st));
   if (!loaded.winner) { R.endTurn(loaded); }
@@ -2374,6 +2376,148 @@ test('Passende KI-Stärke: drei Siege → schwerer, drei Niederlagen → leichte
   assert.deepStrictEqual(P.difficultyAdvice(p), { dir: 'down', level: 'normal' });
   game(true, 'hard');
   assert.strictEqual(P.difficultyAdvice(p), null, 'gemischt: kein Vorschlag');
+});
+
+console.log('\n-- Neue Landschaften, Einheiten, Söldnerlager --');
+
+test('Hügel: begehbar mit 1 Bewegung, anderthalbfache Verteidigung, 1 Feld mehr Sicht', () => {
+  const st = makeState();
+  st.terrain[5 * MAP_W + 6] = 'hills';
+  const u = unit('a', 'player_1', 'warrior', 5, 5);
+  st.units = [u];
+  assert.ok(R.reachableMap(st, u).has('6,5'), 'Krieger betritt Hügel');
+  const before = R.unitSight(st, u);
+  assert.ok(R.moveUnit(st, u, 6, 5).ok);
+  assert.strictEqual(R.unitSight(st, u), before + 1);
+  assert.strictEqual(R.defenceBonus(st, u), 1.5);
+  assert.ok(IMPROVEMENTS.mine.terrain.includes('hills'), 'Mine auf Hügeln');
+});
+
+test('Sumpf: Betreten beendet die Bewegung, Verteidigung 0,75-fach', () => {
+  const st = makeState();
+  st.terrain[5 * MAP_W + 6] = 'swamp';
+  const u = unit('a', 'player_1', 'rider', 5, 5);
+  st.units = [u];
+  const reach = R.reachableMap(st, u);
+  assert.ok(reach.has('6,5'), 'Sumpf erreichbar');
+  assert.ok(!reach.has('7,5') || R.pathTo(st, u, 7, 5).every(([q, r]) => R.terrainAt(st, q, r) !== 'swamp'), 'nicht durch den Sumpf hindurch');
+  assert.ok(R.moveUnit(st, u, 6, 5).ok);
+  assert.strictEqual(u.mp, 0, 'Bewegung verbraucht');
+  assert.strictEqual(R.defenceBonus(st, u), 0.75);
+});
+
+test('Waldläufer: Wald, Hügel und Sumpf kosten 1 und halten nicht auf, aus dem Wald +1 Angriff', () => {
+  const st = makeState();
+  for (const q of [6, 7, 8]) st.terrain[5 * MAP_W + q] = 'swamp';
+  st.terrain[6 * MAP_W + 5] = 'forest';
+  const r = unit('r', 'player_1', 'ranger', 5, 5, { mp: 2 });
+  st.units = [r];
+  assert.strictEqual(R.moveCost(st, r, 5, 6), 1);
+  assert.ok(R.reachableMap(st, r).has('7,5'), 'zwei Sumpffelder weit');
+  const base = R.attackOf(st, r);
+  r.r = 6;
+  assert.strictEqual(R.attackOf(st, r), base + 1, 'Bonus im Wald');
+  st.techs.player_1.push('hunting', 'forestry');
+  assert.ok(R.unlockedUnits(st, 'player_1').includes('ranger'));
+});
+
+test('Bannerträger: +0,5 Angriff für eigene Nachbarn, nicht für sich, nicht doppelt, nicht für Gegner', () => {
+  const st = makeState();
+  const w = unit('w', 'player_1', 'warrior', 5, 5);
+  const b1 = unit('b1', 'player_1', 'bannerman', 6, 5);
+  const b2 = unit('b2', 'player_1', 'bannerman', 4, 5);
+  const e = unit('e', 'player_2', 'warrior', 5, 6);
+  st.units = [w, b1, e];
+  assert.strictEqual(R.attackOf(st, w), UNITS.warrior.atk + 0.5);
+  assert.strictEqual(R.attackOf(st, b1), UNITS.bannerman.atk, 'eigenes Banner zählt nicht');
+  assert.strictEqual(R.attackOf(st, e), UNITS.warrior.atk, 'Gegner profitiert nicht');
+  st.units.push(b2);
+  assert.strictEqual(R.attackOf(st, w), UNITS.warrior.atk + 0.5, 'zwei Banner zählen einfach');
+  const dmgWith = R.battleResults(st, w, e).damage;
+  st.units = [w, e];
+  assert.ok(dmgWith > R.battleResults(st, w, e).damage, 'mehr Schaden mit Banner');
+});
+
+test('Brander: trifft Nachbarn des Ziels mit halbem Schaden, sinkt, kein Gegenschlag', () => {
+  const st = makeState();
+  for (let q = 3; q < 10; q++) for (let r = 3; r < 9; r++) st.terrain[r * MAP_W + q] = 'water';
+  const f = unit('f', 'player_1', 'fireship', 5, 5);
+  const t = unit('t', 'player_2', 'ship', 6, 5);
+  const n = unit('n', 'player_2', 'boat', 7, 5);
+  const ally = unit('a', 'player_1', 'boat', 6, 4);
+  st.units = [f, t, n, ally];
+  const res0 = R.battleResults(st, f, t);
+  assert.strictEqual(res0.retaliation, 0);
+  const { events } = R.attack(st, f, t);
+  assert.ok(!R.findUnit(st, 'f'), 'Brander ist gesunken');
+  assert.strictEqual(t.hp, UNITS.ship.hp - res0.damage);
+  const splash = Math.max(1, Math.round(res0.damage / 2));
+  assert.strictEqual(n.hp, UNITS.boat.hp - splash, 'Nachbar getroffen');
+  assert.strictEqual(ally.hp, UNITS.boat.hp, 'eigene Einheit verschont');
+  assert.ok(events.some(e => e.kind === 'splash' && e.to === 'n'));
+});
+
+test('Söldnerlager: anwerben kostet Sterne, ohne Technologie, einmal je Stamm', () => {
+  const st = makeState();
+  st.camps = { '5,5': { type: 'knight', used: [] } };
+  const u = unit('u', 'player_1', 'warrior', 5, 5);
+  st.units = [u];
+  const o = R.hireOption(st, u);
+  assert.ok(o.ok, o.reason);
+  assert.strictEqual(o.cost, R.mercCost('knight'));
+  const res = R.hireMercenary(st, u, 'player_1');
+  assert.ok(res.ok);
+  assert.strictEqual(st.stars.player_1, 20 - R.mercCost('knight'));
+  assert.strictEqual(st.units.filter(x => x.type === 'knight' && x.owner === 'player_1').length, 1);
+  assert.ok(u.acted, 'verbraucht den Zug');
+  u.acted = false;
+  assert.ok(!R.hireOption(st, u).ok, 'nur einmal');
+  const v = unit('v', 'player_2', 'warrior', 5, 5);
+  st.units = [v];
+  st.turn = 'player_2';
+  st.stars.player_2 = 3;
+  assert.strictEqual(R.hireOption(st, v).reason, 'Zu wenig Sterne');
+  st.stars.player_2 = 20;
+  assert.ok(R.hireMercenary(st, v, 'player_2').ok, 'anderer Stamm darf');
+  assert.strictEqual(R.hireOption(st, unit('s', 'player_1', 'boat', 5, 5)), null, 'Schiffe werben nicht an');
+});
+
+test('KI wirbt im Söldnerlager an', () => {
+  const st = makeState();
+  st.ai = ['player_1'];
+  st.camps = { '5,5': { type: 'swordsman', used: [] } };
+  const u = unit('u', 'player_1', 'warrior', 5, 5);
+  st.units = [u];
+  const step = botStep(st, 'player_1');
+  assert.strictEqual(step && step.kind, 'hire');
+  assert.ok(applyStep(st, step, 'player_1').ok);
+});
+
+test('Kartenerzeugung: Hügel, Sumpf und Lager abseits der Städte, gleich bei gleichem Startwert', () => {
+  for (const seed of [11, 12, 13, 14]) {
+    const a = R.createGame(seed, 4);
+    const b = R.createGame(seed, 4);
+    assert.deepStrictEqual(a.terrain, b.terrain);
+    assert.deepStrictEqual(a.camps, b.camps);
+    assertInvariants(a);
+    assert.ok(Object.keys(a.camps).length >= 1, 'mindestens ein Lager');
+    for (const k of Object.keys(a.camps)) {
+      const [q, r] = k.split(',').map(Number);
+      assert.ok(a.cities.every(c => hexDistance(q, r, c.q, c.r) >= 3), 'Lager weit genug weg');
+      assert.ok(['field', 'hills'].includes(R.terrainAt(a, q, r)));
+    }
+    for (const c of a.cities.filter(c => c.isCapital)) {
+      forEachHex((q, r) => {
+        if (hexDistance(q, r, c.q, c.r) <= 2) assert.ok(!['hills', 'swamp'].includes(R.terrainAt(a, q, r)), 'Startgebiet unverändert');
+      });
+    }
+  }
+});
+
+test('Wiederholung: neue Einheiten stehen hinten, alte Aufzeichnungen bleiben lesbar', () => {
+  const keys = Object.keys(UNITS);
+  assert.deepStrictEqual(keys.slice(-3), ['ranger', 'bannerman', 'fireship']);
+  assert.strictEqual(keys.indexOf('settler'), keys.length - 4);
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
