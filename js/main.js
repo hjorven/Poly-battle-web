@@ -1331,6 +1331,7 @@ function enterLocal() {
     try { net.unsubscribe(app.channel); } catch (e) { /* ignore */ }
     app.channel = null;
   }
+  stopChat();
   history.replaceState(null, '', location.pathname);
   ui.hideNews();
   ui.hideMenu();
@@ -1444,6 +1445,7 @@ async function startOnline() {
     try { net.unsubscribe(app.channel); } catch (e) { /* ignore */ }
     app.channel = null;
   }
+  startChat();
   app.channel = net.subscribe(app.gameId, match => {
     if (!app.online || !match.game_state) return;
     if (allSeated(match)) app.hasOpponent = true;
@@ -1457,6 +1459,7 @@ async function startOnline() {
       app.busy = false;
       render.syncBoard(app.state, viewer());
       if (!wasMine && myTurn()) notifyTurn();
+      loadChat();
     }
     refresh();
   });
@@ -1475,6 +1478,66 @@ function allSeated(match) {
   app.seated = humans.filter(h => joined.includes(h)).length;
   app.humanSeats = humans.length;
   return humans.every(h => joined.includes(h));
+}
+
+// --- Nachrichten in Online-Partien ------------------------------------------------
+function startChat() {
+  stopChat();
+  app.chat = { items: [], last: 0, unread: 0, open: false, channel: net.chatChannel(app.gameId, () => loadChat()) };
+  loadChat(true);
+  drawChat();
+}
+
+function stopChat() {
+  if (app.chat && app.chat.channel) { try { net.unsubscribe(app.chat.channel); } catch (e) { /* ignore */ } }
+  app.chat = null;
+  ui.setChat({ visible: false });
+}
+
+async function loadChat(initial = false) {
+  const c = app.chat;
+  if (!c || !app.online || !app.myRole) return;
+  const res = await net.fetchMessages(app.gameId, c.last);
+  if (!app.chat || app.chat !== c || !Array.isArray(res.data) || !res.data.length) return;
+  for (const m of res.data) {
+    if (m.id <= c.last) continue;
+    c.items.push(m);
+    c.last = m.id;
+    if (!initial && m.role !== app.myRole) {
+      if (!c.open) { c.unread++; ui.toast(`${needName(app.state, m.role)}: ${m.text}`); }
+      sfx('select');
+    }
+  }
+  c.items = c.items.slice(-60);
+  drawChat();
+}
+
+function drawChat() {
+  const c = app.chat;
+  if (!c) return;
+  ui.setChat({
+    visible: !!app.myRole, open: c.open, items: c.items, unread: c.unread, me: app.myRole,
+    nameOf: r => needName(app.state, r) + (r === app.myRole ? ' (du)' : ''),
+    colorOf: r => '#' + R.playerColor(app.state, r).toString(16).padStart(6, '0')
+  });
+}
+
+async function onChat(cmd, text) {
+  const c = app.chat;
+  if (!c) return;
+  if (cmd === 'toggle' || cmd === 'close') {
+    c.open = cmd === 'toggle' ? !c.open : false;
+    if (c.open) c.unread = 0;
+    drawChat();
+    return;
+  }
+  if (cmd === 'send') {
+    const res = await net.sendMessage(app.gameId, text);
+    if (res.error) { ui.toast(res.error, 'warn'); return; }
+    ui.clearChatInput();
+    net.ringChat(c.channel);
+    await loadChat();
+  }
 }
 
 // --- Online: Bescheid geben, wenn man am Zug ist ----------------------------------
@@ -1527,6 +1590,7 @@ function boot() {
     onUpgrade: doUpgrade,
     onTrade: doTrade,
     onCoach: coachHint,
+    onChat,
     onUnloadCargo: doUnloadCargo,
     onBuildRoad: doBuildRoad,
     onJump: (q, r) => render.cameraTo(q, r, true),
@@ -1707,7 +1771,7 @@ function boot() {
     AP.open();
   });
 
-  window.__pb = { app, notifyTurn, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera };
+  window.__pb = { app, notifyTurn, startChat, loadChat, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera };
 }
 
 boot();
