@@ -50,7 +50,7 @@ Auf jeder Karte stehen ein paar Zeltlager abseits der Startstädte. Jedes bietet
 
 ## Nebel
 
-Unentdecktes Land liegt unter Nebel. Einheiten und Städte decken ihre Umgebung auf; Berge und Hügel geben mehr Sicht. Entdecktes, aber gerade unbeobachtetes Land ist abgedunkelt – dort siehst du keine fremden Einheiten, und Städte zeigen den Stand, in dem du sie zuletzt gesehen hast.
+Unentdecktes Land liegt unter Nebel. Einheiten und Städte decken ihre Umgebung auf; Berge und Hügel geben mehr Sicht. Entdecktes, aber gerade unbeobachtetes Land ist abgedunkelt – dort siehst du keine fremden Einheiten, und Städte zeigen den Stand, in dem du sie zuletzt gesehen hast. Für die KI gilt dasselbe: Sie plant nur mit dem, was ihr Stamm gerade sieht oder schon entdeckt hat, und muss dich erst finden.
 
 ## Schonfrist und Diplomatie
 
