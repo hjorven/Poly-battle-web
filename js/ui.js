@@ -448,6 +448,8 @@ export function renderBoard(res, kind, myName) {
   const me = d.me && !top.some(r => r.name === d.me.name) ? `<li class="me"><span>${d.me.rank}.</span><span>${esc(d.me.name)}</span><b>${d.me.score}</b></li>` : '';
   box.innerHTML = top.length ? `<ol class="board-list">${rows}${me}</ol><div class="hint">${d.total} ${d.total === 1 ? 'Spieler' : 'Spieler'} ${kind === 'daily' ? 'heute' : 'diese Woche'}</div>`
     : `<div class="hint">Noch keine Einträge ${kind === 'daily' ? 'heute' : 'diese Woche'} – spiel die ${kind === 'daily' ? 'Tages' : 'Wochen'}-Herausforderung und sei die Nummer 1!</div>`;
+  if (d.pending) box.innerHTML += `<div class="hint">${d.pending === 1 ? 'Ein Ergebnis von dir wird' : d.pending + ' Ergebnisse von dir werden'} gerade geprüft und erscheint danach hier.</div>`;
+  if (d.rejected) box.innerHTML += `<div class="hint">Ein Ergebnis wurde nicht gewertet: ${esc(d.rejected)}</div>`;
   if (!myName) box.innerHTML += '<div class="hint">Wähle oben im Profil einen Namen, damit deine Punkte hier erscheinen.</div>';
 }
 

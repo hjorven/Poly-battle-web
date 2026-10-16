@@ -138,8 +138,9 @@ async function rpc(fn, args) {
 export const claimName = name => rpc('pb_claim_name', { p_token: getToken(), p_name: name });
 export const myRemoteProfile = () => rpc('pb_my_profile', { p_token: getToken() });
 export const saveRemoteProfile = (data, level) => rpc('pb_save_profile', { p_token: getToken(), p_data: data, p_level: level });
-export const submitScore = (kind, period, score, tribe, round) =>
-  rpc('pb_submit_score', { p_token: getToken(), p_kind: kind, p_period: period, p_score: score, p_tribe: tribe, p_round: round });
+// Mit Zugprotokoll: der Server spielt die Partie nach, erst dann zählt sie.
+export const submitScore = (kind, period, score, tribe, round, actions) =>
+  rpc('pb_submit_score', { p_token: getToken(), p_kind: kind, p_period: period, p_score: score, p_tribe: tribe, p_round: round, p_actions: actions });
 export const leaderboard = (kind, period) => rpc('pb_leaderboard', { p_kind: kind, p_period: period, p_token: getToken() });
 
 // Profil-Code: die geheime Kennung dieses Browsers (zum Übertragen auf ein anderes Gerät).

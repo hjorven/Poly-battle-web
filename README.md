@@ -56,6 +56,7 @@ js/render.js          3D-Darstellung mit Three.js (auch die 3D-Ansicht im Bau-Fe
 js/ui.js              Kärtchen, Schild und Werkzeugreihe, Bau-Fenster, Forschung, Menüs
 js/main.js            Verkabelung, Eingabe, Zugablauf
 js/net.js             Online-Partien, Profile, Bestenliste (Supabase)
+js/actionlog.js       Zugprotokoll der Herausforderungen, Nachspielen zur Punkteprüfung
 js/save.js            Lokaler Spielstand
 js/profile.js         Profil, Erfolge, Herausforderungen
 js/campaign.js        Kampagne
@@ -68,7 +69,7 @@ Mehr dazu auf der Wiki-Seite [Technik](https://github.com/hjorven/Poly-battle-we
 
 ## Online und Datenschutz
 
-Clients haben keinen direkten Zugriff auf die Tabellen. Gelesen und geschrieben wird nur über Datenbank-Funktionen, die prüfen, wer mitspielt, wer am Zug ist und ob Namen und Punkte plausibel sind. Laufende Partien sieht nur, wer mitspielt; nach jedem Zug schickt die Datenbank über Realtime nur eine Klingel, den Stand holt sich der Client geprüft ab. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Gespeichert werden Spielstände, Name, Profildaten und Punkte – keine E-Mail-Adressen, kein Konto.
+Clients haben keinen direkten Zugriff auf die Tabellen. Gelesen und geschrieben wird nur über Datenbank-Funktionen, die prüfen, wer mitspielt, wer am Zug ist und ob Namen plausibel sind. Laufende Partien sieht nur, wer mitspielt; nach jedem Zug schickt die Datenbank über Realtime nur eine Klingel, den Stand holt sich der Client geprüft ab. Punkte der Herausforderungen zählen erst, wenn `scripts/verify-scores.mjs` (GitHub Actions, alle 10 Minuten, Secret `SUPABASE_SERVICE_ROLE_KEY`) die Partie aus dem mitgeschickten Zugprotokoll (`js/actionlog.js`) nachgespielt hat. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Gespeichert werden Spielstände, Name, Profildaten und Punkte – keine E-Mail-Adressen, kein Konto.
 
 ## Mitmachen
 
