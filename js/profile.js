@@ -279,6 +279,18 @@ export function gameFacts(state, me, { won, mode, score }) {
 
 const LEVEL_MULT = { easy: 1, normal: 1.5, hard: 2 };
 
+// Passende KI-Stärke: drei Siege in Folge auf derselben Stufe → eine Stufe
+// höher vorschlagen, drei Niederlagen → eine niedriger (nur freie Partien gegen die KI).
+const LEVELS = ['easy', 'normal', 'hard'];
+export function difficultyAdvice(profile) {
+  const games = (profile.recent || []).filter(g => g.mode === 'bot' && g.aiLevel).slice(-3);
+  if (games.length < 3 || games.some(g => g.aiLevel !== games[0].aiLevel)) return null;
+  const i = LEVELS.indexOf(games[0].aiLevel);
+  if (games.every(g => g.won) && i < LEVELS.length - 1) return { dir: 'up', level: LEVELS[i + 1] };
+  if (games.every(g => !g.won) && i > 0) return { dir: 'down', level: LEVELS[i - 1] };
+  return null;
+}
+
 // Trägt eine Partie ein. Gibt zurück, was der Spieler dafür bekommen hat.
 export function recordGame(profile, facts) {
   const before = profile.xp;
@@ -293,8 +305,9 @@ export function recordGame(profile, facts) {
   t.techs += facts.techs || 0;
   if (facts.tribe) profile.tribeGames[facts.tribe] = (profile.tribeGames[facts.tribe] || 0) + 1;
   profile.recent = [...(profile.recent || []), {
-    date: dateKey(), mode: facts.daily ? 'daily' : facts.weekly ? 'weekly' : facts.mode,
-    tribe: facts.tribe, won: !!facts.won, score: facts.score, round: facts.round
+    date: dateKey(), mode: facts.daily ? 'daily' : facts.weekly ? 'weekly' : facts.mission ? 'mission' : facts.mode,
+    tribe: facts.tribe, won: !!facts.won, score: facts.score, round: facts.round,
+    ...(facts.vsAi ? { aiLevel: facts.aiLevel } : {})
   }].slice(-10);
   if (facts.won) {
     profile.wins++;

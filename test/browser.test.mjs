@@ -398,6 +398,26 @@ await test('Kampagne: neue Mission startet mit Rammbock und Ziel-Leiste', async 
   await page.context().close();
 });
 
+await test('Nach drei Siegen in Folge: schwerere Stufe angeboten und gestartet', async () => {
+  const page = await open('pc');
+  await page.evaluate(() => {
+    const p = { v: 1, xp: 0, recent: [1, 2].map(() => ({ mode: 'bot', aiLevel: 'normal', won: true, date: '2026-10-16' })) };
+    localStorage.setItem('pb_profile_v1', JSON.stringify(p));
+  });
+  await page.reload();
+  await page.waitForTimeout(300);
+  await startGame(page);
+  await page.evaluate(() => { const { app, R, sync } = window.__pb; const st = app.state; st.aiLevel = 'normal'; for (const c of st.cities) c.owner = 'player_1'; R.checkWinner(st); sync(); });
+  await page.waitForTimeout(400);
+  assert.ok(await page.isVisible('#winnerHarder'), 'Angebot sichtbar');
+  assert.match(await page.textContent('#winnerHarder'), /Schwer/);
+  await page.click('#winnerHarder');
+  await page.waitForTimeout(400);
+  assert.strictEqual(await page.evaluate(() => window.__pb.app.state.aiLevel), 'hard');
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
