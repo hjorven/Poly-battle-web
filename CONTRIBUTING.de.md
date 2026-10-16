@@ -1,0 +1,78 @@
+# Mitmachen bei Poly Battle
+
+[English](CONTRIBUTING.md) · **Deutsch**
+
+Danke, dass du helfen willst. Diese Seite erklärt, wie Fehlerberichte, Ideen und Pull Requests ablaufen.
+
+## Fehler melden und Ideen einbringen
+
+Über [Issues → Neues Issue](https://github.com/hjorven/Poly-battle-web/issues/new/choose) gibt es Vorlagen für:
+
+- **Fehler** – etwas funktioniert nicht oder sieht falsch aus.
+- **Idee** – eine neue Funktion oder Verbesserung.
+- **Balance** – etwas ist zu stark, zu schwach oder unfair.
+
+Ein guter Fehlerbericht sagt, was du getan hast, was du erwartet hast und was stattdessen passiert ist, auf welchem Gerät und in welchem Browser. Ein Screenshot hilft fast immer. Hat ein Spielstand den Fehler ausgelöst, häng ihn an, falls möglich.
+
+## Lokal entwickeln
+
+Du brauchst nur Git, Node.js (für die Tests) und Python oder einen anderen statischen Webserver.
+
+```bash
+git clone https://github.com/hjorven/Poly-battle-web.git
+cd Poly-battle-web
+npm run serve   # http://localhost:8080
+npm test
+```
+
+Es gibt keinen Build-Schritt; `npm install` holt nur Playwright für die Browser-Tests. Änderungen im Code sind nach dem Neuladen der Seite sichtbar.
+
+## Ablauf für Pull Requests
+
+1. Lege einen Branch vom aktuellen `main` an, zum Beispiel `feature/handelsrouten` oder `fix/bruecke-schiff`.
+2. Halte den Pull Request bei einem Thema. Mehrere unabhängige Änderungen lieber getrennt einreichen.
+3. Führe `npm test` und `npm run test:browser` aus – alle Tests müssen grün sein (einmalig vorher `npm install`). Neue Regeln brauchen neue Tests in `test/logic.test.js`, neue Bedienabläufe in `test/browser.test.mjs`. GitHub führt beide Testläufe bei jedem Pull Request automatisch aus (`.github/workflows/tests.yml`); der Pull Request wird erst zusammengeführt, wenn sie grün sind.
+4. Probiere Oberflächenänderungen im Browser aus: am PC mit Maus und Tastatur und auf einem Tablet oder in der Gerätesimulation mit Touch, hochkant und quer.
+5. Hast du Spieldaten in `js/config.js` oder `js/campaign.js` geändert, führe `npm run wiki` aus und committe die erzeugten Seiten unter `docs/wiki/` (Englisch) und `docs/wiki/de/` (Deutsch) mit. Neue oder geänderte Texte aus den Spieldaten brauchen eine englische Fassung in `scripts/wiki-en.json`; fehlt sie, nennt `npm run wiki` die fehlenden Texte. Hat sich die Oberfläche sichtbar geändert, nimm die Bilder mit `npm run screenshots` neu auf.
+6. Beschreibe im Pull Request, was sich für Spielende ändert und wie du es getestet hast. Screenshots bei sichtbaren Änderungen.
+
+## Dokumentation
+
+README, CONTRIBUTING und Wiki gibt es auf Englisch (Hauptsprache) und Deutsch. Ändere immer beide Fassungen: `README.md` und `README.de.md`, `CONTRIBUTING.md` und `CONTRIBUTING.de.md`, die Wiki-Seiten unter `docs/wiki/` und `docs/wiki/de/`. Nach dem Zusammenführen überträgt GitHub das Wiki automatisch.
+
+## Richtlinien
+
+### Spiel und Oberfläche
+
+- **Sprache:** Alle Texte im Spiel sind Deutsch, in einfachen Worten. Knöpfe sagen, was passiert („Zug beenden“, nicht „OK“).
+- **Keine Emojis und keine Textsymbole** in der Oberfläche (keine Pfeile, Sterne oder Häkchen als Zeichen). Wo ein Symbol nötig ist, als SVG.
+- **Kein Rückgängig.** Jeder Zug zählt; stattdessen verhindern zweistufige Aktionen (erst markieren, dann ausführen) Fehlbedienung.
+- **Stil der Spielwelt:** realistisch-mittelalterlich im Low-Poly-Look. Neue Modelle passen sich daran an.
+- **Stil der Oberfläche:** schlicht wie Mini Metro – die Karte bleibt frei, Bedienung in schwebenden Kärtchen, Infos als Schild am Objekt, Aktionen als Werkzeugreihe unten. Eckige Ecken, eine Schrift, Hauptfarbe Waldgrün über die CSS-Variablen (hell und dunkel), Sechsecke nur als Marker und Abzeichen. Keine Verläufe, Texturen oder Zierschriften.
+- **Für alle Geräte:** Bedienbar mit Maus, Tastatur und Touch. Tippziele mindestens 36 px hoch, wichtige Dialoge passen ohne Scrollen auf ein iPad (810×950 hochkant, 1080×700 quer).
+- **Handy-Ansicht:** Auf Handys (erkannt am Gerät, nicht an der Fensterbreite) setzt `index.html` die Klasse `phone` am `<html>`. Handy-Regeln stehen in `css/style.css` am Ende unter `html.phone`, damit PC und Tablet unberührt bleiben. Auf dem Handy nur das Nötigste gleichzeitig zeigen, der Rest hinter „Mehr“.
+- **Robust:** Beschädigte Spielstände, Profile oder unerwartete Eingaben dürfen das Spiel nie lahmlegen.
+
+### Code
+
+- Reines JavaScript als ES-Module, kein Framework, kein Build-Schritt.
+- **Regeln gehören nach `js/rules.js`** und sind reine Funktionen auf dem Spielstand – ohne DOM und ohne Three.js. So sind sie testbar und laufen auch in Online-Partien gleich.
+- Balancing-Werte stehen in `js/config.js`, nicht verstreut im Code.
+- Kommentare sind Deutsch und erklären das Warum, nicht das Was.
+- Schreibe so wie der umliegende Code: gleiche Benennung, gleiche Kommentardichte.
+
+### Datenbank (Supabase)
+
+- Änderungen nur als neue Datei in `supabase/migrations/`, nie bestehende Migrationen ändern.
+- Dateiname `JJJJMMTTHHMMSS_name.sql` (vollständige Uhrzeit). Dieselbe Versionsnummer steht nach dem Einspielen in der Migrationsliste von Supabase, so passen Repository und Datenbank zusammen und `supabase db push` spielt nur Neues ein.
+- Tabellen bleiben für Clients gesperrt (Row Level Security ohne Freigaben). Zugriff nur über `security definer`-Funktionen mit `set search_path = ''`, die alle Eingaben prüfen.
+- Keine Klartext-Kennungen speichern, nur Prüfsummen.
+- Neue Server-Funktionen bekommen Tests in `test/db/` (`npm run test:db` mit lokalem Postgres).
+
+## Verhalten
+
+Sei freundlich und sachlich. Kritik gilt dem Code, nicht der Person.
+
+## Lizenz
+
+Mit einem Beitrag stimmst du zu, dass er unter der [MIT-Lizenz](LICENSE) des Projekts steht.

@@ -1,5 +1,7 @@
 # Spielanleitung
 
+**Deutsch** · [English](How-to-Play)
+
 ## Das Ziel
 
 Im Modus **Eroberung** gewinnt, wer als Letzter noch Städte besitzt. Im Modus **Perfektion** endet das Spiel nach 30 Runden, und die höchste Punktzahl gewinnt. Punkte gibt es für Städte, Bevölkerung, Technologien, Einheiten, erkundetes Land, Gebäude, Ruinen, Leuchttürme und Monumente.

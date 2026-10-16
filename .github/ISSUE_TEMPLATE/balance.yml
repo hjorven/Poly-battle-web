@@ -1,41 +1,43 @@
 name: Balance
-description: Etwas ist zu stark, zu schwach oder unfair.
+description: Something is too strong, too weak or unfair. · Etwas ist zu stark, zu schwach oder unfair.
 title: "Balance: "
 labels: ["balance"]
 body:
   - type: markdown
     attributes:
       value: |
-        Die aktuellen Werte stehen im [Wiki](https://github.com/hjorven/Poly-battle-web/wiki) (Einheiten, Stämme, Technologien, Gebäude).
+        The current stats are in the [wiki](https://github.com/hjorven/Poly-battle-web/wiki) (units, tribes, technologies, buildings).
+
+        Die aktuellen Werte stehen im [Wiki](https://github.com/hjorven/Poly-battle-web/wiki/Startseite) (Einheiten, Stämme, Technologien, Gebäude).
   - type: input
     id: was
     attributes:
-      label: Was betrifft es?
-      placeholder: Ritter, Stamm Xin-Xi, Technologie Wege, KI auf Schwer …
+      label: What is it about? · Was betrifft es?
+      placeholder: Knight, Xin-Xi tribe, Roads technology, AI on Hard …
     validations:
       required: true
   - type: dropdown
     id: richtung
     attributes:
-      label: Dein Eindruck
+      label: Your impression · Dein Eindruck
       options:
-        - zu stark
-        - zu schwach
-        - zu teuer
-        - zu billig
-        - unfair (Startplatz, KI, Karte)
+        - too strong · zu stark
+        - too weak · zu schwach
+        - too expensive · zu teuer
+        - too cheap · zu billig
+        - unfair (start position, AI, map) · unfair (Startplatz, KI, Karte)
     validations:
       required: true
   - type: textarea
     id: begruendung
     attributes:
-      label: Woran machst du das fest?
-      description: Wie viele Partien, welche Einstellungen, was ist passiert?
-      placeholder: In 5 Partien auf Normal hat die KI mit Rittern jedes Mal bis Runde 15 zwei Städte erobert.
+      label: What makes you think so? · Woran machst du das fest?
+      description: How many games, which settings, what happened? · Wie viele Partien, welche Einstellungen, was ist passiert?
+      placeholder: In 5 games on Normal, the AI captured two cities with knights by turn 15 every time.
     validations:
       required: true
   - type: textarea
     id: vorschlag
     attributes:
-      label: Vorschlag
-      placeholder: Ritter-Kosten von 8 auf 9 Sterne.
+      label: Suggestion · Vorschlag
+      placeholder: Raise the knight cost from 8 to 9 stars.

@@ -1,5 +1,7 @@
 # Technologien
 
+**Deutsch** · [English](Technologies)
+
 > Diese Seite wird aus den Spieldaten erzeugt (`npm run wiki`). Änderungen bitte in `js/config.js` bzw. `js/campaign.js` machen.
 
 Der Forschungsbaum hat 55 Technologien in sechs Stufen. Die Kosten steigen mit der Stufe, der Zahl deiner Städte und der Zahl bereits erforschter Technologien.

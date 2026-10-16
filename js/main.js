@@ -9,6 +9,7 @@ import * as P from './profile.js';
 import { shareResult } from './share.js';
 import * as K from './campaign.js';
 import * as AP from './admin-panel.js';
+import * as L from './actionlog.js';
 import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS, PERSONAS } from './config.js';
 
 const app = {
@@ -252,7 +253,7 @@ function announceEliminations() {
 function announceMonuments() {
   if (!myTurn()) return;
   const p = actAs();
-  R.checkMonuments(app.state, p);
+  if (R.checkMonuments(app.state, p).length) L.logAction(app.state, L.entry.monuments());
   if (!app.monAnnounced) app.monAnnounced = new Set();
   for (const t of R.readyMonuments(app.state, p)) {
     const key = `${app.gen}:${p}:${t}`;
@@ -408,9 +409,13 @@ async function syncOnline(profile, st, me, score) {
   }
   const kind = st.admin || st.coached ? null : st.daily ? 'daily' : st.weekly ? 'weekly' : null;
   if (kind) {
-    const res = await net.submitScore(kind, st.daily || st.weekly, score, st.tribes ? st.tribes[me] : null, st.round);
-    if (res.data) ui.toast(`Bestenliste ${kind === 'daily' ? 'heute' : 'diese Woche'}: Platz ${res.data.rank} von ${res.data.total}`, 'good');
-    else if (res.error) ui.toast('Bestenliste: ' + res.error, 'warn');
+    if (!Array.isArray(st.actions)) {
+      ui.toast('Diese Partie wurde vor dem letzten Update begonnen und zählt nicht für die Bestenliste.', 'warn');
+    } else {
+      const res = await net.submitScore(kind, st.daily || st.weekly, score, st.tribes ? st.tribes[me] : null, st.round, st.actions);
+      if (res.data) ui.toast('Ergebnis eingereicht. Es erscheint in der Bestenliste, sobald es geprüft ist (meist nach wenigen Minuten).', 'good');
+      else if (res.error) ui.toast('Bestenliste: ' + res.error, 'warn');
+    }
   }
   await net.saveRemoteProfile(profile, P.levelOf(profile.xp));
 }
@@ -444,8 +449,35 @@ function profileCodeDialog() {
     return null;
   }, {
     title: 'Profil-Code', max: 64, ok: 'Übernehmen',
-    text: 'Das ist dein geheimer Profil-Code. Gib ihn auf einem anderen Gerät hier ein, um Name, Stufe und Erfolge mitzunehmen. Verrate ihn niemandem – wer ihn kennt, spielt als du.'
+    text: 'Das ist dein geheimer Profil-Code. Gib ihn auf einem anderen Gerät hier ein, um Name, Stufe, Erfolge und deine Online-Partien mitzunehmen. Verrate ihn niemandem – wer ihn kennt, spielt als du. Speichere ihn als Datei, sonst ist alles weg, wenn der Browser seine Daten löscht.',
+    extra: [
+      { label: 'Als Datei speichern', run: () => downloadProfileCode() },
+      { label: 'Neuen Code erzeugen', run: close => { close(); renewProfileCode(); } }
+    ]
   });
+}
+
+function downloadProfileCode() {
+  const name = P.loadProfile().name;
+  const text = `Poly Battle – Profil-Code${name ? ' von ' + name : ''}\n\n${net.profileCode()}\n\n` +
+    `Im Spiel unter Profil → Profil-Code eingeben, um Profil und Online-Partien auf einem anderen Gerät zu nutzen.\n` +
+    `Geheim halten: Wer den Code kennt, spielt als du.\n`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  a.download = 'poly-battle-profil-code.txt';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+// Hat jemand den Code gesehen: neuen erzeugen, der alte gilt danach nirgends mehr.
+function renewProfileCode() {
+  ui.showConfirm('Neuen Profil-Code erzeugen? Der alte Code funktioniert danach nirgends mehr, auch nicht auf deinen anderen Geräten. Dort musst du den neuen Code eingeben.', async () => {
+    const res = await net.renewProfileCode();
+    if (res.error) { ui.toast(res.error, 'warn'); return; }
+    ui.toast('Neuer Profil-Code aktiv. Speichere ihn am besten gleich als Datei.', 'good');
+    profileCodeDialog();
+  }, { yes: 'Neuen Code erzeugen' });
 }
 
 async function showBoard(kind) {
@@ -569,6 +601,7 @@ function doOfferPeace(to) {
   if (!myTurn()) return;
   const res = R.offerPeace(app.state, actAs(), to);
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, L.entry.peace(to));
   const name = needName(app.state, to);
   if (res.accepted) { ui.toast(`Frieden mit ${name} geschlossen`, 'good'); quote(to, 'peaceYes'); sfx('peace'); }
   else if (res.pending) ui.toast(`Friedensangebot an ${name} gesendet`, 'good');
@@ -582,6 +615,7 @@ function doDeclareWar(to) {
   ui.showConfirm(`${needName(app.state, to)} den Krieg erklären? Ein neuer Frieden ist frühestens in 3 Runden möglich.`, () => {
     const res = R.declareWar(app.state, actAs(), to);
     if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
+    L.logAction(app.state, L.entry.war(to));
     ui.toast(`Krieg mit ${needName(app.state, to)}!`, 'warn');
     sfx('war');
     ui.hideOverview();
@@ -598,6 +632,7 @@ function offerDiplomacy() {
   const answer = accept => {
     const res = R.respondPeace(app.state, me, offer.from, accept);
     if (!res.ok) return;
+    L.logAction(app.state, L.entry.respond(offer.from, accept));
     if (accept) { ui.toast(`Frieden mit ${needName(app.state, offer.from)} geschlossen`, 'good'); sfx('peace'); }
     else ui.toast('Angebot abgelehnt');
     afterAction();
@@ -631,8 +666,10 @@ function offerReward() {
 async function doChooseReward(city, id) {
   city = liveCity(city);
   if (!city) return;
+  const log = L.entry.reward(city, id);
   const res = R.chooseReward(app.state, city, id, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast(`${CITY_REWARDS[id].name} gewählt`, 'good');
   sfx('coin');
@@ -653,8 +690,10 @@ function viewer() {
 async function doMove(unit, q, r) {
   app.busy = true;
   render.setMovePath(unit.id, R.pathTo(app.state, unit, q, r));
+  const log = L.entry.move(unit, q, r);
   const res = R.moveUnit(app.state, unit, q, r);
   if (!res.ok) { app.busy = false; refresh(); return; }
+  L.logAction(app.state, log);
   if (!res.events.some(e => e.kind === 'embark')) sfx('move');
   app.sel = { kind: 'unit', id: unit.id };
   await render.syncBoard(app.state, viewer());
@@ -663,7 +702,9 @@ async function doMove(unit, q, r) {
 
 async function doAttack(attacker, defender) {
   app.busy = true;
-  const { events } = R.attack(app.state, attacker, defender);
+  const log = L.entry.attack(attacker, defender);
+  const { events, ok } = R.attack(app.state, attacker, defender);
+  if (ok !== false) L.logAction(app.state, log);
   sfx(events.some(e => e.kind === 'kill') ? 'kill' : 'attack');
   // Erst der Schlagabtausch (Geschoss, Treffer), dann Umfallen und Nachrücken.
   await render.playCombat(events);
@@ -676,8 +717,10 @@ async function doAttack(attacker, defender) {
 async function doTrain(city, type) {
   city = liveCity(city);
   if (!city) return;
+  const log = L.entry.train(city, type);
   const res = R.trainUnit(app.state, city, type, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast(`${UNITS[type].name} ausgebildet`, 'good');
   sfx('coin');
@@ -688,8 +731,10 @@ async function doTrain(city, type) {
 async function doBuyPop(city) {
   city = liveCity(city);
   if (!city) return;
+  const log = L.entry.buyPop(city);
   const res = R.buyPop(app.state, city, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast('Bevölkerung wächst', 'good');
   sfx('coin');
@@ -701,8 +746,10 @@ async function doBuyPop(city) {
 async function doImprove(city, type, q, r) {
   city = liveCity(city);
   if (!city) return;
+  const log = L.entry.improve(city, type, q, r);
   const res = R.improve(app.state, city, type, q, r, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   const def = IMPROVEMENTS[type];
   ui.toast(`${def ? def.name + ' gebaut' : 'Gebäude gebaut'}`, 'good');
@@ -714,8 +761,10 @@ async function doImprove(city, type, q, r) {
 
 async function doBuildRoad(q, r, unit) {
   if (unit) { unit = liveUnit(unit); if (!unit) return; }
+  const log = L.entry.road(q, r, unit);
   const res = R.buildRoad(app.state, actAs(), q, r, unit);
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast('Weg gebaut', 'good');
   sfx('build');
@@ -726,8 +775,10 @@ async function doBuildRoad(q, r, unit) {
 async function doFound(unit) {
   unit = liveUnit(unit);
   if (!unit) return;
+  const log = L.entry.found(unit);
   const res = R.foundCity(app.state, unit, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast('Stadt gegründet', 'good');
   sfx('capture');
@@ -738,8 +789,10 @@ async function doFound(unit) {
 async function doTrade(unit) {
   unit = liveUnit(unit);
   if (!unit) return;
+  const log = L.entry.trade(unit);
   const res = R.trade(app.state, unit, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   app.sel = null;
   ui.toast(`Handel ${res.foreign ? 'mit ' + needName(app.state, res.city.owner) : 'abgeschlossen'}: +${res.stars} Sterne`, 'good');
@@ -752,8 +805,10 @@ async function doTrade(unit) {
 async function doHire(unit) {
   unit = liveUnit(unit);
   if (!unit) return;
+  const log = L.entry.hire(unit);
   const res = R.hireMercenary(app.state, unit, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast(`${UNITS[res.type].name} angeworben`, 'good');
   sfx('coin');
@@ -766,8 +821,10 @@ async function doUpgrade(unit) {
   unit = liveUnit(unit);
   if (!unit) return;
   const from = UNITS[unit.type].name;
+  const log = L.entry.upgrade(unit);
   const res = R.upgradeUnit(app.state, unit, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast(`${from} aufgerüstet zu ${UNITS[res.to].name}`, 'good');
   sfx('promote');
@@ -780,8 +837,10 @@ async function doLoadCargo(balloon, unitId) {
   balloon = liveUnit(balloon);
   const unit = R.findUnit(app.state, unitId);
   if (!balloon || !unit) return;
+  const log = L.entry.load(balloon, unit);
   const res = R.loadCargo(app.state, balloon, unit);
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast(`${UNITS[unit.type].name} steigt in den Ballon`, 'good');
   sfx('move');
@@ -792,8 +851,10 @@ async function doLoadCargo(balloon, unitId) {
 async function doUnloadCargo(balloon, q, r) {
   balloon = liveUnit(balloon);
   if (!balloon) return;
+  const log = L.entry.unload(balloon, q, r);
   const res = R.unloadCargo(app.state, balloon, q, r);
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast(`${UNITS[res.unit.type].name} abgesetzt`, 'good');
   sfx('move');
@@ -804,8 +865,10 @@ async function doUnloadCargo(balloon, q, r) {
 async function doBuildBridge(unit, dir) {
   unit = liveUnit(unit);
   if (!unit) return;
+  const log = L.entry.bridge(unit, dir);
   const res = R.buildBridge(app.state, unit, dir, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast('Brücke gebaut', 'good');
   sfx('build');
@@ -816,8 +879,10 @@ async function doBuildBridge(unit, dir) {
 async function doDestroyBridge(unit, q, r) {
   unit = liveUnit(unit);
   if (!unit) return;
+  const log = L.entry.unbridge(unit, q, r);
   const res = R.destroyBridge(app.state, unit, q, r, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast('Brücke eingerissen', 'good');
   sfx('splash');
@@ -830,8 +895,10 @@ function doDisband(unit) {
   ui.showConfirm(`${name} auflösen? Du erhältst ${R.disbandRefund(unit)} Sterne zurück.`, async () => {
     const u = liveUnit(unit);
     if (!u || !myTurn()) return;
+    const log = L.entry.disband(u);
     const res = R.disbandUnit(app.state, u, actAs());
     if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
+    L.logAction(app.state, log);
     sfx('select');
     app.busy = true;
     app.sel = null;
@@ -850,6 +917,7 @@ function doEndTurnNow() {
   app.pending = null;
   app.busy = true;
   app.sel = null;
+  L.logAction(app.state, L.entry.end());
   R.endTurn(app.state);
   if (app.online) app.botDriver = true;
   sfx('turn');
@@ -879,8 +947,10 @@ async function doEndTurn() {
 }
 
 async function doResearch(techId) {
+  const log = L.entry.research(techId);
   const res = R.research(app.state, techId, actAs());
   if (!res.ok) { ui.toast(res.reason, 'warn'); sfx('error'); return; }
+  L.logAction(app.state, log);
   app.busy = true;
   ui.toast(`${TECHS[techId].name} erforscht`, 'good');
   sfx('research');
@@ -1162,14 +1232,20 @@ function onTutor(action) {
   tutorTick();
 }
 
-function startDaily() {
-  const ch = P.dailyChallenge();
-  startLocal('bot', {
-    count: ch.count, tribe: ch.tribe, mapSize: ch.mapSize, mapType: ch.mapType,
-    aiLevel: ch.aiLevel, turnLimit: ch.turnLimit, stars: ch.stars, seed: ch.seed
-  });
-  app.state.daily = ch.key;
+// Tages- und Wochen-Herausforderung: Aufbau wie beim Nachprüfen der Punkte
+// (actionlog.js), dazu ein Zugprotokoll für die Bestenliste.
+function startChallenge(kind) {
+  resetLocal('bot');
+  const { state, challenge } = L.challengeGame(kind);
+  app.state = state;
+  app.state.looks = { player_1: P.lookOf(P.loadProfile()) };
+  enterLocal();
   persist();
+  return challenge;
+}
+
+function startDaily() {
+  startChallenge('daily');
   ui.toast('Tagesherausforderung: Heute spielen alle dieselbe Karte mit demselben Stamm. Nach 30 Runden zählt die Punktzahl.', 'good');
 }
 
@@ -1205,16 +1281,7 @@ function missionTick() {
 const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function startWeekly() {
-  const ch = P.weeklyChallenge();
-  startLocal('bot', {
-    count: ch.count, tribe: ch.tribe, mapSize: ch.mapSize, mapType: ch.mapType,
-    aiLevel: ch.aiLevel, turnLimit: ch.turnLimit, stars: ch.stars, seed: ch.seed
-  });
-  R.applyWeeklyRule(app.state, ch.rule);
-  app.state.weekly = ch.key;
-  render.syncBoard(app.state, viewer());
-  persist();
-  refresh();
+  const ch = startChallenge('weekly');
   ui.toast(`Wochen-Herausforderung „${ch.name}“: ${ch.desc} Nach ${ch.turnLimit} Runden zählt die Punktzahl.`, 'good');
 }
 
@@ -1344,7 +1411,8 @@ function endReview() {
   ui.setReview(false);
 }
 
-function startLocal(mode, override = null) {
+// Gemeinsamer Start aller lokalen Partien.
+function resetLocal(mode) {
   endReview();
   app.gen++;
   app.mode = mode;
@@ -1355,6 +1423,10 @@ function startLocal(mode, override = null) {
   app.sel = null;
   app.busy = false;
   app.idleWarned = null;
+}
+
+function startLocal(mode, override = null) {
+  resetLocal(mode);
   const settings = { ...ui.getSettings(), ...(override || {}) };
   const count = override && override.count ? override.count : mode === 'bot' ? settings.bots + 1 : settings.humans;
   const tribe = mode === 'bot' ? (override && override.tribe) || ui.getTribe() : null;

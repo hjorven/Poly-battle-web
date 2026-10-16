@@ -1,5 +1,7 @@
 # Stämme
 
+**Deutsch** · [English](Tribes)
+
 > Diese Seite wird aus den Spieldaten erzeugt (`npm run wiki`). Änderungen bitte in `js/config.js` bzw. `js/campaign.js` machen.
 
 Jeder Stamm startet mit einer Technologie, einer Einheit und einer Besonderheit.

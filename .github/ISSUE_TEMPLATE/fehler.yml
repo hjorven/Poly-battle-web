@@ -1,81 +1,82 @@
-name: Fehler melden
-description: Etwas funktioniert nicht oder sieht falsch aus.
-title: "Fehler: "
+name: Report a bug · Fehler melden
+description: Something does not work or looks wrong. · Etwas funktioniert nicht oder sieht falsch aus.
+title: "Bug: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Danke fürs Melden! Je genauer, desto schneller lässt sich der Fehler finden.
+        Thanks for reporting! The more precise, the faster the bug can be found. You can write in English or German.
+
+        Danke fürs Melden! Je genauer, desto schneller lässt sich der Fehler finden. Du kannst auf Englisch oder Deutsch schreiben.
   - type: textarea
     id: was
     attributes:
-      label: Was ist passiert?
-      description: Beschreibe, was du gesehen hast.
-      placeholder: Nach dem Angriff mit dem Katapult blieb das Spielfeld weiß.
+      label: What happened? · Was ist passiert?
+      description: Describe what you saw. · Beschreibe, was du gesehen hast.
+      placeholder: After attacking with the catapult, the board turned white.
     validations:
       required: true
   - type: textarea
     id: erwartet
     attributes:
-      label: Was hast du erwartet?
-      placeholder: Die Einheit sollte Schaden nehmen und das Spiel normal weiterlaufen.
+      label: What did you expect? · Was hast du erwartet?
+      placeholder: The unit should take damage and the game should continue normally.
     validations:
       required: true
   - type: textarea
     id: schritte
     attributes:
-      label: So lässt es sich auslösen
-      description: Schritt für Schritt, so weit du dich erinnerst.
+      label: Steps to reproduce · So lässt es sich auslösen
+      description: Step by step, as far as you remember. · Schritt für Schritt, so weit du dich erinnerst.
       placeholder: |
-        1. Gegen KI starten, Karte klein
-        2. Katapult in Runde 8 ausbilden
-        3. Gegnerische Stadt angreifen
+        1. Start against the AI, small map
+        2. Train a catapult in turn 8
+        3. Attack an enemy city
     validations:
       required: true
   - type: dropdown
     id: modus
     attributes:
-      label: Spielmodus
+      label: Game mode · Spielmodus
       options:
-        - Gegen KI
+        - Against AI · Gegen KI
         - Hotseat
         - Online
         - Tutorial
-        - Kampagne
-        - Tagesherausforderung
-        - Wochen-Herausforderung
-        - Menü (kein Spiel)
+        - Campaign · Kampagne
+        - Daily challenge · Tagesherausforderung
+        - Weekly challenge · Wochen-Herausforderung
+        - Menu, no game · Menü, kein Spiel
     validations:
       required: true
   - type: dropdown
     id: geraet
     attributes:
-      label: Gerät
+      label: Device · Gerät
       options:
-        - PC oder Laptop
-        - iPad oder Tablet
-        - Handy
+        - PC or laptop · PC oder Laptop
+        - iPad or tablet · iPad oder Tablet
+        - Phone · Handy
     validations:
       required: true
   - type: input
     id: browser
     attributes:
-      label: Browser und Version
-      placeholder: Safari auf iPadOS 18, Chrome 130 unter Windows …
+      label: Browser and version · Browser und Version
+      placeholder: Safari on iPadOS 18, Chrome 130 on Windows …
     validations:
       required: true
   - type: textarea
     id: bilder
     attributes:
-      label: Screenshots oder Spielstand
-      description: Bilder hier hineinziehen. Fehlermeldungen aus der Browser-Konsole (F12) helfen sehr.
+      label: Screenshots or save game · Screenshots oder Spielstand
+      description: Drag images here. Error messages from the browser console (F12) help a lot. · Bilder hier hineinziehen. Fehlermeldungen aus der Browser-Konsole (F12) helfen sehr.
   - type: checkboxes
     id: check
     attributes:
-      label: Vorher geprüft
+      label: Checked beforehand · Vorher geprüft
       options:
-        - label: Ich habe die Seite neu geladen und es passiert weiterhin.
+        - label: I reloaded the page and it still happens. · Ich habe die Seite neu geladen und es passiert weiterhin.
           required: true
-        - label: Ich habe in den offenen Issues nach dem Fehler gesucht.
-          required: true
+        - label: I searched the open issues for this bug. · Ich habe in den offenen Issues nach dem Fehler gesucht.

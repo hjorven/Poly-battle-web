@@ -60,6 +60,7 @@ export function initUI(h) {
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('coachBtn').addEventListener('click', () => handlers.onCoach && handlers.onCoach());
+  bindPhoneHud();
   // Die Karte reicht bis oben; Elemente darunter richten sich nach der Höhe der Kärtchen.
   const syncTop = () => document.documentElement.style.setProperty('--hud-h', $('topbar').offsetHeight + 'px');
   syncTop();
@@ -188,6 +189,18 @@ function buildSettings() {
     markTheme();
   }));
   markTheme();
+  // Ansicht: Automatisch (nach Gerät), Handy oder Groß – für Geräte, die falsch erkannt werden.
+  const viewBtns = wrap.querySelectorAll('[data-view-pick]');
+  let view = 'auto';
+  try { view = localStorage.getItem('pb_view') || 'auto'; } catch (e) { view = 'auto'; }
+  const markView = () => viewBtns.forEach(b => b.classList.toggle('active', b.dataset.viewPick === view));
+  viewBtns.forEach(b => b.addEventListener('click', () => {
+    view = b.dataset.viewPick;
+    if (window.pbView) window.pbView(view);
+    try { if (view === 'auto') localStorage.removeItem('pb_view'); else localStorage.setItem('pb_view', view); } catch (e) { /* ignore */ }
+    markView();
+  }));
+  markView();
   loadSettings();
   wrap.addEventListener('click', e => { if (e.target.closest('button')) saveSettings(); });
   const bots = wrap.querySelectorAll('[data-bots]');
@@ -412,8 +425,13 @@ function renderStats(profile) {
 
 // Namensdialog; `onSave(name)` liefert eine Fehlermeldung oder null.
 const NAME_TEXT = 'Mit diesem Namen erscheinst du in der Bestenliste. 3–16 Zeichen, Buchstaben, Ziffern, Leerzeichen, _ und -.';
-export function askName(current, onSave, { title = 'Wähle deinen Namen', text = NAME_TEXT, max = 16, ok = 'Speichern' } = {}) {
+export function askName(current, onSave, { title = 'Wähle deinen Namen', text = NAME_TEXT, max = 16, ok = 'Speichern', extra = [] } = {}) {
   $('name-title').textContent = title;
+  // Zusätzliche Knöpfe unter dem Feld (Profil-Code: speichern, erneuern).
+  const ex = $('name-extra');
+  ex.innerHTML = extra.map((b, i) => `<button class="btn ghost" data-nx="${i}">${esc(b.label)}</button>`).join('');
+  ex.classList.toggle('hidden', !extra.length);
+  ex.querySelectorAll('[data-nx]').forEach(btn => btn.addEventListener('click', () => extra[+btn.dataset.nx].run(close)));
   $('name-text').textContent = text;
   $('nameOk').textContent = ok;
   const input = $('name-input');
@@ -422,7 +440,7 @@ export function askName(current, onSave, { title = 'Wähle deinen Namen', text =
   $('name-error').textContent = '';
   $('name-overlay').classList.remove('hidden');
   input.focus();
-  const close = () => { $('name-overlay').classList.add('hidden'); $('nameOk').onclick = null; input.onkeydown = null; };
+  function close() { $('name-overlay').classList.add('hidden'); $('nameOk').onclick = null; input.onkeydown = null; }
   const save = async () => {
     $('nameOk').disabled = true;
     const err = await onSave(input.value);
@@ -448,6 +466,8 @@ export function renderBoard(res, kind, myName) {
   const me = d.me && !top.some(r => r.name === d.me.name) ? `<li class="me"><span>${d.me.rank}.</span><span>${esc(d.me.name)}</span><b>${d.me.score}</b></li>` : '';
   box.innerHTML = top.length ? `<ol class="board-list">${rows}${me}</ol><div class="hint">${d.total} ${d.total === 1 ? 'Spieler' : 'Spieler'} ${kind === 'daily' ? 'heute' : 'diese Woche'}</div>`
     : `<div class="hint">Noch keine Einträge ${kind === 'daily' ? 'heute' : 'diese Woche'} – spiel die ${kind === 'daily' ? 'Tages' : 'Wochen'}-Herausforderung und sei die Nummer 1!</div>`;
+  if (d.pending) box.innerHTML += `<div class="hint">${d.pending === 1 ? 'Ein Ergebnis von dir wird' : d.pending + ' Ergebnisse von dir werden'} gerade geprüft und erscheint danach hier.</div>`;
+  if (d.rejected) box.innerHTML += `<div class="hint">Ein Ergebnis wurde nicht gewertet: ${esc(d.rejected)}</div>`;
   if (!myName) box.innerHTML += '<div class="hint">Wähle oben im Profil einen Namen, damit deine Punkte hier erscheinen.</div>';
 }
 
@@ -517,6 +537,34 @@ export function showNews(report) {
 
 export function hideNews() {
   $('news').classList.add('hidden');
+}
+
+// Handy: oben nur das Nötigste, der Rest hinter „Mehr“. Minikarte und Kamera-Knöpfe
+// sind dort aus- und einschaltbar (gemerkt), weil die Karte sonst kaum Platz hat.
+function bindPhoneHud() {
+  const root = document.documentElement;
+  const top = $('topbar'), more = $('moreBtn');
+  const setMore = open => { top.classList.toggle('more-open', open); more.setAttribute('aria-expanded', String(open)); };
+  more.addEventListener('click', () => setMore(!top.classList.contains('more-open')));
+  // Nach einem Knopf aus „Mehr“ klappt die Leiste wieder zu; Minikarte und Kamera bleiben offen zum Vergleichen.
+  top.querySelectorAll('.top-actions .btn').forEach(b => {
+    if (b !== more && b.id !== 'mapToggleBtn' && b.id !== 'camToggleBtn') b.addEventListener('click', () => setMore(false));
+  });
+  $('gameCanvas').addEventListener('pointerdown', () => setMore(false));
+  let hud = {};
+  try { hud = JSON.parse(localStorage.getItem('pb_phone_hud') || '{}') || {}; } catch (e) { hud = {}; }
+  const toggles = [['mapToggleBtn', 'map', 'show-map'], ['camToggleBtn', 'cam', 'show-cam']];
+  const apply = () => toggles.forEach(([id, key, cls]) => {
+    root.classList.toggle(cls, !!hud[key]);
+    $(id).setAttribute('aria-pressed', String(!!hud[key]));
+    $(id).classList.toggle('active', !!hud[key]);
+  });
+  toggles.forEach(([id, key]) => $(id).addEventListener('click', () => {
+    hud[key] = !hud[key];
+    try { localStorage.setItem('pb_phone_hud', JSON.stringify(hud)); } catch (e) { /* ignore */ }
+    apply();
+  }));
+  apply();
 }
 
 export function setEndTurn(enabled) {

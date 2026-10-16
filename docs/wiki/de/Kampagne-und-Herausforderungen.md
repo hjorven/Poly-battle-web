@@ -1,5 +1,7 @@
 # Kampagne und Herausforderungen
 
+**Deutsch** · [English](Campaign-and-Challenges)
+
 > Diese Seite wird aus den Spieldaten erzeugt (`npm run wiki`). Änderungen bitte in `js/config.js` bzw. `js/campaign.js` machen.
 
 ## Kampagne

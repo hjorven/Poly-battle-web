@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Datenschutz – Poly Battle</title>
+  <meta name="color-scheme" content="light dark">
+  <script>
+    // Gleiche Darstellung wie im Spiel (System, Hell oder Dunkel).
+    try { var t = localStorage.getItem('pb_theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Das Spiel sperrt Scrollen und Markieren – diese Seite ist zum Lesen da. */
+    html, body { height: auto; overflow: auto; user-select: text; -webkit-user-select: text; touch-action: auto; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; line-height: 1.6; font-size: 15px; }
+    h1 { font-size: 26px; margin-bottom: 4px; }
+    h2 { font-size: 18px; margin: 28px 0 8px; }
+    p, ul { margin-bottom: 10px; }
+    ul { padding-left: 20px; }
+    a { color: var(--primary); }
+    .stand { color: var(--muted); font-size: 13px; }
+    .back { display: inline-block; margin-bottom: 20px; }
+    code { font-size: 13px; }
+  </style>
+</head>
+<body>
+<main>
+  <a class="back" href="./">Zurück zum Spiel</a>
+  <h1>Datenschutz</h1>
+  <p class="stand">Stand: 16. Oktober 2026</p>
+
+  <p>Poly Battle ist ein privates Hobbyprojekt ohne Werbung, ohne Einnahmen und ohne Tracking. Der Quelltext ist offen auf <a href="https://github.com/hjorven/Poly-battle-web">GitHub</a>. Hier steht, welche Daten beim Spielen anfallen, wo sie liegen und wie lange.</p>
+
+  <h2>Verantwortlich</h2>
+  <p>Jorven Heine<br>E-Mail: <a href="mailto:ezzuarhc6@mozmail.com">ezzuarhc6@mozmail.com</a></p>
+
+  <h2>Kurz gesagt</h2>
+  <ul>
+    <li>Keine Cookies, keine Statistik, kein Tracking, keine Werbung, keine fremden Schriften oder Skripte.</li>
+    <li>Kein Konto, keine E-Mail-Adresse. Wer nur gegen die KI oder am selben Gerät spielt, schickt keine Spieldaten an einen Server.</li>
+    <li>Online-Partien, Profil-Name und Bestenliste laufen über eine Datenbank in Frankfurt.</li>
+  </ul>
+
+  <h2>Aufruf der Webseite (GitHub Pages)</h2>
+  <p>Die Seite liegt bei GitHub Pages (GitHub, Inc., USA, ein Tochterunternehmen von Microsoft). Beim Aufruf verarbeitet GitHub technisch notwendige Daten wie IP-Adresse, Zeitpunkt, aufgerufene Datei und Browserkennung, um die Seite auszuliefern und vor Angriffen zu schützen. Rechtsgrundlage ist unser berechtigtes Interesse an einer sicheren, erreichbaren Webseite (Art. 6 Abs. 1 lit. f DSGVO). GitHub ist nach dem EU-US Data Privacy Framework zertifiziert. Details: <a href="https://docs.github.com/de/site-policy/privacy-policies/github-general-privacy-statement">Datenschutzerklärung von GitHub</a>.</p>
+
+  <h2>Speicher im Browser</h2>
+  <p>Das Spiel legt im Speicher deines Browsers (<code>localStorage</code>) ab, was es zum Funktionieren braucht: deinen Spielstand, Profil und Erfolge, Einstellungen wie Darstellung und Ton, und eine zufällige Spieler-Kennung für Online-Partien. Ein Service Worker speichert die Dateien des Spiels, damit es auch ohne Verbindung startet. Diese Daten bleiben auf deinem Gerät, bis du sie in den Browser-Einstellungen löschst. Eine Einwilligung ist dafür nicht nötig, weil sie für das Spiel, das du aufrufst, unbedingt erforderlich sind (§ 25 Abs. 2 Nr. 2 TDDDG).</p>
+
+  <h2>Online-Funktionen (Supabase)</h2>
+  <p>Für Online-Partien, Profil-Namen und die Bestenliste nutzt das Spiel den Dienst Supabase (<a href="https://supabase.com">supabase.com</a>) als Auftragsverarbeiter. Die Datenbank steht in Frankfurt am Main (Region <code>eu-central-1</code>); Supabase hat aber auch Standorte außerhalb der EU, etwa in den USA, und kann im Einzelfall von dort darauf zugreifen. Der Vertrag zur Auftragsverarbeitung (Data Processing Addendum mit EU-Standardvertragsklauseln) ist Teil der Nutzungsbedingungen von Supabase. Details: <a href="https://supabase.com/privacy">Datenschutzerklärung von Supabase</a>. Daten fließen nur, wenn du eine dieser Funktionen nutzt:</p>
+  <ul>
+    <li><b>Online-Partien:</b> der Spielstand und für jeden Platz eine Prüfsumme (SHA-256) deiner Spieler-Kennung, nie die Kennung selbst. Partien werden gelöscht, wenn 30 Tage lang niemand zieht, und offene Partien ohne Mitspieler schon nach 7 Tagen.</li>
+    <li><b>Profil und Name:</b> Sobald du im Profil einen Namen wählst, werden Name und Profil (Stufe, Erfolge, Statistik, gewähltes Aussehen) gespeichert. Profile ohne Fortschritt (Stufe 1) werden nach 180 Tagen ohne Änderung gelöscht.</li>
+    <li><b>Bestenliste:</b> Ergebnisse der Tages- und Wochen-Herausforderung mit dem Zugprotokoll der Partie. Ein automatischer Prüfer (GitHub Actions) spielt die Partie nach, bevor das Ergebnis zählt. In der Bestenliste sind für alle sichtbar: Name, Stufe, Punkte, Stamm und Runde.</li>
+    <li><b>Schutz vor Missbrauch:</b> Beim Wählen eines Namens wird eine Prüfsumme deiner IP-Adresse gespeichert, um massenhaftes Anlegen von Namen zu bremsen. Sie wird nach einem Tag gelöscht.</li>
+  </ul>
+  <p>Wie bei jedem Server verarbeitet Supabase bei jeder Anfrage deine IP-Adresse, um antworten zu können. Rechtsgrundlage ist die Bereitstellung der Spielfunktionen, die du nutzt (Art. 6 Abs. 1 lit. b DSGVO), beim Missbrauchsschutz unser berechtigtes Interesse an einer fairen Bestenliste (Art. 6 Abs. 1 lit. f DSGVO).</p>
+
+  <h2>Mitteilungen</h2>
+  <p>Wenn du es im Browser erlaubst, zeigt das Spiel eine Mitteilung, sobald du in einer Online-Partie am Zug bist. Die Mitteilung entsteht in deinem Browser; es wird dafür kein Push-Dienst genutzt.</p>
+
+  <h2>Deine Rechte</h2>
+  <p>Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch (Art. 15 bis 21 DSGVO). Schreib dafür an die oben genannte E-Mail-Adresse und nenn deinen Spielernamen, damit wir deine Daten finden. Du kannst dich außerdem bei einer Datenschutz-Aufsichtsbehörde beschweren (Art. 77 DSGVO).</p>
+</main>
+</body>
+</html>
