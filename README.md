@@ -8,7 +8,7 @@ Turn-based conquest in the browser, inspired by *The Battle of Polytopia*: found
 
 > The game itself is in German. The documentation is available in English and German.
 
-![A game in turn 22: capital with farms, a second city at the top, a mercenary camp, lighthouses at the map corners, the rest of the world under fog](docs/screenshot.png)
+![A game in turn 21: two cities with farms and roads, hills, swamp, a mercenary camp, ships off the coast and lighthouses at the map corners](docs/screenshot.png)
 
 ## What to expect
 
@@ -25,6 +25,8 @@ Turn-based conquest in the browser, inspired by *The Battle of Polytopia*: found
 - **Open map:** the controls sit in floating cards along the edges. Select a city or unit and a sign with its stats appears right next to it, with the actions in a toolbar at the bottom – inspired by Mini Metro.
 - **Controls** with mouse and keyboard or touch; moving and attacking take two taps so nothing happens by accident. No undo – every move counts.
 - **Light or dark:** follows the system setting or can be set manually.
+
+![Main menu in dark mode: game modes, daily and weekly challenge, tribe selection and game settings](docs/menu.png)
 
 ![Selected capital: sign with level and income at the city, the toolbar at the bottom with Build, Population and units](docs/city.png)
 
