@@ -137,7 +137,7 @@
               <button class="btn big mode daily-btn" data-mode="weekly" id="weeklyBtn">Wochen-Herausforderung</button>
               <button class="btn big mode" data-mode="hotseat">Hotseat<span class="sub">Mehrere Spieler an einem Gerät</span></button>
               <button class="btn big mode" data-mode="online">Online<span class="sub">Link teilen und gegeneinander spielen</span></button>
-              <button class="btn big mode ghost" data-mode="tutorial">Tutorial<span class="sub">Das erste Spiel mit Anleitung</span></button>
+              <button class="btn big mode ghost" data-mode="tutorial">Tutorial<span class="sub">Lektionen von Grundlagen bis Kampf</span></button>
             </div>
             <div id="my-matches" class="my-matches hidden" aria-live="polite"></div>
           </div>
@@ -337,6 +337,16 @@
         <button id="overviewClose" class="btn ghost small">Schließen</button>
       </div>
       <div id="overview-list"></div>
+    </div>
+  </div>
+
+  <div id="learn-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="learn-title">
+    <div class="card learn-card">
+      <div class="card-head">
+        <h2 id="learn-title">Tutorial</h2>
+        <button id="learnClose" class="btn ghost small">Schließen</button>
+      </div>
+      <div id="learn-body"></div>
     </div>
   </div>
 

@@ -35,6 +35,11 @@ export function initUI(h) {
       closeTech();
     }
   });
+  $('learnClose').addEventListener('click', () => hideLearn());
+  $('learn-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) hideLearn(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('learn-overlay').classList.contains('hidden')) { e.preventDefault(); hideLearn(); }
+  });
   $('endTurnBtn').addEventListener('click', () => handlers.onEndTurn());
   $('idleBtn').addEventListener('click', () => handlers.onNextIdle());
   $('soundBtn').addEventListener('click', () => handlers.onToggleSound());
@@ -350,24 +355,156 @@ export function setSoundIcon(muted) {
   btn.setAttribute('aria-label', btn.title);
 }
 
-// Tutorial-Karte: Text, Fortschritt, Weiter (nur beim letzten/Info-Schritt) und Überspringen.
-export function showTutor({ text, step, total, next }) {
-  const box = $('tutor');
-  box.innerHTML = `<div class="tu-head"><span>Tutorial · Schritt ${step + 1} von ${total}</span></div>
-    <div class="tu-bar"><div style="width:${Math.round((step + 1) / total * 100)}%"></div></div>
-    <p class="tu-text">${esc(text)}</p>
-    <div class="tu-btns">
-      <button class="btn small" data-tu-skip>${next === 'Fertig' ? 'Schließen' : 'Tutorial beenden'}</button>
-      ${next ? `<button class="btn small primary" data-tu-next>${esc(next)}</button>` : ''}
-    </div>`;
-  box.querySelector('[data-tu-skip]').addEventListener('click', () => handlers.onTutor('skip'));
-  const n = box.querySelector('[data-tu-next]');
-  if (n) n.addEventListener('click', () => handlers.onTutor('next'));
+// --- Tutorial -------------------------------------------------------------------
+
+// Id des offenen Fensters (Menü, Forschung, Bestätigung …) oder null.
+export function openOverlay() {
+  const o = [...document.querySelectorAll('.overlay')].find(x => !x.classList.contains('hidden'));
+  return o ? o.id : null;
+}
+
+// Wirklich zu sehende Treffer einer CSS-Auswahl: im Fenster, nicht weggescrollt
+// oder abgeschnitten, nicht hinter einem offenen Fenster.
+function tutorTargets(sel) {
+  if (!sel) return [];
+  const open = openOverlay();
+  const W = window.innerWidth, H = window.innerHeight;
+  return [...document.querySelectorAll(sel)].filter(el => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return false;
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (x < 0 || y < 0 || x > W || y > H) return false;
+    if (getComputedStyle(el).visibility === 'hidden') return false;
+    if (open && !el.closest('#' + open)) return false;
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (!/hidden|auto|scroll|clip/.test(cs.overflowX + cs.overflowY)) continue;
+      const pr = p.getBoundingClientRect();
+      if (x < pr.left || x > pr.right || y < pr.top || y > pr.bottom) return false;
+    }
+    return true;
+  });
+}
+
+export function tutorVisible(sel) {
+  return tutorTargets(sel).length > 0;
+}
+
+let tutorSig = '';
+let tutorScrolled = '';
+// Tutorial-Karte: Kopf mit Fortschritt, Text, Knöpfe. `focus` hebt Knöpfe
+// hervor; `inline` (Id eines Fensters) zeigt die Karte als Leiste oben in diesem
+// Fenster statt über der Karte. Die Karte meidet Ziel, Tipp und Meldungen.
+export function showTutor({ head, progress, text, buttons = [], focus = null, tile = null, inline = null }) {
+  const sig = JSON.stringify([head, text, buttons, inline]);
+  const card = inline ? $(inline).querySelector('.card') : null;
+  let box = inline ? card.querySelector('.tu-inline') : $('tutor');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'tu-inline';
+    box.setAttribute('role', 'status');
+    card.querySelector('.card-head').after(box);
+  }
+  document.querySelectorAll('.tu-inline').forEach(b => { if (b !== box) b.remove(); });
+  if (inline) $('tutor').classList.add('hidden');
+  if (sig !== tutorSig || !box.firstChild) {
+    tutorSig = sig;
+    box.innerHTML = `<div class="tu-head"><span>${esc(head)}</span></div>
+      <div class="tu-bar"><div style="width:${Math.round(progress * 100)}%"></div></div>
+      <p class="tu-text">${esc(text)}</p>
+      <div class="tu-btns">${buttons.map(([id, label, primary]) => `<button class="btn small${primary ? ' primary' : ''}" data-tu="${id}">${esc(label)}</button>`).join('')}</div>`;
+    box.querySelectorAll('[data-tu]').forEach(b => b.addEventListener('click', () => handlers.onTutor(b.dataset.tu)));
+  }
   box.classList.remove('hidden');
+  // Hervorhebung neu setzen (Leisten werden beim Neuzeichnen ersetzt).
+  const targets = tutorTargets(focus).slice(0, 12);
+  document.querySelectorAll('.tu-focus').forEach(e => { if (!targets.includes(e)) e.classList.remove('tu-focus'); });
+  targets.forEach(e => e.classList.add('tu-focus'));
+  // Ziel einmal ins Bild holen: Knopf in einer scrollenden Leiste, Technologie
+  // außerhalb des sichtbaren Baumausschnitts (Handy hochkant).
+  const first = focus && document.querySelector(focus);
+  if (first && focus !== tutorScrolled && (first.closest('.tb-row') || !targets.length)) {
+    tutorScrolled = focus;
+    const tree = first.closest('#tech-tree');
+    if (tree) {
+      const tr = tree.getBoundingClientRect(), er = first.getBoundingClientRect();
+      techNav.tx += (tr.left + tr.width / 2) - (er.left + er.width / 2);
+      techNav.ty += (tr.top + tr.height / 2) - (er.top + er.height / 2);
+      applyTechNav();
+    } else first.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (!targets.length) tutorTargets(focus).slice(0, 12).forEach(e => e.classList.add('tu-focus'));
+  }
+  if (!inline) placeTutor(box, targets, tile);
+}
+
+// Oben oder unten hinsetzen: dort, wo die Karte weder das Ziel noch Tipp,
+// Meldungen oder die untere Leiste verdeckt.
+function placeTutor(box, targets, tile) {
+  const avoid = targets.map(e => e.getBoundingClientRect());
+  if (tile) { const p = project(tile[0], tile[1]); if (p) avoid.push({ left: p.x - 40, right: p.x + 40, top: p.y - 50, bottom: p.y + 30 }); }
+  const shown = id => { const e = $(id); return e && !e.classList.contains('hidden') && e.getBoundingClientRect().height ? e.getBoundingClientRect() : null; };
+  const others = ['coach', 'news', 'mission-bar'].map(shown).filter(Boolean);
+  const H = window.innerHeight;
+  const hud = $('topbar').getBoundingClientRect().bottom;
+  // Handy quer: wenig Höhe, deshalb schmal links neben der Karte.
+  const side = document.documentElement.classList.contains('phone') && window.innerWidth > H;
+  box.classList.toggle('tu-side', side);
+  // Untere Leisten (Stadt, Einheit), sofern sie nicht selbst das Ziel enthalten.
+  const bars = ['panel', 'unit-chip'].map(shown).filter(Boolean);
+  const barTop = Math.min(H, ...bars.map(r => r.top));
+  if (side) {
+    const bottomBars = ['panel', 'unit-chip'].map(shown).filter(Boolean);
+    const limit = Math.min(H, ...bottomBars.map(r => r.top)) - 8;
+    box.style.top = Math.round(hud + 6) + 'px';
+    box.style.bottom = 'auto';
+    box.style.maxHeight = Math.max(90, Math.round(limit - hud - 6)) + 'px';
+    return;
+  }
+  box.style.maxHeight = '';
+  const h = box.offsetHeight || 120;
+  const spots = [{ top: hud + 8 }, { top: barTop - 8 - h }, { top: H - 14 - h }];
+  const portraitPhone = document.documentElement.classList.contains('phone') && H > window.innerWidth;
+  if (portraitPhone) spots.unshift(spots.splice(1, 1)[0]);
+  const hits = (top, rects) => rects.some(r => r.bottom > top && r.top < top + h);
+  const free = spots.filter(s => s.top >= hud + 4 && s.top + h <= H);
+  const pick = free.find(s => !hits(s.top, avoid) && !hits(s.top, others)) || free.find(s => !hits(s.top, avoid)) || free[0] || spots[0];
+  box.style.top = Math.round(pick.top) + 'px';
+  box.style.bottom = 'auto';
 }
 
 export function hideTutor() {
   $('tutor').classList.add('hidden');
+  document.querySelectorAll('.tu-inline').forEach(b => b.remove());
+  document.querySelectorAll('.tu-focus').forEach(e => e.classList.remove('tu-focus'));
+  tutorSig = '';
+  tutorScrolled = '';
+}
+
+// Lern-Tabs: eine Lektion je Reiter, mit Haken für erledigte.
+let learnTab = null;
+export function showLearn(lessons, done) {
+  if (!learnTab || !lessons.some(l => l.id === learnTab)) learnTab = (lessons.find(l => !done.includes(l.id)) || lessons[0]).id;
+  const i = lessons.findIndex(l => l.id === learnTab);
+  const l = lessons[i];
+  const fin = done.includes(l.id);
+  $('learn-body').innerHTML = `
+    <div class="ov-tabs learn-tabs" role="tablist">${lessons.map((x, k) => `<button class="ov-tab${x.id === learnTab ? ' active' : ''}" role="tab" aria-selected="${x.id === learnTab}" data-learn-tab="${x.id}">${k + 1}. ${esc(x.title)}${done.includes(x.id) ? ` <span class="learn-done" title="Geschafft">${CHECK_ICON}</span>` : ''}</button>`).join('')}</div>
+    <div class="learn-pane" role="tabpanel">
+      <p class="learn-kicker">Lektion ${i + 1} von ${lessons.length}${fin ? ' · geschafft' : ''}</p>
+      <h3>${esc(l.title)}</h3>
+      <p>${esc(l.blurb)}</p>
+      <p class="learn-sub">Das lernst du:</p>
+      <ul class="learn-list">${l.learn.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+      <p class="hint">Jede Lektion spielt auf einer eigenen kleinen Übungskarte gegen eine leichte KI. Danach kannst du dort frei weiterspielen.</p>
+      <div class="menu-buttons"><button class="btn primary big" data-learn-start="${l.id}">${fin ? 'Nochmal spielen' : 'Lektion starten'}</button></div>
+    </div>`;
+  $('learn-body').querySelectorAll('[data-learn-tab]').forEach(b => b.addEventListener('click', () => { learnTab = b.dataset.learnTab; showLearn(lessons, done); }));
+  $('learn-body').querySelector('[data-learn-start]').addEventListener('click', e => handlers.onLesson(e.currentTarget.dataset.learnStart));
+  $('learn-overlay').classList.remove('hidden');
+}
+
+export function hideLearn() {
+  $('learn-overlay').classList.add('hidden');
 }
 
 // --- Profil ---------------------------------------------------------------------

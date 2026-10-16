@@ -946,7 +946,30 @@ export function setThreatMarkers(cities) {
   }
 }
 
+// Tutorial: weißer, pulsierender Ring um das Feld, über das der Schritt spricht.
+let tutorRing = null;
+export function setTutorMarker(tile) {
+  if (!initialized) return;
+  const key = tile ? hk(tile[0], tile[1]) : null;
+  if (tutorRing && tutorRing.userData.key === key) return;
+  if (tutorRing) { idleGroup.remove(tutorRing); tutorRing.material.dispose(); tutorRing = null; }
+  if (!key || !tiles.get(key)) return;
+  const ringGeo = geo('tutorRing', () => new THREE.RingGeometry(0.78, 0.94, 6).rotateX(-Math.PI / 2).rotateY(Math.PI / 6));
+  const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }));
+  const p = toWorld(tile[0], tile[1]);
+  m.position.set(p.x, hexTop(key) + 0.06, p.z);
+  m.renderOrder = 14;
+  m.userData.key = key;
+  idleGroup.add(m);
+  tutorRing = m;
+}
+
 function stepIdleMarkers(now) {
+  if (tutorRing) {
+    tutorRing.material.opacity = 0.55 + Math.sin(now / 220) * 0.4;
+    const s = 1.02 + Math.sin(now / 220) * 0.06;
+    tutorRing.scale.set(s, 1, s);
+  }
   for (const m of threatRings) {
     m.material.opacity = 0.45 + Math.sin(now / 280) * 0.35;
     const s = 1 + Math.sin(now / 280) * 0.04;
