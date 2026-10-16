@@ -1,0 +1,8 @@
+{
+  "erlaubt": ["Jorven1", "Lais", "Marschall", "Barsch", "Shiitake Pilz", "Grafik", "Pazifik", "Kanal", "Heiler", "Niger",
+              "Hitachi", "Max88", "Analyst", "Fagott", "Spieler 42", "Kokosnuss", "Benedikt", "Ölprinz", "Straße", "Hans-Peter"],
+  "verboten": ["Fickfrosch", "f1ck", "F-i-c-k", "fiiick", "FUCK", "phuck", "sh1t", "n1gger", "N i g g e r", "Hitler",
+               "H1tl3r", "Adolf Hitler", "Nazi88", "1488", "14-88", "Sieg Heil", "admin", "Admin-Tom", "Moderator",
+               "Hurensohn", "Arschloch", "ArschMarsch", "Wixxer", "Schl4mpe", "Scheiße", "KKK", "Pu55y",
+               "Vergewaltiger", "Kanacke", "Sh1tt"]
+}
