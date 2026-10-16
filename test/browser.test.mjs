@@ -212,6 +212,29 @@ await test('Handy: Minikarte auf Wunsch, Ansicht im Menü umstellbar', async () 
   await page.context().close();
 });
 
+await test('Handy quer: Kamera-Knöpfe nie unter der Leiste, Kacheln ohne Überlauf, Mehr klappt zu', async () => {
+  const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36';
+  const ctx = await browser.newContext({ viewport: { width: 640, height: 360 }, screen: { width: 640, height: 360 }, hasTouch: true, isMobile: true, userAgent: android });
+  const page = await ctx.newPage();
+  await page.route(/supabase\.co/, r => r.fulfill({ status: 200, body: '[]' }));
+  await page.goto(URL_);
+  await startGame(page);
+  await page.click('#moreBtn');
+  await page.click('#camToggleBtn');
+  assert.ok(await page.isVisible('#camera-pad'), 'Kamera eingeschaltet');
+  await page.evaluate(() => { document.activeElement.blur(); const { app, sync } = window.__pb; const u = app.state.units.find(x => x.owner === 'player_1'); app.sel = { kind: 'unit', id: u.id }; sync(); });
+  await page.waitForTimeout(300);
+  assert.ok(await page.isVisible('#unit-chip'), 'Einheit gewählt');
+  assert.ok(!(await page.$eval('#topbar', e => e.classList.contains('more-open'))), 'Mehr klappt zu');
+  assert.ok(!(await page.isVisible('#camera-pad')), 'Kamera-Knöpfe weg, solange die Leiste offen ist');
+  const over = await page.$$eval('#unit-chip .tool-tile', ts => ts.map(t => t.scrollWidth - t.clientWidth).filter(d => d > 1));
+  assert.deepStrictEqual(over, [], 'Kachel-Text läuft über');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  assert.ok(await page.isVisible('#camera-pad'), 'Kamera-Knöpfe wieder da');
+  await ctx.close();
+});
+
 await test('Stadt: Schild und Werkzeugreihe, Bau-Fenster in 3D, Farm bauen', async () => {
   for (const d of ['pc', 'ipadQuer']) {
     const page = await open(d);

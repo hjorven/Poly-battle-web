@@ -559,6 +559,13 @@ function bindPhoneHud() {
     if (b !== more && b.id !== 'mapToggleBtn' && b.id !== 'camToggleBtn') b.addEventListener('click', () => setMore(false));
   });
   $('gameCanvas').addEventListener('pointerdown', () => setMore(false));
+  // Wird eine Einheit oder Stadt gewählt (auch per Tastatur), klappt „Mehr“ zu: unten braucht die Leiste den Platz.
+  if (typeof MutationObserver !== 'undefined') {
+    const watch = new MutationObserver(() => {
+      if (!$('unit-chip').classList.contains('hidden') || !$('panel').classList.contains('hidden')) setMore(false);
+    });
+    for (const id of ['unit-chip', 'panel']) watch.observe($(id), { attributes: true, attributeFilter: ['class'] });
+  }
   let hud = {};
   try { hud = JSON.parse(localStorage.getItem('pb_phone_hud') || '{}') || {}; } catch (e) { hud = {}; }
   const toggles = [['mapToggleBtn', 'map', 'show-map'], ['camToggleBtn', 'cam', 'show-cam']];
