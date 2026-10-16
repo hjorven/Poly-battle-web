@@ -14,12 +14,14 @@
   <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/"
       }
     }
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" defer></script>
+  <!-- Three.js 0.160.0 und supabase-js 2.45.4 liegen im Repository (vendor/):
+       das Spiel startet auch, wenn ein CDN gesperrt ist oder ausfällt. -->
+  <script src="vendor/supabase/supabase.js" defer></script>
 </head>
 <body>
 
@@ -373,5 +375,20 @@
   </div>
 
   <script type="module" src="js/main.js"></script>
+  <script>
+    // Lädt das Spiel nicht (Skript blockiert, Browser zu alt), statt einer
+    // toten Seite sagen, was los ist. main.js setzt pbBooted beim Start.
+    setTimeout(function () {
+      if (window.pbBooted) return;
+      var msg = 'Das Spiel konnte nicht geladen werden. Prüfe die Verbindung und lade die Seite neu.';
+      var s = document.getElementById('status');
+      if (s) s.textContent = msg;
+      var b = document.createElement('div');
+      b.className = 'boot-failed';
+      b.setAttribute('role', 'alert');
+      b.textContent = msg;
+      document.body.appendChild(b);
+    }, 12000);
+  </script>
 </body>
 </html>

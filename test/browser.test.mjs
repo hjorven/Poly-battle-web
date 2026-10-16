@@ -32,7 +32,8 @@ const DEVICES = {
   handy: { viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true }
 };
 
-const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+// PB_CHROMIUM: eigener Chromium-Pfad, falls Playwrights eigener fehlt.
+const browser = await chromium.launch({ executablePath: process.env.PB_CHROMIUM || undefined, args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 const only = process.argv[2] ? process.argv[2].toLowerCase() : null;
 let passed = 0, failed = 0;
 
@@ -109,6 +110,20 @@ await test('Menü passt ohne Scrollen aufs iPad (hoch und quer)', async () => {
     noErrors(page);
     await page.context().close();
   }
+});
+
+await test('Ohne fremde Server: Spiel startet, Menü reagiert', async () => {
+  const ctx = await browser.newContext(DEVICES.pc);
+  const page = await ctx.newPage();
+  page.errors = [];
+  page.on('pageerror', e => page.errors.push(e.message));
+  // Alles außer dem eigenen Webserver sperren (CDN, Supabase).
+  await page.route(url => !url.href.startsWith(URL_), route => route.abort());
+  await page.goto(URL_);
+  await startGame(page);
+  assert.ok(await page.isVisible('#endTurnBtn'), 'Spiel läuft nicht');
+  assert.deepStrictEqual(page.errors, [], 'Fehler auf der Seite');
+  await ctx.close();
 });
 
 await test('Menü: Reiter wechseln, Einstellungen bleiben nach Neuladen', async () => {
