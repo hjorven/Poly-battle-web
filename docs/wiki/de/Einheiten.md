@@ -1,5 +1,7 @@
 # Einheiten
 
+**Deutsch** · [English](Units)
+
 > Diese Seite wird aus den Spieldaten erzeugt (`npm run wiki`). Änderungen bitte in `js/config.js` bzw. `js/campaign.js` machen.
 
 Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Veteranen (nach 3 Siegen) bekommen zusätzliches Leben.

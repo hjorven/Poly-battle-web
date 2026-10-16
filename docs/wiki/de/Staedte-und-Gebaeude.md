@@ -1,5 +1,7 @@
 # Städte und Gebäude
 
+**Deutsch** · [English](Cities-and-Buildings)
+
 > Diese Seite wird aus den Spieldaten erzeugt (`npm run wiki`). Änderungen bitte in `js/config.js` bzw. `js/campaign.js` machen.
 
 ## Stadtstufen

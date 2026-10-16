@@ -1,23 +1,27 @@
 # Poly Battle – Wiki
 
-Poly Battle ist ein rundenbasiertes Strategiespiel im Browser, angelehnt an *The Battle of Polytopia*: Stämme gründen Städte, forschen, bauen und erobern eine Hexagon-Welt in Low-Poly-3D.
+**English** · [Deutsch](Startseite)
 
-**Direkt spielen:** https://hjorven.github.io/Poly-battle-web/ – auf PC, Tablet und Handy, ohne Installation und ohne Konto.
+Poly Battle is a turn-based strategy game in the browser, inspired by *The Battle of Polytopia*: tribes found cities, research, build and conquer a hexagon world in low-poly 3D.
 
-## Für Spielende
+**Play now:** https://hjorven.github.io/Poly-battle-web/ – on PC, tablet and phone, no installation and no account.
 
-- [Spielanleitung](Spielanleitung) – erste Schritte, Bedienung mit Maus, Tastatur und Touch
-- [Spielmodi](Spielmodi) – gegen die KI, Hotseat, online, Tages- und Wochen-Herausforderung
-- [Einheiten](Einheiten) – alle Werte und Fähigkeiten
-- [Stämme](Staemme) – Start-Technologien, Besonderheiten, KI-Persönlichkeiten
-- [Technologien](Technologien) – der Forschungsbaum in sechs Stufen
-- [Städte und Gebäude](Staedte-und-Gebaeude) – Stadtstufen, Bauten, Monumente, Gelände
-- [Kampagne und Herausforderungen](Kampagne-und-Herausforderungen) – 13 Missionen und die Wochenregeln
-- [Profil und Bestenliste](Profil-und-Bestenliste) – Stufen, Erfolge, Aussehen, Namen und Profil-Code
+> The game itself is in German. This wiki gives button and menu names in German as they appear in the game, with an English translation, for example **Zug beenden** (End turn).
 
-## Für Mitwirkende
+## For players
 
-- [Technik](Technik) – Aufbau des Codes, Spielstand, Online-Server, Tests
-- [Mitmachen](https://github.com/hjorven/Poly-battle-web/blob/main/CONTRIBUTING.md) – wie Fehlerberichte, Ideen und Pull Requests ablaufen
+- [How to Play](How-to-Play) – first steps, controls with mouse, keyboard and touch
+- [Game Modes](Game-Modes) – against the AI, hotseat, online, daily and weekly challenge
+- [Units](Units) – all stats and abilities
+- [Tribes](Tribes) – starting technologies, special traits, AI personalities
+- [Technologies](Technologies) – the tech tree in six tiers
+- [Cities and Buildings](Cities-and-Buildings) – city levels, buildings, monuments, terrain, mercenary camps
+- [Campaign and Challenges](Campaign-and-Challenges) – 13 missions and the weekly rules
+- [Profile and Leaderboard](Profile-and-Leaderboard) – levels, achievements, cosmetics, names and profile code
 
-Fehler gefunden oder eine Idee? Über [Issues](https://github.com/hjorven/Poly-battle-web/issues/new/choose) melden.
+## For contributors
+
+- [Technical Overview](Technical-Overview) – code structure, game state, online server, tests
+- [Contributing](https://github.com/hjorven/Poly-battle-web/blob/main/CONTRIBUTING.md) – how bug reports, ideas and pull requests work
+
+Found a bug or have an idea? Report it via [Issues](https://github.com/hjorven/Poly-battle-web/issues/new/choose).

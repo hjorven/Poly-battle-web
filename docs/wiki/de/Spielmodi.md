@@ -1,5 +1,7 @@
 # Spielmodi
 
+**Deutsch** · [English](Game-Modes)
+
 Alle Modi starten im Menü unter **Spielen**. Stamm und Spieleinstellungen (Kartengröße, Kartentyp, KI-Stärke, Gegnerzahl, Start-Sterne) merkt sich der Browser.
 
 | Modus | Spieler | Server nötig | Gespeichert |
