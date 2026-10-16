@@ -1,5 +1,7 @@
 # Profil und Bestenliste
 
+**Deutsch** · [English](Profile-and-Leaderboard)
+
 ## Profil
 
 Jede beendete Partie gegen die KI oder online bringt Erfahrung – mehr bei Siegen und höherer Schwierigkeit. Mit den Stufen steigt dein Titel: Häuptling, Fürst, König, Kaiser, Legende. Das Profil liegt im Browser; im Menü unter **Profil** findest du Erfolge, Aussehen und Statistik.

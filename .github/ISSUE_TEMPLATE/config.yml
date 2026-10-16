@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Spielanleitung und Werte im Wiki
+  - name: How to play and stats in the wiki · Spielanleitung und Werte im Wiki
     url: https://github.com/hjorven/Poly-battle-web/wiki
-    about: Regeln, Einheiten, Stämme, Technologien und Gebäude nachschlagen.
-  - name: Poly Battle spielen
+    about: Look up rules, units, tribes, technologies and buildings (English and German). · Regeln, Einheiten, Stämme, Technologien und Gebäude nachschlagen (Englisch und Deutsch).
+  - name: Play Poly Battle · Poly Battle spielen
     url: https://hjorven.github.io/Poly-battle-web/
-    about: Die aktuelle Version im Browser.
+    about: The current version in the browser. · Die aktuelle Version im Browser.
