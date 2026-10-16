@@ -1,0 +1,27 @@
+# Eingereichte Ergebnisse der Herausforderungen nachprüfen (scripts/verify-scores.mjs).
+# Braucht unter Settings → Secrets and variables → Actions das Secret
+# SUPABASE_SERVICE_ROLE_KEY (Supabase: Project Settings → API → service_role).
+name: Bestenliste prüfen
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: verify-scores
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ergebnisse nachspielen
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/verify-scores.mjs
