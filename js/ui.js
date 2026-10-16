@@ -1603,6 +1603,17 @@ function renderTechDetail(state, ctx) {
   if (buy && !reason) buy.addEventListener('click', () => handlers.onResearch(id));
 }
 
+// Trennstellen für lange Namen im Wabenbaum: Auf schmalen Bildschirmen bricht der
+// Name dort mit Bindestrich um statt mitten im Wort („Kartografi/e“).
+const TECH_BREAKS = ['Organi|sation', 'Klet|tern', 'Fische|rei', 'Land|wirt|schaft', 'Schild|macher', 'Berg|bau', 'Medi|tation',
+  'Bogen|schießen', 'Forst|wirt|schaft', 'Bau|kunst', 'Mühlen|bau', 'Stadt|planung', 'Frucht|folge', 'Pike|niere', 'Diplo|matie',
+  'Spio|nage', 'Burg|bau', 'Schmiede|kunst', 'Ver|hüttung', 'Platten|rüstung', 'Philo|sophie', 'Gelehr|samkeit', 'Buch|druck',
+  'Kloster|wesen', 'Navi|gation', 'Karto|grafie', 'See|macht', 'See|herr|schaft', 'Aqua|tismus', 'Fisch|zucht', 'Hafen|wirt|schaft',
+  'Werf|ten', 'Arm|brust', 'Spiri|tua|lismus', 'Heil|kunst', 'Meister|schützen', 'Mathe|matik', 'Inge|nieur|wesen', 'Ballon|fahrt',
+  'Luft|schiff|bau', 'Bank|wesen', 'Ritter|lich|keit', 'Huf|eisen', 'Tur|niere', 'Ritter|orden'];
+const TECH_SHY = Object.fromEntries(TECH_BREAKS.map(w => [w.replace(/\|/g, ''), w.replace(/\|/g, '\u00ad')]));
+const techLabel = name => name.split(' ').map(w => TECH_SHY[w] || w).join(' ');
+
 export function openTech(state, ctx, keepView = false) {
   const overlay = $('tech-overlay');
   overlay.classList.remove('hidden');
@@ -1683,7 +1694,7 @@ export function openTech(state, ctx, keepView = false) {
     btn.style.setProperty('--branch', BRANCH_COLOR[branchOf(id)]);
     btn.dataset.tech = id;
     const cost = techCost(state, id, ctx.actAs);
-    btn.innerHTML = `<span class="tn-in"><span class="tn-name" lang="de">${t.name}</span><span class="tn-cost">${status === 'done' ? CHECK_ICON : cost}</span></span>`;
+    btn.innerHTML = `<span class="tn-in"><span class="tn-name" lang="de">${techLabel(t.name)}</span><span class="tn-cost">${status === 'done' ? CHECK_ICON : cost}</span></span>`;
     btn.setAttribute('aria-label', `${t.name}, ${status === 'done' ? 'erforscht' : status === 'locked' ? 'gesperrt, ' + cost + ' Sterne' : cost + ' Sterne'}`);
     nodes.appendChild(btn);
   }
