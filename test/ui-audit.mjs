@@ -53,7 +53,12 @@ for (const [name, a, b, kind] of SIZES) {
     const label = `${name} ${orient} ${w}x${h}`;
     if (only && !label.toLowerCase().includes(only)) continue;
     const touch = kind !== 'desktop';
-    DEVICES.push({ label, kind, touch, opts: { viewport: { width: w, height: h }, hasTouch: touch, isMobile: kind === 'phone', deviceScaleFactor: 1 } });
+    // Browserkennung wie auf echten Geräten: davon hängt die Handy-Ansicht (html.phone) ab.
+    const userAgent = kind === 'desktop' ? undefined
+      : /iPhone/.test(name) ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+      : kind === 'phone' ? 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'
+      : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+    DEVICES.push({ label, kind, touch, opts: { viewport: { width: w, height: h }, screen: { width: w, height: h }, hasTouch: touch, isMobile: kind === 'phone', deviceScaleFactor: 1, ...(userAgent ? { userAgent } : {}) } });
   }
 }
 
@@ -279,6 +284,17 @@ async function runDevice(dev) {
   await startGame(page);
   await ui(page);
   await record(page, dev, 'Spiel: Leiste oben, nichts gewählt');
+  // Handy-Ansicht: Ansicht muss zum Gerät passen; „Mehr“, Minikarte und Kamera durchschalten.
+  const phoneView = await page.evaluate(() => document.documentElement.classList.contains('phone'));
+  if (phoneView !== (dev.kind === 'phone')) results.push({ device: dev.label, state: 'Ansicht', count: 0, issues: [{ kind: 'falsche ansicht', el: 'html', info: phoneView ? 'Handy-Ansicht auf ' + dev.kind : 'große Ansicht auf Handy' }] });
+  if (await page.isVisible('#moreBtn')) {
+    await page.click('#moreBtn');
+    await record(page, dev, 'Handy: Mehr aufgeklappt');
+    for (const id of ['mapToggleBtn', 'camToggleBtn']) await page.click('#' + id).catch(() => {});
+    await record(page, dev, 'Handy: Minikarte und Kamera an');
+    await page.click('#moreBtn').catch(() => {});
+    await record(page, dev, 'Handy: Mehr zu, Minikarte und Kamera an');
+  }
   await page.evaluate(() => { window.__ui.setIdle(3); });
   await record(page, dev, 'Spiel: mit Knopf „Bereit“');
   await page.keyboard.press(' ');
