@@ -1007,6 +1007,16 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
 #menu-overlay .btn.primary.big.mode .sub { color: var(--on-primary-sub); opacity: 1; }
 #menu-overlay .btn.big.mode.ghost { border: 1px dashed var(--border-strong); }
 .mode-wide { text-align: center !important; min-height: 48px; }
+.online-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.online-actions .btn { min-height: 36px; }
+.my-matches { border: 1px solid var(--border); background: var(--panel); }
+.my-matches .menu-h { margin: 0; padding: 8px 12px 4px; }
+.my-matches-list { max-height: 168px; overflow-y: auto; overscroll-behavior: contain; }
+.match-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 6px 12px; border: 0; border-top: 1px solid var(--hover); background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.match-row:hover { background: var(--hover); }
+.match-row .match-what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-row .match-state { color: var(--muted); white-space: nowrap; }
+.match-row.my-turn .match-state { color: var(--primary); font-weight: 700; }
 .play-tribe .tribe-pick { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 0; }
 .play-tribe .tribe-opt { min-height: 44px; padding: 6px 9px; gap: 1px; }
 .play-tribe .tribe-opt .tribe-name { font-size: 13px; }

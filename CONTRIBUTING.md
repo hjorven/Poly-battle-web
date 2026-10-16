@@ -59,6 +59,7 @@ Es gibt keinen Build-Schritt und keine npm-Abhängigkeiten. Änderungen im Code 
 - Änderungen nur als neue Datei in `supabase/migrations/`, nie bestehende Migrationen ändern.
 - Tabellen bleiben für Clients gesperrt (Row Level Security ohne Freigaben). Zugriff nur über `security definer`-Funktionen mit `set search_path = ''`, die alle Eingaben prüfen.
 - Keine Klartext-Kennungen speichern, nur Prüfsummen.
+- Neue Server-Funktionen bekommen Tests in `test/db/` (`npm run test:db` mit lokalem Postgres).
 
 ## Verhalten
 
