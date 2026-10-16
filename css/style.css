@@ -353,7 +353,6 @@ button:focus-visible {
 .card h2 { font-size: 20px; letter-spacing: -0.02em; }
 .tagline { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
 .footnote { color: var(--muted); font-size: 12px; margin-top: 16px; text-align: center; }
-.footnote a { color: inherit; }
 
 .menu-buttons { display: flex; flex-direction: column; gap: 10px; }
 
@@ -969,6 +968,9 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
   font-weight: 800; font-size: 42px !important; line-height: 0.95; letter-spacing: -0.035em !important; margin: 0 !important;
 }
 .menu-top .tagline { margin: 4px 0 0; font-size: 13px; }
+/* Datenschutz aus jedem Reiter erreichbar, darum im festen Kopf. */
+.menu-legal { margin: 2px 0 0; font-size: 12px; }
+.menu-legal a { color: var(--muted); }
 #menu-overlay #profile-card {
   flex: 0 1 470px; margin: 0; padding: 8px 12px; gap: 2px 12px;
   grid-template-columns: 40px minmax(0, 1fr) auto;
