@@ -1489,6 +1489,12 @@ html.phone #minimap { top: calc(var(--hud-h, 56px) + 6px); bottom: auto; right: 
 html.phone #camera-pad { top: calc(var(--hud-h, 56px) + 6px); bottom: auto; right: 8px; grid-template-columns: repeat(3, 40px); }
 html.phone.show-map #camera-pad { top: calc(var(--hud-h, 56px) + 104px); }
 html.phone .cam-btn { width: 40px; height: 40px; }
+/* Kamera-Knöpfe nie unter einer Leiste: weg, solange „Tipp der KI“ oder „Karte ansehen“ offen ist,
+   quer auch, solange unten eine Einheit oder Stadt gewählt ist (dort reicht die Höhe nicht für beides). */
+html.phone:has(#coach:not(.hidden), #review-bar:not(.hidden)) #camera-pad { display: none; }
+@media (orientation: landscape) {
+  html.phone:has(#unit-chip:not(.hidden), #panel:not(.hidden), #replay-bar:not(.hidden)) #camera-pad { display: none; }
+}
 html.phone #adminBtn { top: calc(var(--hud-h, 56px) + 6px); bottom: auto; right: auto; left: 8px; }
 
 /* Leisten unten über die ganze Breite, nie höher als gut die Hälfte */
@@ -1496,7 +1502,9 @@ html.phone #panel.toolbar, html.phone #unit-chip {
   left: 8px; right: 8px; width: auto; max-width: none; transform: none; margin: 0;
   bottom: calc(6px + env(safe-area-inset-bottom, 0px)); padding: 6px;
 }
-html.phone .tool-tile { width: 100px; min-height: 70px; padding: 6px 8px; }
+/* Kacheln wachsen mit langem Text mit (z. B. „Aufrüsten: Armbrustschütze“), statt überzulaufen */
+html.phone .tool-tile { width: auto; min-width: 100px; max-width: 168px; min-height: 70px; padding: 6px 8px; }
+html.phone .tool-tile b { overflow-wrap: break-word; }
 /* Aufgeklappte Details nie unter die obere Leiste: innen scrollen */
 html.phone #unit-chip, html.phone #panel.toolbar { max-height: calc(100% - var(--hud-h, 56px) - 16px); overflow-y: auto; overscroll-behavior: contain; }
 html.phone #panel.city-bar, html.phone #panel.city-bar.small {
@@ -1539,6 +1547,12 @@ html.phone #tech-tree { min-height: 120px; }
   html.phone .card-head { margin-bottom: 4px; }
   html.phone .card-head h2 { font-size: 18px; }
   html.phone #tech-tree { min-height: 90px; }
+  /* Startmenü quer: schmaler Kopf, damit die Spielarten ohne langes Scrollen sichtbar sind */
+  html.phone #menu-overlay > .menu-card { padding-top: 10px; }
+  html.phone .menu-top { gap: 12px; }
+  html.phone .menu-brand { flex: none; }
+  html.phone .wordmark { font-size: 26px !important; white-space: nowrap; }
+  html.phone .menu-top .tagline { display: none; }
 }
 /* Eigene Online-Partien: lange Stammesnamen umbrechen statt das Menü zu verbreitern */
 html.phone .match-row { flex-wrap: wrap; row-gap: 0; }
