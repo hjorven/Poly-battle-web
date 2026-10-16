@@ -18,7 +18,10 @@ Mit einem Namen (3–16 Zeichen) erscheinen deine Ergebnisse der Tages- und Woch
 
 ## Profil-Code
 
-Der Profil-Code nimmt Name, Stufe und Erfolge auf ein anderes Gerät mit: Im Menü **Profil-Code** öffnen, auf dem anderen Gerät eingeben. Wer den Code kennt, spielt als du – gib ihn nicht weiter.
+Der Profil-Code nimmt Name, Stufe, Erfolge und deine Online-Partien auf ein anderes Gerät mit: Im Menü **Profil-Code** öffnen, auf dem anderen Gerät eingeben. Wer den Code kennt, spielt als du – gib ihn nicht weiter.
+
+- **Als Datei speichern** lädt den Code als Textdatei herunter. Mach das einmal: Löscht der Browser seine Daten und der Code ist nirgends notiert, sind Profil und Online-Partien weg.
+- **Neuen Code erzeugen**, wenn jemand den Code gesehen hat. Der alte Code gilt danach nirgends mehr, auch nicht in laufenden Online-Partien. Auf deinen anderen Geräten gibst du den neuen Code ein.
 
 ## Was gespeichert wird
 
