@@ -1522,6 +1522,8 @@ async function copyLink() {
 }
 
 function boot() {
+  window.pbBooted = true;
+  registerOffline();
   const canvas = document.getElementById('gameCanvas');
   const ok = render.initRender(canvas, { onPick: onHexPick });
   if (!ok) {
@@ -1724,6 +1726,15 @@ function boot() {
   });
 
   window.__pb = { app, notifyTurn, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera };
+}
+
+// Offline spielen: der Service Worker hält die Dateien des Spiels vor.
+// Nur über http(s), nicht in Tests mit ?nosw.
+function registerOffline() {
+  try {
+    if (!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol) || /[?&]nosw\b/.test(location.search)) return;
+    navigator.serviceWorker.register('sw.js').catch(() => { /* ohne Offline-Modus weiter */ });
+  } catch (e) { /* ignorieren */ }
 }
 
 boot();
