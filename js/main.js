@@ -306,12 +306,14 @@ function updateSelection() {
   if (app.sel.kind === 'unit') {
     const u = R.findUnit(st, app.sel.id);
     const canCommand = myTurn() && u.owner === ctx().actAs && !u.acted;
+    // Rückzug/Durchhalten: nach dem Angriff darf die Einheit noch weiterziehen.
+    const canMove = myTurn() && u.owner === ctx().actAs && u.mp > 0;
     const canBridge = myTurn() && u.owner === ctx().actAs && !u.acted;
     const pend = app.pending && app.pending.unitId === u.id && !app.pending.until ? app.pending : null;
     render.setHighlights({
       selected: u.q + ',' + u.r,
       target: pend ? pend.key : null,
-      move: canCommand && u.mp > 0 ? R.reachableMap(st, u) : null,
+      move: canMove ? R.reachableMap(st, u) : null,
       attack: canCommand ? R.attackTargets(st, u) : null,
       bridge: canBridge ? R.bridgeOptions(st, u).flatMap(o => o.tiles) : null
     });
@@ -1128,7 +1130,7 @@ async function onHexPick(key) {
   const sel = app.sel;
   if (sel && sel.kind === 'unit') {
     const me = R.findUnit(st, sel.id);
-    if (me && me.owner === actAs() && !me.acted) {
+    if (me && me.owner === actAs() && (!me.acted || R.reachableMap(st, me).size)) {
       if (unit && unit.owner !== me.owner) {
         // Erster Tipp auf einen Gegner: nur vormerken und Vorschau zeigen.
         if (R.attackTargets(st, me).some(t => t.id === unit.id)) {

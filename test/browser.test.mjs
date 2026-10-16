@@ -345,6 +345,46 @@ await test('Kampfvorschau: erster Tipp zeigt beide Einheiten, zweiter greift an'
   }
 });
 
+await test('Ritter nach dem Angriff: zieht weiter, Krieger gilt als fertig', async () => {
+  const page = await open('pc');
+  await startGame(page);
+  const setup = await page.evaluate(() => {
+    const { app, R, sync } = window.__pb; const st = app.state;
+    const me = st.units.find(u => u.owner === 'player_1');
+    const dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+    const free = (q, r) => R.terrainAt(st, q, r) === 'field' && !R.unitAt(st, q, r) && !R.cityAt(st, q, r);
+    const spot = dirs.map(([dq, dr]) => [me.q + dq, me.r + dr]).find(([q, r]) => free(q, r));
+    if (!spot) return null;
+    // Krieger greift an: danach nichts mehr zu tun.
+    st.units.push({ id: 'feind', owner: 'player_2', type: 'warrior', q: spot[0], r: spot[1], hp: 10, mp: 1, hasMoved: false, acted: false });
+    me.acted = false; me.hasMoved = false; me.mp = 1;
+    R.attack(st, me, st.units.find(u => u.id === 'feind'));
+    const warriorIdle = R.idleUnits(st, 'player_1').some(u => u.id === me.id);
+    // Ritter (Durchhalten) an derselben Stelle: greift an und darf weiterziehen.
+    st.units.find(u => u.id === 'feind').hp = 10;
+    me.type = 'knight'; me.hp = 10; me.acted = false; me.hasMoved = false; me.mp = 3;
+    R.attack(st, me, st.units.find(u => u.id === 'feind'));
+    const knightIdle = R.idleUnits(st, 'player_1').some(u => u.id === me.id);
+    const goal = [...R.reachableMap(st, me).keys()][0];
+    app.sel = { kind: 'unit', id: me.id }; sync();
+    return { warriorIdle, knightIdle, goal, id: me.id };
+  });
+  assert.ok(setup && setup.goal, 'Testaufbau');
+  assert.strictEqual(setup.warriorIdle, false, 'Krieger nach dem Angriff nicht mehr bereit');
+  assert.strictEqual(setup.knightIdle, true, 'Ritter nach dem Angriff noch bereit');
+  await page.waitForTimeout(300);
+  const [q, r] = setup.goal.split(',').map(Number);
+  const pt = await page.evaluate(([q, r]) => window.__pb.project(q, r), [q, r]);
+  await page.mouse.click(pt.x, pt.y);
+  await page.waitForTimeout(300);
+  await page.mouse.click(pt.x, pt.y);
+  await page.waitForTimeout(1200);
+  const pos = await page.evaluate(id => { const u = window.__pb.app.state.units.find(x => x.id === id); return u.q + ',' + u.r; }, setup.id);
+  assert.strictEqual(pos, setup.goal, 'Ritter ist nach dem Angriff weitergezogen');
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Einheit: Details klappen die Werkzeugreihe auf und wieder zu', async () => {
   const page = await open('ipadQuer');
   await startGame(page);
