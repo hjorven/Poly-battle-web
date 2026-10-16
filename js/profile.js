@@ -68,6 +68,11 @@ export function sanitizeProfile(p) {
   return sanitize(p && typeof p === 'object' ? { ...p, v: 1 } : {});
 }
 
+// Mitteilung bei Online-Zug (Einstellung im Browser, unabhängig vom Profil).
+export function notifyEnabled() {
+  try { return globalThis.localStorage.getItem('pb_notify') === '1'; } catch (e) { return false; }
+}
+
 export function saveProfile(profile, store) {
   const s = storage(store);
   if (!s) return false;
