@@ -108,11 +108,11 @@ const fmt = n => String(n).replace('.', ',');
 // --- Kampagne und Wochenregeln ------------------------------------------------------
 {
   let md = '# Kampagne und Herausforderungen\n\n' + HEAD;
-  md += '## Kampagne\n\nZehn Missionen mit festem Aufbau. Ziel erreicht = 1 Stern, schneller als die Vorgaben = 2 oder 3 Sterne. Jede Mission schaltet die nächste frei.\n\n';
+  md += '## Kampagne\n\nMissionen mit festem Aufbau. Ziel erreicht = 1 Stern, schneller als die Vorgaben = 2 oder 3 Sterne. Jede Mission schaltet die nächste frei.\n\n';
   md += row(['Nr.', 'Mission', 'Ziel', 'Stamm', 'Karte', 'Gegner', '2 / 3 Sterne bis Runde']) + '\n' + row(Array(7).fill('---')) + '\n';
   MISSIONS.forEach((m, i) => {
     const s = m.setup;
-    md += row([i + 1, `**${m.title}**`, m.goal, TRIBES[s.tribe].name, `${MAP_SIZES[s.mapSize].label}, ${MAP_TYPES[s.mapType].label}`, `${s.count - 1}, ${AI_LEVELS[s.aiLevel].label}${s.rule === 'nograce' ? ', ohne Schonfrist' : ''}`, m.par ? `${m.par[0]} / ${m.par[1]}` : '3 bzw. 5 Städte am Ende']) + '\n';
+    md += row([i + 1, `**${m.title}**`, m.goal, TRIBES[s.tribe].name, `${MAP_SIZES[s.mapSize].label}, ${MAP_TYPES[s.mapType].label}`, `${s.count - 1}, ${AI_LEVELS[s.aiLevel].label}${s.rule === 'nograce' ? ', ohne Schonfrist' : ''}`, m.par ? `${m.par[0]} / ${m.par[1]}` : (m.starHint || 'Sterne für 3 bzw. 5 Städte am Ende')]) + '\n';
   });
   md += '\n## Wochen-Herausforderung\n\nJede Woche eine feste Karte mit einer dieser Sonderregeln:\n\n';
   for (const r of Object.values(WEEKLY_RULES)) md += `- **${r.name}**: ${r.desc}\n`;

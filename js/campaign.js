@@ -1,4 +1,4 @@
-// Kampagne: zehn Missionen mit festem Aufbau, einem Ziel und Sternwertung.
+// Kampagne: Missionen mit festem Aufbau, einem Ziel und Sternwertung.
 // 1 Stern = Ziel erreicht, 2 bzw. 3 Sterne = schneller als die Vorgaben.
 
 import * as R from './rules.js';
@@ -77,6 +77,42 @@ export const MISSIONS = [
     goal: 'Besiege alle Gegner.',
     setup: { mapSize: 'normal', mapType: 'continents', count: 4, aiLevel: 'normal', tribe: 'yadakk' },
     progress: st => [st.players.filter(p => p !== ME && !R.alive(st, p)).length, st.players.length - 1], par: [50, 35]
+  },
+  {
+    id: 'm11', title: 'Handelsweg',
+    story: 'Zwischen deinen Städten liegt Gold auf der Straße – wenn du es abholst.',
+    goal: 'Verdiene 25 Sterne durch Handel mit Händlerkarren.',
+    setup: { mapSize: 'small', mapType: 'continents', count: 2, aiLevel: 'easy', tribe: 'yadakk' },
+    prepare: st => {
+      for (const t of ['riding', 'roads', 'trade']) if (!st.techs[ME].includes(t)) st.techs[ME].push(t);
+      st.stars[ME] += 5;
+    },
+    progress: st => [(st.tradeStarsBy && st.tradeStarsBy[ME]) || 0, 25], par: [18, 13]
+  },
+  {
+    id: 'm12', title: 'Mauern brechen',
+    story: 'Die Hauptstadt des Feindes trotzt hinter dicken Mauern. Ein Rammbock steht bereit.',
+    goal: 'Erobere die ummauerte Hauptstadt des Gegners.',
+    setup: { mapSize: 'small', mapType: 'pangaea', count: 2, aiLevel: 'normal', tribe: 'imperius', rule: 'nograce' },
+    prepare: st => {
+      for (const t of ['organization', 'farming', 'construction']) if (!st.techs[ME].includes(t)) st.techs[ME].push(t);
+      for (const c of st.cities) if (c.owner && c.owner !== ME && c.isCapital) c.rewards = { ...(c.rewards || {}), 3: 'wall' };
+      const home = st.cities.find(c => c.owner === ME && c.isCapital);
+      const spot = home && R.freeLandAround(st, home.q, home.r);
+      if (spot) st.units.push({ id: 'm12_ram', owner: ME, type: 'ram', q: spot[0], r: spot[1], hp: R.maxHp('ram'), mp: 1, hasMoved: false, acted: false });
+    },
+    progress: st => [mine(st).filter(c => c.isCapital && !(st.home && c.q === st.home.q && c.r === st.home.r)).length, 1], par: [22, 15]
+  },
+  {
+    id: 'm13', title: 'Wacht an der Grenze',
+    story: 'Drei Eroberer rücken an. Türme sehen sie kommen – halte jede Stadt.',
+    goal: 'Überlebe 15 Runden.',
+    setup: { mapSize: 'small', mapType: 'pangaea', count: 3, aiLevel: 'normal', tribe: 'quetzali', rule: 'nograce' },
+    prepare: st => { st.stars[ME] += 5; },
+    progress: st => [Math.min(st.round - 1, 15), 15], par: null,
+    stars: st => 1 + (((st.lostBy && st.lostBy[ME]) || 0) === 0 ? 1 : 0) +
+      (Object.entries(st.improvements || {}).filter(([k, t]) => { const [q, r] = k.split(',').map(Number); return t === 'watchtower' && R.ownLand(st, ME, q, r); }).length >= 2 ? 1 : 0),
+    starHint: 'Sterne: keine Stadt verlieren, mindestens 2 Wachtürme'
   }
 ];
 
@@ -87,6 +123,7 @@ export function prepareMission(state, m) {
   state.home = home ? { q: home.q, r: home.r } : null;
   // Ohne Schonfrist: die KI darf von Anfang an angreifen.
   if (m.setup.rule === 'nograce') state.provoked = Object.fromEntries(state.players.map(p => [p, true]));
+  if (m.prepare) m.prepare(state);
 }
 
 export function missionById(id) {

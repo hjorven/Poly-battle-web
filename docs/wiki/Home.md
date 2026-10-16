@@ -12,7 +12,7 @@ Poly Battle ist ein rundenbasiertes Strategiespiel im Browser, angelehnt an *The
 - [Stämme](Staemme) – Start-Technologien, Besonderheiten, KI-Persönlichkeiten
 - [Technologien](Technologien) – der Forschungsbaum in sechs Stufen
 - [Städte und Gebäude](Staedte-und-Gebaeude) – Stadtstufen, Bauten, Monumente, Gelände
-- [Kampagne und Herausforderungen](Kampagne-und-Herausforderungen) – zehn Missionen und die Wochenregeln
+- [Kampagne und Herausforderungen](Kampagne-und-Herausforderungen) – 13 Missionen und die Wochenregeln
 - [Profil und Bestenliste](Profil-und-Bestenliste) – Stufen, Erfolge, Aussehen, Namen und Profil-Code
 
 ## Für Mitwirkende
