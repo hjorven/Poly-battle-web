@@ -39,12 +39,14 @@ npm run serve   # http://localhost:8080
 npm test        # Logiktests
 ```
 
-Three.js wird über eine Importmap von jsDelivr geladen, dafür braucht der Browser Internet. Gegen KI, Hotseat, Kampagne und Herausforderungen laufen ohne Server; Online-Partien und die Bestenliste nutzen Supabase.
+Three.js und supabase-js liegen unter `vendor/` im Repository, es wird nichts von fremden Servern nachgeladen. Ein Service Worker (`sw.js`) merkt sich die Dateien, so läuft das Spiel nach dem ersten Besuch auch ohne Verbindung. Gegen KI, Hotseat, Kampagne und Herausforderungen laufen ohne Server; Online-Partien und die Bestenliste nutzen Supabase.
 
 ## Aufbau
 
 ```
 index.html            Einstieg, Importmap, Dialoge
+sw.js                 Service Worker (offline spielen)
+vendor/               Three.js 0.160.0 und supabase-js 2.45.4
 css/style.css         Gestaltung
 js/config.js          Spieldaten und Balancing
 js/rules.js           Spielregeln (reine Funktionen, getestet)
