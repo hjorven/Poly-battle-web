@@ -5,7 +5,7 @@ import {
   RESOURCES, IMPROVEMENTS, LIGHTHOUSE, SCORE, TECHS, MONUMENT_POP, ROAD, BOUNTY
 } from '../js/config.js';
 import { hk, hexDistance, neighbors, inBounds, forEachHex } from '../js/hex.js';
-import { botStep, applyStep } from '../js/ai.js';
+import { botStep, applyStep, knownState } from '../js/ai.js';
 import { saveGame, loadGame, saveInfo, clearSave, validState } from '../js/save.js';
 import * as P from '../js/profile.js';
 import * as K from '../js/campaign.js';
@@ -1142,8 +1142,12 @@ test('4 Bots: 30 Runden ohne Verletzungen', () => {
       while (st.turn === player && !st.winner) {
         const step = botStep(st, player);
         if (!step) break;
+        // Die KI sieht nicht durch den Nebel: ein Zug darf an einer verborgenen
+        // Einheit in Reichweite scheitern, sonst nichts.
+        const hidden = step.kind === 'move' && st.units.some(u => u.owner !== player &&
+          !R.isVisible(st, player, u.q, u.r) && hexDistance(u.q, u.r, step.unit.q, step.unit.r) <= step.unit.mp * 2 + 1);
         const res = applyStep(st, step, player);
-        if (res && res.ok === false) throw new Error(`${step.kind} fehlgeschlagen: ${res.reason}`);
+        if (res && res.ok === false && !hidden) throw new Error(`${step.kind} fehlgeschlagen: ${res.reason}`);
         assertInvariants(st);
         steps++;
         if (steps > 200) throw new Error('Bot-Loop über 200 Schritte');
@@ -1542,6 +1546,23 @@ test('KI-Stärke ändert Einkommen und Startsterne der Bots', () => {
   assert.ok(R.incomeFor(easy, 'player_2') < R.incomeFor(norm, 'player_2'));
   assert.strictEqual(R.incomeFor(hard, 'player_2'), R.incomeFor(norm, 'player_2') + 2);
   assert.strictEqual(R.incomeFor(easy, 'player_1'), R.incomeFor(norm, 'player_1'));
+});
+
+test('KI sieht nicht durch den Nebel: nur sichtbare Einheiten, entdeckte Ruinen', () => {
+  const st = R.createGame(4242, 2, { ai: ['player_2'] });
+  const view = knownState(st, 'player_2');
+  for (const u of view.units) {
+    assert.ok(u.owner === 'player_2' || R.isVisible(st, 'player_2', u.q, u.r), 'fremde Einheit nur in Sicht');
+  }
+  const hidden = st.units.filter(u => u.owner === 'player_1' && !R.isVisible(st, 'player_2', u.q, u.r));
+  assert.ok(hidden.length > 0, 'zu Beginn sind die Einheiten des Menschen verborgen');
+  for (const k of Object.keys(view.ruins || {})) {
+    const [q, r] = k.split(',').map(Number);
+    assert.ok(R.isExplored(st, 'player_2', q, r), 'Ruine nur auf entdecktem Feld');
+  }
+  // Ohne Nebel (Wochenregel) sieht die KI alles wie alle anderen.
+  st.noFog = true;
+  assert.strictEqual(knownState(st, 'player_2'), st);
 });
 
 test('Komplette KI-Partien: jede Stärke, Perfektion bis zum Ende', () => {
