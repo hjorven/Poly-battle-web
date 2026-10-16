@@ -381,6 +381,9 @@ function recordProfile() {
   }
   if (app.lastResult) ui.showProfileResult(app.lastResult, P.levelProgress(P.loadProfile().xp), P.ACHIEVEMENTS);
   else ui.showProfileResult(null);
+  // Passende Stufe: nach drei Siegen in Folge eine schwerere anbieten (freie Partien gegen die KI).
+  const advice = app.mode === 'bot' && !st.mission && !st.daily && !st.weekly ? P.difficultyAdvice(P.loadProfile()) : null;
+  if (advice && advice.dir === 'up' && st.winner === 'player_1') ui.offerHarder(advice.level, AI_LEVELS[advice.level].label);
 }
 
 // Mit Namen: Tages-/Wochenwertung einreichen und das Profil auf dem Server
@@ -1627,6 +1630,12 @@ function boot() {
       if (!st) return showMenu();
       const levels = ['easy', 'normal', 'hard'];
       let aiLevel = st.aiLevel || 'normal', count = st.players.length;
+      if (easier === 'harder') {
+        aiLevel = levels[Math.min(levels.length - 1, levels.indexOf(aiLevel) + 1)];
+        startLocal('bot', { count, aiLevel, tribe: st.tribes && st.tribes.player_1, mapSize: st.mapSize, mapType: st.mapType, turnLimit: st.turnLimit });
+        ui.toast(`Neues Spiel auf ${AI_LEVELS[aiLevel].label}`, 'good');
+        return;
+      }
       // Leichter: erst die Stufe senken, dann einen Gegner weniger.
       if (easier) { if (aiLevel !== 'easy') aiLevel = levels[levels.indexOf(aiLevel) - 1]; else count = Math.max(2, count - 1); }
       startLocal('bot', { count, aiLevel, tribe: st.tribes && st.tribes.player_1, mapSize: st.mapSize, mapType: st.mapType, turnLimit: st.turnLimit });
