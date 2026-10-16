@@ -8,7 +8,7 @@ const CORE = [
   './', 'index.html', 'css/style.css',
   'js/main.js', 'js/ui.js', 'js/render.js', 'js/rules.js', 'js/ai.js', 'js/config.js', 'js/hex.js',
   'js/net.js', 'js/save.js', 'js/profile.js', 'js/campaign.js', 'js/share.js', 'js/sound.js',
-  'js/admin.js', 'js/admin-panel.js',
+  'js/admin.js', 'js/admin-panel.js', 'js/actionlog.js', 'js/names.js',
   'vendor/three/three.module.min.js', 'vendor/three/addons/controls/OrbitControls.js',
   'vendor/supabase/supabase.js'
 ];
