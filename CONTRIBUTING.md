@@ -50,6 +50,7 @@ README, CONTRIBUTING and the wiki exist in English (main language) and German. A
 - **World style:** realistic medieval in a low-poly look. New models should fit in.
 - **Interface style:** plain like Mini Metro – the map stays clear, controls in floating cards, information as a sign on the object, actions as a toolbar at the bottom. Square corners, one typeface, main colour forest green via the CSS variables (light and dark), hexagons only as markers and badges. No gradients, textures or decorative fonts.
 - **For all devices:** usable with mouse, keyboard and touch. Tap targets at least 36 px high, important dialogs fit on an iPad without scrolling (810×950 portrait, 1080×700 landscape).
+- **Phone view:** on phones (detected by the device, not the window width) `index.html` sets the class `phone` on `<html>`. Phone rules live at the end of `css/style.css` under `html.phone`, so PC and tablet stay untouched. On a phone, show only what is needed at once and put the rest behind „Mehr“.
 - **Robust:** corrupted save games, profiles or unexpected input must never break the game.
 
 ### Code
