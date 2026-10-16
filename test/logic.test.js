@@ -1548,7 +1548,7 @@ test('KI-Stärke ändert Einkommen und Startsterne der Bots', () => {
   assert.strictEqual(R.incomeFor(easy, 'player_1'), R.incomeFor(norm, 'player_1'));
 });
 
-test('KI sieht nicht durch den Nebel: nur sichtbare Einheiten, entdeckte Ruinen', () => {
+test('KI sieht nicht durch den Nebel: nur sichtbare Einheiten, entdeckte Ruinen und Lager', () => {
   const st = R.createGame(4242, 2, { ai: ['player_2'] });
   const view = knownState(st, 'player_2');
   for (const u of view.units) {
@@ -1560,6 +1560,11 @@ test('KI sieht nicht durch den Nebel: nur sichtbare Einheiten, entdeckte Ruinen'
     const [q, r] = k.split(',').map(Number);
     assert.ok(R.isExplored(st, 'player_2', q, r), 'Ruine nur auf entdecktem Feld');
   }
+  for (const k of Object.keys(view.camps || {})) {
+    const [q, r] = k.split(',').map(Number);
+    assert.ok(R.isExplored(st, 'player_2', q, r), 'Söldnerlager nur auf entdecktem Feld');
+  }
+  assert.ok(Object.keys(st.camps || {}).length > Object.keys(view.camps || {}).length, 'unentdeckte Lager sind verborgen');
   // Ohne Nebel (Wochenregel) sieht die KI alles wie alle anderen.
   st.noFog = true;
   assert.strictEqual(knownState(st, 'player_2'), st);

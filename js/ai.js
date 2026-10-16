@@ -1,5 +1,5 @@
 import * as R from './rules.js';
-import { UNITS, IMPROVEMENTS, TECHS, BRIDGE, ROAD } from './config.js';
+import { UNITS, IMPROVEMENTS, TECHS, BRIDGE, ROAD, MAP_W, MAP_H } from './config.js';
 import { hexDistance, hk, forEachHex } from './hex.js';
 
 const UNIT_VALUE_BASE = {
@@ -128,11 +128,14 @@ function exploreMove(state, unit, player) {
   forEachHex((q, r) => { if (!known.has(hk(q, r))) unknown.push([q, r]); });
   if (!unknown.length) return null;
   const cap = R.citiesFor(state, player).find(c => c.isCapital) || unit;
+  const mid = [Math.round(MAP_W / 2 - MAP_H / 4), Math.round(MAP_H / 2)];
   const score = (q, r) => {
     const sight = R.unitSight(state, { ...unit, q, r });
     const reveal = unknown.filter(([uq, ur]) => hexDistance(q, r, uq, ur) <= sight).length;
     const near = Math.min(...unknown.map(([uq, ur]) => hexDistance(q, r, uq, ur)));
-    return reveal * 3 - near + hexDistance(q, r, cap.q, cap.r) * 0.5 - (R.threatened(state, { ...unit, q, r }) ? 8 : 0);
+    // Weg von der eigenen Hauptstadt und zur Kartenmitte: Die Startplätze
+    // liegen im Ring um die Mitte, dort trifft man am ehesten auf andere.
+    return reveal * 3 - near + hexDistance(q, r, cap.q, cap.r) * 0.5 - hexDistance(q, r, mid[0], mid[1]) - (R.threatened(state, { ...unit, q, r }) ? 8 : 0);
   };
   let best = { q: unit.q, r: unit.r, sc: score(unit.q, unit.r) };
   for (const [k] of reach) {
