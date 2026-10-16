@@ -54,7 +54,7 @@ Alle Tabellen sind für Clients gesperrt (Row Level Security ohne Freigaben). Ge
 - Partien: `create_match`, `join_match`, `save_match` – nur wer mitspielt und am Zug ist, darf speichern.
 - Profile und Bestenliste: `pb_claim_name`, `pb_my_profile`, `pb_save_profile`, `pb_submit_score`, `pb_leaderboard` – Namen werden geprüft, Punkte auf Plausibilität begrenzt.
 
-Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Der Server rechnet die Spielregeln nicht nach, prüft beim Speichern aber, ob der neue Stand überhaupt möglich ist (`pb_check_plausible`): Runde, Technologien, Sterne, Einheiten, Städte und Sieg im Vergleich zum gespeicherten Stand, mit großzügigen Grenzen. Testpartien aus dem Admin-Panel sind davon ausgenommen und für alle Mitspieler sichtbar markiert.
+Nachrichten in Online-Partien liegen in einer eigenen Tabelle (`pb_send_message`, `pb_messages_since`: nur Mitspieler, höchstens 120 Zeichen, Filter, 2 Sekunden Abstand); ein Echtzeit-Kanal klingelt nur, gelesen wird über die geprüfte Funktion. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Der Server rechnet die Spielregeln nicht nach, prüft beim Speichern aber, ob der neue Stand überhaupt möglich ist (`pb_check_plausible`): Runde, Technologien, Sterne, Einheiten, Städte und Sieg im Vergleich zum gespeicherten Stand, mit großzügigen Grenzen. Testpartien aus dem Admin-Panel sind davon ausgenommen und für alle Mitspieler sichtbar markiert.
 
 ## Tests
 
