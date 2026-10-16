@@ -10,6 +10,7 @@ import { shareResult } from './share.js';
 import * as K from './campaign.js';
 import * as AP from './admin-panel.js';
 import * as L from './actionlog.js';
+import { checkName } from './names.js';
 import { NAMES, UNITS, TECHS, IMPROVEMENTS, CITY_REWARDS, AI_LEVELS, PERSONAS } from './config.js';
 
 const app = {
@@ -432,7 +433,7 @@ function chooseName() {
     ui.toast(`Willkommen, ${res.data.name}!`, 'good');
     showMenu();
     return null;
-  });
+  }, { check: checkName });
 }
 
 function profileCodeDialog() {

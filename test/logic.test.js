@@ -11,6 +11,8 @@ import * as P from '../js/profile.js';
 import * as K from '../js/campaign.js';
 import * as A from '../js/admin.js';
 import * as L from '../js/actionlog.js';
+import * as N from '../js/names.js';
+import { readFileSync } from 'node:fs';
 
 let passed = 0;
 let failed = 0;
@@ -2599,6 +2601,22 @@ test('Zugprotokoll: gefälschte oder unvollständige Protokolle fallen auf', () 
   assert.match(L.replayChallenge('weekly', '2026-W42', fake).error, /nicht möglich/);
   assert.match(L.replayChallenge('daily', '2026-W42', log).error || 'falsche Karte', /./, 'andere Herausforderung passt nicht');
   assert.ok(L.replayChallenge('weekly', '2026-W42', 'kaputt').error);
+});
+
+test('Namen: Wortliste greift, harmlose Namen bleiben erlaubt', () => {
+  const cases = JSON.parse(readFileSync(new URL('./names.json', import.meta.url)));
+  for (const n of cases.erlaubt) assert.strictEqual(N.checkName(n), null, n);
+  for (const n of cases.verboten) assert.strictEqual(N.checkName(n), 'Dieser Name ist nicht erlaubt', n);
+  assert.match(N.checkName('ab'), /3 bis 16/);
+  assert.match(N.checkName('Name!'), /Erlaubt sind/);
+});
+
+test('Namen: Wortliste im Spiel und auf dem Server gleich', () => {
+  const dir = new URL('../supabase/migrations/', import.meta.url);
+  const sql = readFileSync(new URL('20261016180000_namen_pruefen.sql', dir), 'utf8');
+  const list = re => sql.match(re)[1].match(/'([^']+)'/g).map(w => w.slice(1, -1));
+  assert.deepStrictEqual(list(/bad constant text\[\] := array\[([^\]]+)\]/), N.BAD_WORDS);
+  assert.deepStrictEqual(list(/ok_words constant text\[\] := array\[([^\]]+)\]/), N.OK_WORDS);
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);

@@ -424,8 +424,9 @@ function renderStats(profile) {
 }
 
 // Namensdialog; `onSave(name)` liefert eine Fehlermeldung oder null.
-const NAME_TEXT = 'Mit diesem Namen erscheinst du in der Bestenliste. 3–16 Zeichen, Buchstaben, Ziffern, Leerzeichen, _ und -.';
-export function askName(current, onSave, { title = 'Wähle deinen Namen', text = NAME_TEXT, max = 16, ok = 'Speichern', extra = [] } = {}) {
+const NAME_TEXT = 'Mit diesem Namen erscheinst du in der Bestenliste. 3–16 Zeichen, Buchstaben, Ziffern, Leerzeichen, _ und -. Beleidigende oder anstößige Namen gehen nicht.';
+// `check(name)` (optional) prüft schon beim Tippen und liefert eine Fehlermeldung oder null.
+export function askName(current, onSave, { title = 'Wähle deinen Namen', text = NAME_TEXT, max = 16, ok = 'Speichern', extra = [], check = null } = {}) {
   $('name-title').textContent = title;
   // Zusätzliche Knöpfe unter dem Feld (Profil-Code: speichern, erneuern).
   const ex = $('name-extra');
@@ -440,8 +441,15 @@ export function askName(current, onSave, { title = 'Wähle deinen Namen', text =
   $('name-error').textContent = '';
   $('name-overlay').classList.remove('hidden');
   input.focus();
-  function close() { $('name-overlay').classList.add('hidden'); $('nameOk').onclick = null; input.onkeydown = null; }
+  function close() { $('name-overlay').classList.add('hidden'); $('nameOk').onclick = null; input.onkeydown = null; input.oninput = null; }
+  // Sofortige Rückmeldung; „zu kurz“ erst beim Speichern, sonst meckert schon der erste Buchstabe.
+  input.oninput = () => {
+    const err = check && input.value.trim().length >= 3 ? check(input.value) : null;
+    $('name-error').textContent = err || '';
+  };
   const save = async () => {
+    const bad = check && check(input.value);
+    if (bad) { $('name-error').textContent = bad; return; }
     $('nameOk').disabled = true;
     const err = await onSave(input.value);
     $('nameOk').disabled = false;

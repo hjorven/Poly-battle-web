@@ -31,3 +31,5 @@ B übernimmt nach 3 min: {"rev": 2}
 B tritt bei: player_2
 A gibt im eigenen Zug auf: ai=["player_1"]
 B übernimmt sofort: {"rev": 2}
+Namen erlaubt: alle ok
+Namen verboten: alle gesperrt
