@@ -8,7 +8,7 @@ Turn-based conquest in the browser, inspired by *The Battle of Polytopia*: found
 
 > The game itself is in German. The documentation is available in English and German.
 
-![A game in turn 22: capital with farms, a second city at the top, a mercenary camp, lighthouses at the map corners, the rest of the world under fog](docs/screenshot.png)
+![A game in turn 21: two cities with farms and roads, hills, swamp, a mercenary camp, ships off the coast and lighthouses at the map corners](docs/screenshot.png)
 
 ## What to expect
 

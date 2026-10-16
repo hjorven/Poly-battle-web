@@ -6,7 +6,7 @@ Rundenbasierte Eroberung im Browser, angelehnt an *The Battle of Polytopia*: Gr�
 
 **[Jetzt spielen](https://hjorven.github.io/Poly-battle-web/)** · [Wiki](https://github.com/hjorven/Poly-battle-web/wiki/Startseite) · [Fehler melden](https://github.com/hjorven/Poly-battle-web/issues/new/choose)
 
-![Eine Partie in Runde 22: Hauptstadt mit Farmen, oben eine zweite Stadt, Söldnerlager, Leuchttürme an den Kartenecken, der Rest der Welt unter Nebel](docs/screenshot.png)
+![Eine Partie in Runde 21: zwei Städte mit Farmen und Wegen, Hügel, Sumpf, ein Söldnerlager, Schiffe vor der Küste und Leuchttürme an den Kartenecken](docs/screenshot.png)
 
 ## Was dich erwartet
 
