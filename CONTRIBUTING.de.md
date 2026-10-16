@@ -50,6 +50,7 @@ README, CONTRIBUTING und Wiki gibt es auf Englisch (Hauptsprache) und Deutsch. �
 - **Stil der Spielwelt:** realistisch-mittelalterlich im Low-Poly-Look. Neue Modelle passen sich daran an.
 - **Stil der Oberfläche:** schlicht wie Mini Metro – die Karte bleibt frei, Bedienung in schwebenden Kärtchen, Infos als Schild am Objekt, Aktionen als Werkzeugreihe unten. Eckige Ecken, eine Schrift, Hauptfarbe Waldgrün über die CSS-Variablen (hell und dunkel), Sechsecke nur als Marker und Abzeichen. Keine Verläufe, Texturen oder Zierschriften.
 - **Für alle Geräte:** Bedienbar mit Maus, Tastatur und Touch. Tippziele mindestens 36 px hoch, wichtige Dialoge passen ohne Scrollen auf ein iPad (810×950 hochkant, 1080×700 quer).
+- **Handy-Ansicht:** Auf Handys (erkannt am Gerät, nicht an der Fensterbreite) setzt `index.html` die Klasse `phone` am `<html>`. Handy-Regeln stehen in `css/style.css` am Ende unter `html.phone`, damit PC und Tablet unberührt bleiben. Auf dem Handy nur das Nötigste gleichzeitig zeigen, der Rest hinter „Mehr“.
 - **Robust:** Beschädigte Spielstände, Profile oder unerwartete Eingaben dürfen das Spiel nie lahmlegen.
 
 ### Code
