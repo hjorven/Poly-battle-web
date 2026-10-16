@@ -95,6 +95,11 @@ async function test(name, fn) {
   } catch (e) {
     failed++;
     console.log(`FAIL  ${name}\n      ${String(e.message).split('\n')[0]}`);
+    // Auf GitHub als Hinweis an den Lauf hängen, dann steht der Fehler direkt im PR.
+    if (process.env.GITHUB_ACTIONS) {
+      const msg = String(e.message).replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A').slice(0, 1500);
+      console.log(`::error title=${name.replace(/[,:]/g, ' ')}::${msg}`);
+    }
   }
 }
 
