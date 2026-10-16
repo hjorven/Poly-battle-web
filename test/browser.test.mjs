@@ -414,8 +414,12 @@ await test('Wiederholung: nach Spielende abspielen, Regler, Tempo', async () => 
   const v = Number(await page.$eval('#rpSlider', e => e.value));
   assert.ok(v > 2, 'Zeitraffer läuft: ' + v);
   // Bei kurzen Partien kann der Zeitraffer schon am Ende stehen und hat
-  // selbst angehalten; dann würde ein Klick ihn neu starten.
-  if (/Anhalten/.test(await page.textContent('#rpPlay'))) await page.click('#rpPlay');
+  // selbst angehalten; dann würde ein Klick ihn neu starten. Endet er genau
+  // zwischen Lesen und Klick, startet der Klick ihn neu – dann noch einmal anhalten.
+  for (let i = 0; i < 3 && /Anhalten/.test(await page.textContent('#rpPlay')); i++) {
+    await page.click('#rpPlay');
+    await page.waitForTimeout(100);
+  }
   assert.match(await page.textContent('#rpPlay'), /bspielen/);
   await page.click('#reviewBack');
   await page.waitForTimeout(200);
