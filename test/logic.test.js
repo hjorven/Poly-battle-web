@@ -2324,5 +2324,15 @@ test('Wiederholung: jede Runde nachbaubar, kompakt genug für Online', () => {
   assert.deepStrictEqual(last.improvements, loaded.improvements);
 });
 
+test('Schmelzhütte: +1 je Berg daneben, +2 wenn dort eine Mine steht', () => {
+  const st = makeState();
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }];
+  st.terrain[4 * MAP_W + 6] = 'mountain';
+  st.terrain[5 * MAP_W + 4] = 'mountain';
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'forge', 5, 4), 1 + 2);
+  st.improvements['6,4'] = 'mine';
+  assert.strictEqual(R.improvementIncome(st, 'player_1', 'forge', 5, 4), 1 + 1 + 2);
+});
+
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
 if (failed) process.exit(1);

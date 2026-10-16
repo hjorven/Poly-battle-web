@@ -26,7 +26,7 @@ Gebaut wird im Stadtmenü über **Ausbauen**: Feld im Stadtgebiet antippen, dann
 | **Tempel** | 10 | Feld | Meditation | +2 pro Runde |
 | **Ballonplatz** | 8 | Feld | Ballonfahrt | +1 pro Runde |
 | **Windmühle** | 6 | Feld | Mühlenbau | +1, +1 je angrenzender Farm |
-| **Schmelzhütte** | 6 | Feld | Verhüttung | +1, +2 je angrenzender Mine |
+| **Schmelzhütte** | 6 | Feld | Verhüttung | +1, +2 je angrenzender Mine, +1 je angrenzendem Berg ohne Gebäude |
 | **Markt** | 8 | Feld | Märkte | +1 je angrenzendem Gebäude (bis 5), Rohstoffe zählen mit |
 | **Wachturm** | 5 | Feld, Berg | Schildmacher | Sicht 3 Felder; Einheiten darauf und daneben verteidigen anderthalbfach |
 | **Fischerhütte** | 5 | Flachwasser | Fischerei | +1 pro Runde, +1 je angrenzendem Fischgrund |
