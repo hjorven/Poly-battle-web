@@ -4,7 +4,8 @@ import {
   DEF_BONUS, researchCost, TRIBES, TRIBE_POOL, tribeColor, hasAbility,
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
-  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY, UPGRADES, PERSONAS
+  PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY, UPGRADES, PERSONAS,
+  LANDSCAPE, BANNER_ATK, RANGER_FOREST_ATK, MERC
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -83,7 +84,21 @@ export function improvementCost(state, player, type) {
 }
 
 export function attackOf(state, unit) {
-  return UNITS[unit.type].atk + (unit.owner ? techBonus(state, unit.owner, 'atk', unit.type) : 0);
+  let a = UNITS[unit.type].atk + (unit.owner ? techBonus(state, unit.owner, 'atk', unit.type) : 0);
+  if (!a) return a;
+  // Waldläufer schlagen aus der Deckung des Waldes härter zu.
+  if (hasAbility(unit.type, 'ranger') && terrainAt(state, unit.q, unit.r) === 'forest') a += RANGER_FOREST_ATK;
+  if (unit.owner && underBanner(state, unit)) a += BANNER_ATK;
+  return a;
+}
+
+// Steht ein eigener Bannerträger direkt neben der Einheit? (Er selbst zählt nicht.)
+export function underBanner(state, unit) {
+  if (unit.q == null || !state.units) return false;
+  return neighbors(unit.q, unit.r).some(([q, r]) => {
+    const b = unitAt(state, q, r);
+    return b && b !== unit && b.owner === unit.owner && hasAbility(b.type, 'banner');
+  });
 }
 
 // --- Diplomatie ---------------------------------------------------------------
@@ -453,6 +468,8 @@ export function moveCost(state, unit, q, r) {
   if (bridgeAt(state, q, r)) return 1;
   // Wege: im eigenen Gebiet kostet jedes Landfeld nur 1 Bewegung.
   if (hasTech(state, unit.owner, 'roads') && ownLand(state, unit.owner, q, r)) return 1;
+  // Waldläufer kennen die Pfade durch Wald, Hügel und Sumpf.
+  if (hasAbility(unit.type, 'ranger') && TERRAIN[tile].walkable) return 1;
   const perk = perkOf(state, unit.owner);
   if (tile === 'forest' && perk === 'woodland') return 1;
   if (tile === 'mountain' && perk === 'mountaineer') return 1;
@@ -563,6 +580,8 @@ export function battleResults(state, attacker, defender) {
     if (hasAbility(defender.type, 'fragile')) damage = defender.hp;
     else if (hasAbility(defender.type, 'flak')) damage *= 2;
   }
+  // Der Brander geht beim Angriff unter, es gibt nichts zurückzuschlagen.
+  if (hasAbility(attacker.type, 'fireship')) retaliation = 0;
   if (isAir(attacker.type)) {
     // Nahkämpfer können nicht nach oben zurückschlagen.
     if (!ranged(defender)) retaliation = 0;
@@ -576,10 +595,11 @@ export function battleResults(state, attacker, defender) {
 // Segeln +1 für alle.
 export function unitSight(state, u) {
   let radius = UNITS[u.type].sight ?? VISION.unit;
-  if (terrainAt(state, u.q, u.r) === 'mountain') {
+  const tile = terrainAt(state, u.q, u.r);
+  if (tile === 'mountain') {
     radius = Math.max(radius, 2);
     if (hasAbility(u.type, 'scout')) radius += 1;
-  }
+  } else if (!isAir(u.type) && TERRAIN[tile] && TERRAIN[tile].sight) radius += TERRAIN[tile].sight;
   if (hasTech(state, u.owner, 'sailing')) radius += 1;
   if ((u.type === 'rider' || u.type === 'knight') && perkOf(state, u.owner) === 'lookouts') radius += 1;
   radius += techBonus(state, u.owner, 'sight', u.type) + techBonus(state, u.owner, 'sightAll');
@@ -858,17 +878,19 @@ export function reachableMap(state, unit, prev = null) {
         const c = cityAt(state, nq, nr);
         if (c && atPeace(state, unit.owner, c.owner)) continue;
         const switching = switchesDomain(state, unit, nq, nr);
-        // Ein- und Ausschiffen verbraucht die restliche Bewegung.
+        // Ein- und Ausschiffen verbraucht die restliche Bewegung, ebenso das
+        // Betreten eines Sumpfs (außer über einen Weg oder als Waldläufer).
         const road = land && onRoadNet(state, q, r) && onRoadNet(state, nq, nr);
         const step = road ? 1 : moveCost(state, unit, nq, nr) * 2;
-        const nc = switching ? Math.max(cost + 2, budget) : cost + step;
+        const stuck = switching || (land && !road && TERRAIN[tile].stop && !hasAbility(unit.type, 'ranger') && !bridgeAt(state, nq, nr));
+        const nc = stuck ? Math.max(cost + step, budget) : cost + step;
         if (nc > budget) continue;
         if (nc < (dist.get(k) ?? Infinity)) {
           dist.set(k, nc);
           if (prev) prev.set(k, hk(q, r));
           // Kontrollzone: Neben einem Feind endet der Zug; auch nach dem
           // Wechsel zwischen Land und Wasser geht es nicht weiter.
-          if (!switching && (flying || !zoc(nq, nr))) (buckets[nc] || (buckets[nc] = [])).push([nq, nr]);
+          if (!stuck && (flying || !zoc(nq, nr))) (buckets[nc] || (buckets[nc] = [])).push([nq, nr]);
         }
       }
     }
@@ -1007,7 +1029,7 @@ export function attack(state, attacker, defender) {
     events.push({ kind: 'bounty', player: attacker.owner, stars: BOUNTY });
     const promo = addKill(attacker);
     if (promo) events.push(promo);
-    if (UNITS[attacker.type].range === 1 && !isAir(attacker.type) && !switchesDomain(state, attacker, defender.q, defender.r)) {
+    if (UNITS[attacker.type].range === 1 && !isAir(attacker.type) && !hasAbility(attacker.type, 'fireship') && !switchesDomain(state, attacker, defender.q, defender.r)) {
       const tile = terrainAt(state, defender.q, defender.r);
       if (canEnter(state, attacker, tile, defender.q, defender.r) && !unitAt(state, defender.q, defender.r)) {
         attacker.q = defender.q;
@@ -1029,6 +1051,31 @@ export function attack(state, attacker, defender) {
     }
   } else {
     logEvent(state, { kind: 'hit', victim: defender.owner, unit: defender.type, dmg: res.damage, q: defender.q, r: defender.r });
+  }
+  if (hasAbility(attacker.type, 'fireship')) {
+    // Brandsatz: alle Feinde neben dem Ziel bekommen halben Schaden, der
+    // Brander selbst sinkt.
+    const splash = Math.max(1, Math.round(res.damage / 2));
+    for (const [nq, nr] of neighbors(defender.q, defender.r)) {
+      const v = unitAt(state, nq, nr);
+      if (!v || v === attacker || v === defender || !hostile(state, attacker.owner, v.owner)) continue;
+      v.hp -= splash;
+      events.push({ kind: 'splash', from: attacker.id, to: v.id, dmg: splash });
+      if (v.hp <= 0) {
+        state.units = state.units.filter(x => x !== v);
+        events.push({ kind: 'kill', unit: v });
+        logEvent(state, { kind: 'unitLost', victim: v.owner, unit: v.type, q: v.q, r: v.r });
+        if (!state.killsBy) state.killsBy = {};
+        state.killsBy[attacker.owner] = (state.killsBy[attacker.owner] || 0) + 1;
+        state.stars[attacker.owner] += BOUNTY;
+      } else logEvent(state, { kind: 'hit', victim: v.owner, unit: v.type, dmg: splash, q: v.q, r: v.r });
+    }
+    state.units = state.units.filter(u => u !== attacker);
+    events.push({ kind: 'kill', unit: attacker, sunk: true });
+    attacker.acted = true;
+    attacker.mp = 0;
+    updateExplored(state, attacker.owner);
+    return { events, killed };
   }
   if (!killed && !hasAbility(defender.type, 'stiff') && rangeOf(state, defender) >= dist && res.retaliation > 0) {
     attacker.hp -= res.retaliation;
@@ -1928,6 +1975,11 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   generateResources(state, rand, centerCities);
   generateRuins(state, rand);
   placeLighthouses(state);
+  // Eigener Zufall für Hügel, Sumpf und Söldnerlager: So bleiben alle übrigen
+  // Felder einer Karte (Tages- und Wochenherausforderung) unverändert.
+  const extra = mulberry32((seed ^ 0x27d4eb2f) >>> 0);
+  addLandscapes(state, extra);
+  placeCamps(state, extra, starts[0]);
   startTurn(state);
   recordHistory(state);
   return state;
@@ -2231,6 +2283,100 @@ export function claimLighthouse(state, unit) {
     return { kind: 'lighthouse', text, player: p, q, r };
   }
   return null;
+}
+
+// --- Hügel und Sumpf --------------------------------------------------------------
+// Werden erst nach allem anderen gesetzt und nur auf freie Felder abseits der
+// Städte, damit Startgebiete und bestehende Karten gleich bleiben.
+
+function emptyTile(state, q, r) {
+  const k = hk(q, r);
+  return !(state.resources && state.resources[k]) && !(state.ruins && state.ruins[k]) &&
+    !(state.improvements && state.improvements[k]) && !(state.lighthouses && state.lighthouses[k] != null) &&
+    !(state.camps && state.camps[k]) && !bridgeAt(state, q, r) && !roadAt(state, q, r) && !unitAt(state, q, r) &&
+    !state.cities.some(c => hexDistance(q, r, c.q, c.r) <= (c.isCapital ? 2 : 1));
+}
+
+function addLandscapes(state, rand) {
+  const near = (q, r, list) => neighbors(q, r).some(([nq, nr]) => list.includes(terrainAt(state, nq, nr)));
+  const plan = [];
+  forEachHex((q, r) => {
+    const roll = rand();
+    if (terrainAt(state, q, r) !== 'field' || !emptyTile(state, q, r)) return;
+    if (roll < (near(q, r, ['mountain']) ? LANDSCAPE.hillsNearMountain : LANDSCAPE.hills)) plan.push([q, r, 'hills']);
+    else if (roll > 1 - (near(q, r, ['water']) ? LANDSCAPE.swampNearWater : LANDSCAPE.swamp)) plan.push([q, r, 'swamp']);
+  });
+  // Erst sammeln, dann setzen: Neue Hügel sollen nicht weitere nach sich ziehen.
+  for (const [q, r, t] of plan) state.terrain[idx(q, r)] = t;
+}
+
+// --- Söldnerlager -----------------------------------------------------------------
+
+export function campAt(state, q, r) {
+  return (state.camps && state.camps[hk(q, r)]) || null;
+}
+
+export function mercCost(type) {
+  return UNITS[type].cost + MERC.extra;
+}
+
+function placeCamps(state, rand, start) {
+  state.camps = {};
+  const want = MERC.count[state.mapSize] || MERC.count.normal;
+  const reach = floodReachable(state, start[0], start[1]);
+  const spots = [];
+  forEachHex((q, r) => {
+    const t = terrainAt(state, q, r);
+    if ((t !== 'field' && t !== 'hills') || !reach.has(hk(q, r)) || !emptyTile(state, q, r)) return;
+    const gap = Math.min(...state.cities.map(c => hexDistance(q, r, c.q, c.r)));
+    if (gap >= MERC.minDist - 1) spots.push([q, r, gap >= MERC.minDist]);
+  });
+  for (let i = spots.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [spots[i], spots[j]] = [spots[j], spots[i]];
+  }
+  // Weit von Städten entfernte Plätze zuerst; auf vollen Karten auch etwas näher.
+  spots.sort((a, b) => b[2] - a[2]);
+  let made = 0;
+  for (const [q, r] of spots) {
+    if (made >= want) break;
+    if (Object.keys(state.camps).some(k => { const [cq, cr] = k.split(',').map(Number); return hexDistance(q, r, cq, cr) < 4; })) continue;
+    state.camps[hk(q, r)] = { type: MERC.types[Math.floor(rand() * MERC.types.length)], used: [] };
+    made++;
+  }
+}
+
+// Kann die Einheit auf ihrem Feld Söldner anwerben? null = hier gibt es nichts.
+export function hireOption(state, unit) {
+  if (!unit || unit.carry || hasAbility(unit.type, 'water') || isAir(unit.type)) return null;
+  const camp = campAt(state, unit.q, unit.r);
+  if (!camp || !UNITS[camp.type]) return null;
+  const p = unit.owner;
+  const cost = mercCost(camp.type);
+  const base = { type: camp.type, cost, q: unit.q, r: unit.r };
+  if (state.winner) return { ...base, ok: false, reason: 'Spiel vorbei' };
+  if (camp.used.includes(p)) return { ...base, ok: false, reason: 'Hier schon angeworben' };
+  if (unit.acted) return { ...base, ok: false, reason: 'Hat schon gehandelt' };
+  if ((state.stars[p] || 0) < cost) return { ...base, ok: false, reason: 'Zu wenig Sterne' };
+  if (!freeLandNear(state, unit.q, unit.r, camp.type, p)) return { ...base, ok: false, reason: 'Kein freies Feld daneben' };
+  return { ...base, ok: true };
+}
+
+export function hireMercenary(state, unit, player) {
+  if (!unit || unit.owner !== player || state.turn !== player) return { ok: false, reason: 'Fremde Einheit' };
+  const o = hireOption(state, unit);
+  if (!o) return { ok: false, reason: 'Kein Söldnerlager' };
+  if (!o.ok) return o;
+  const [q, r] = freeLandNear(state, unit.q, unit.r, o.type, player);
+  state.stars[player] -= o.cost;
+  campAt(state, unit.q, unit.r).used.push(player);
+  const merc = spawnUnitAt(state, player, o.type, q, r);
+  unit.acted = true;
+  unit.mp = 0;
+  unit.hasMoved = true;
+  countStat(state, 'mercsBy', player);
+  updateExplored(state, player);
+  return { ok: true, unit: merc, type: o.type, cost: o.cost };
 }
 
 // --- Punkte, Verlauf, Spielende ---------------------------------------------

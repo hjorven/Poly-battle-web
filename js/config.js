@@ -62,8 +62,16 @@ export const TERRAIN = {
   mountain: { name: 'Berg', color: 0x9b9b94, height: 1.15, walkable: true, move: 2, def: 1.5, tech: 'climbing', enterTech: 'climbing' },
   water: { name: 'Flachwasser', color: 0x3fa7e0, height: 0.24, walkable: false, move: 2, def: 1.5, tech: 'aquatism', enterTech: null },
   ocean: { name: 'Ozean', color: 0x2b6fbd, height: 0.18, walkable: false, move: 2, def: 1.5, tech: 'aquatism', enterTech: null },
-  ice: { name: 'Eis', color: 0xd8eef7, height: 0.45, walkable: true, move: 1, def: 1, tech: null, enterTech: null }
+  ice: { name: 'Eis', color: 0xd8eef7, height: 0.45, walkable: true, move: 1, def: 1, tech: null, enterTech: null },
+  // Hügel: für alle begehbar, Verteidigung ohne Technologie, Einheiten darauf sehen weiter.
+  hills: { name: 'Hügel', color: 0xa3a94f, height: 0.72, walkable: true, move: 1, def: 1.5, tech: null, enterTech: null, sight: 1 },
+  // Sumpf: Betreten beendet die Bewegung (`stop`), Verteidiger stehen schlechter.
+  swamp: { name: 'Sumpf', color: 0x6b7d4a, height: 0.4, walkable: true, move: 1, def: 0.75, tech: null, enterTech: null, stop: true }
 };
+
+// Anteil der neuen Landschaften, die nach der Kartenerzeugung auf freie Felder
+// gesetzt werden (siehe rules.js: addLandscapes).
+export const LANDSCAPE = { hillsNearMountain: 0.5, hills: 0.08, swampNearWater: 0.3, swamp: 0.03 };
 
 // Fähigkeiten (abilities) je Einheit – Namen wie in den Spieldaten.
 export const ABILITY_INFO = {
@@ -85,8 +93,15 @@ export const ABILITY_INFO = {
   cargo: { name: 'Transport', desc: 'Nimmt eine benachbarte eigene Landeinheit auf und setzt sie anderswo ab.' },
   siege: { name: 'Belagerung', desc: 'Dreifacher Schaden gegen Einheiten in Städten und auf Burgen; dort ohne Gegenschlag.' },
   trade: { name: 'Handel', desc: 'In oder neben einer anderen Stadt: einmalig Sterne, mehr je weiter von der Heimatstadt entfernt. Erobert keine Städte.' },
-  pikes: { name: 'Pikenwall', desc: 'Anderthalbfacher Schaden gegen Reiter, Ritter und Paladine – auch beim Gegenschlag.' }
+  pikes: { name: 'Pikenwall', desc: 'Anderthalbfacher Schaden gegen Reiter, Ritter und Paladine – auch beim Gegenschlag.' },
+  ranger: { name: 'Pfadfinder', desc: 'Wald, Hügel und Sumpf kosten nur 1 Bewegung und halten nicht auf; aus dem Wald +1 Angriff.' },
+  banner: { name: 'Banner', desc: 'Eigene Einheiten direkt daneben haben +0,5 Angriff (mehrere Banner zählen nicht doppelt).' },
+  fireship: { name: 'Brandsatz', desc: 'Geht beim Angriff unter, trifft aber auch alle Feinde neben dem Ziel mit halbem Schaden. Kein Gegenschlag.' }
 };
+
+// Werte der neuen Fähigkeiten (siehe rules.js: attackOf, attack).
+export const BANNER_ATK = 0.5;
+export const RANGER_FOREST_ATK = 1;
 
 export function hasAbility(type, name) {
   return (UNITS[type].abilities || []).includes(name);
@@ -189,13 +204,27 @@ export const UNITS = {
   settler: {
     name: 'Siedler', hp: 10, atk: 0, def: 0, move: 1, range: 1, cost: 5, sight: 1,
     tech: null, abilities: ['static', 'land', 'settle'], capital: true
+  },
+  // Neue Einheiten stehen am Ende: Wiederholungen speichern die Art als
+  // Position in dieser Liste.
+  ranger: {
+    name: 'Waldläufer', hp: 10, atk: 2, def: 2, move: 1, range: 1, cost: 4, sight: 2,
+    tech: 'forestry', abilities: ['dash', 'fortify', 'land', 'ranger']
+  },
+  bannerman: {
+    name: 'Bannerträger', hp: 10, atk: 1, def: 2, move: 1, range: 1, cost: 6, sight: 1,
+    tech: 'freespirit', abilities: ['fortify', 'land', 'banner']
+  },
+  fireship: {
+    name: 'Brander', hp: 8, atk: 4, def: 0, move: 3, range: 1, cost: 6, sight: 2,
+    tech: 'aquatism', abilities: ['dash', 'water', 'fireship']
   }
 };
 
 export const UNIT_ORDER = [
-  'warrior', 'archer', 'rider', 'defender', 'pikeman', 'swordsman', 'crossbow',
-  'catapult', 'ram', 'mindbender', 'horsearcher', 'knight', 'paladin', 'cart', 'giant',
-  'boat', 'ship', 'battleship', 'balloon', 'cargoballoon', 'fireballoon', 'airship', 'spy', 'settler'
+  'warrior', 'archer', 'ranger', 'rider', 'defender', 'pikeman', 'swordsman', 'crossbow',
+  'catapult', 'ram', 'mindbender', 'bannerman', 'horsearcher', 'knight', 'paladin', 'cart', 'giant',
+  'boat', 'ship', 'fireship', 'battleship', 'balloon', 'cargoballoon', 'fireballoon', 'airship', 'spy', 'settler'
 ];
 
 // Echter Technologiebaum (Basis-Äste; `req` = Voraussetzung, `tier` = Stufe/Kosten).
@@ -213,9 +242,9 @@ export const TECHS = {
   sailing: { name: 'Segeln', tier: 2, req: 'fishing', desc: 'Boote & Schiffe; Häfen; +1 Sicht' },
   ramming: { name: 'Rammen', tier: 2, req: 'fishing', desc: 'Zweig: Aquatismus' },
   archery: { name: 'Bogenschießen', tier: 2, req: 'hunting', desc: 'Bogenschützen; Wald-Verteidigung' },
-  forestry: { name: 'Forstwirtschaft', tier: 2, req: 'hunting', desc: 'Sägewerke bauen (+1 Einkommen)' },
+  forestry: { name: 'Forstwirtschaft', tier: 2, req: 'hunting', desc: 'Sägewerke bauen (+1 Einkommen); Waldläufer' },
   roads: { name: 'Wege', tier: 2, req: 'riding', desc: 'Wege (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1' },
-  freespirit: { name: 'Freier Geist', tier: 2, req: 'riding', desc: 'Zweig: Ritterlichkeit' },
+  freespirit: { name: 'Freier Geist', tier: 2, req: 'riding', desc: 'Bannerträger; Zweig: Ritterlichkeit' },
 
   // Je Ast: Stufe 2 → 3 → 4 → 5 → 6. Neue Inhalte stehen auch früh (Stufe 3/4),
   // einige reine Boni sind dafür nach hinten gerückt.
@@ -244,7 +273,7 @@ export const TECHS = {
   seapower: { name: 'Seemacht', tier: 5, req: 'cartography', desc: 'Boote, Schiffe und Kriegsschiffe +1 Bewegung' },
   naval: { name: 'Seeherrschaft', tier: 6, req: 'seapower', desc: 'Boote, Schiffe und Kriegsschiffe +1 Angriff' },
 
-  aquatism: { name: 'Aquatismus', tier: 3, req: 'ramming', desc: 'Verteidigungsbonus auf Wasser' },
+  aquatism: { name: 'Aquatismus', tier: 3, req: 'ramming', desc: 'Verteidigungsbonus auf Wasser; Brander' },
   fishfarming: { name: 'Fischzucht', tier: 4, req: 'aquatism', desc: 'Fischgründe bringen +1 Stern zusätzlich' },
   harbors: { name: 'Hafenwirtschaft', tier: 5, req: 'fishfarming', desc: 'Jeder Hafen bringt +1 Stern zusätzlich' },
   shipyards: { name: 'Werften', tier: 6, req: 'harbors', desc: 'Boote, Schiffe und Kriegsschiffe kosten 2 Sterne weniger' },
@@ -337,7 +366,7 @@ export const RESOURCES = {
 export const IMPROVEMENTS = {
   farm: { name: 'Farm', tech: 'farming', terrain: ['field'], cost: 6, pop: 1 },
   sawmill: { name: 'Sägewerk', tech: 'forestry', terrain: ['forest'], cost: 7, pop: 1 },
-  mine: { name: 'Mine', tech: 'mining', terrain: ['mountain'], cost: 6, pop: 1 },
+  mine: { name: 'Mine', tech: 'mining', terrain: ['mountain', 'hills'], cost: 6, pop: 1 },
   port: { name: 'Hafen', tech: 'sailing', terrain: ['water', 'ocean'], cost: 7, pop: 1 },
   temple: { name: 'Tempel', tech: 'meditation', terrain: ['field'], cost: 10, pop: 2 },
   // Ballonplatz: dort steigen Luft-Einheiten auf (wie Schiffe im Hafen).
@@ -347,10 +376,10 @@ export const IMPROVEMENTS = {
   forge: { name: 'Schmelzhütte', tech: 'smelting', terrain: ['field'], cost: 6, pop: 1, adjacent: { mine: 2 }, adjacentTerrain: { mountain: 1 } },
   market: { name: 'Markt', tech: 'markets', terrain: ['field'], cost: 8, pop: 0, adjacent: { '*': 1 }, max: 5, resources: true },
   // Wachturm: weite Sicht; Einheiten darauf und daneben verteidigen anderthalbfach.
-  watchtower: { name: 'Wachturm', tech: 'shields', terrain: ['field', 'mountain'], cost: 5, pop: 0, sight: 3 },
+  watchtower: { name: 'Wachturm', tech: 'shields', terrain: ['field', 'mountain', 'hills'], cost: 5, pop: 0, sight: 3 },
   // Fischerhütte: am Wasser, lohnt neben Fischgründen.
   fishhut: { name: 'Fischerhütte', tech: 'fishing', terrain: ['water'], cost: 5, pop: 1, adjacentRes: { fish: 1 } },
-  fort: { name: 'Burg', tech: 'castles', terrain: ['field', 'forest'], cost: 10, pop: 0 },
+  fort: { name: 'Burg', tech: 'castles', terrain: ['field', 'forest', 'hills'], cost: 10, pop: 0 },
   monastery: { name: 'Kloster', tech: 'monastic', terrain: ['field'], cost: 12, pop: 2 },
   // Monumente: kostenlos, einmal je Stamm, nach einem Erfolg (siehe MONUMENTS).
   m_wisdom: { name: 'Turm der Weisheit', monument: true, terrain: ['field', 'forest'], cost: 0, pop: 0 },
@@ -500,6 +529,17 @@ export const WEEKLY_RULES = {
 // erreichen (Schiff auf oder neben dem Turm): Sterne und Sicht auf die Umgebung,
 // wer alle vier findet, bekommt einen Zusatzbonus.
 export const LIGHTHOUSE = { stars: 3, reveal: 3, allBonus: 5 };
+
+// --- Söldnerlager -------------------------------------------------------------
+// Neutrale Lager abseits der Startstädte. Eine eigene Landeinheit auf dem Lager
+// wirbt die angebotene Einheit an – ohne Technologie, einmal je Stamm und Lager.
+// `count` je Kartengröße, `minDist` = Abstand zu jeder Stadt.
+export const MERC = {
+  count: { small: 2, normal: 3, large: 4 },
+  minDist: 4,
+  types: ['swordsman', 'crossbow', 'knight', 'pikeman', 'horsearcher', 'catapult'],
+  extra: 2
+};
 
 // --- Spielmodi & Schwierigkeit ---------------------------------------------
 export const GAME_MODES = {

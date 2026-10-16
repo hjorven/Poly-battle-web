@@ -10,6 +10,7 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **Krieger** | 2 | 10 | 2 | 2 | 1 | 1 | – | Sturm, Verschanzen |
 | **Bogenschütze** | 3 | 10 | 2 | 1 | 1 | 2 | Bogenschießen | Sturm, Verschanzen |
+| **Waldläufer** | 4 | 10 | 2 | 2 | 1 | 1 | Forstwirtschaft | Sturm, Verschanzen, Pfadfinder |
 | **Reiter** | 3 | 10 | 2 | 1 | 2 | 1 | Reiten | Sturm, Rückzug, Verschanzen |
 | **Verteidiger** | 3 | 15 | 1 | 3 | 1 | 1 | Schildmacher | Verschanzen |
 | **Pikenier** | 4 | 10 | 2 | 3 | 1 | 1 | Pikeniere | Sturm, Verschanzen, Pikenwall |
@@ -18,6 +19,7 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 | **Katapult** | 8 | 10 | 4 | 0 | 1 | 3 | Mathematik | Starr |
 | **Rammbock** | 6 | 15 | 1 | 1 | 1 | 1 | Baukunst | Belagerung |
 | **Gedankenbeuger** | 5 | 10 | 0 | 1 | 1 | 1 | Philosophie | Heilen, Bekehren, Starr |
+| **Bannerträger** | 6 | 10 | 1 | 2 | 1 | 1 | Freier Geist | Verschanzen, Banner |
 | **Bogenreiter** | 6 | 10 | 2 | 1 | 2 | 2 | Hufeisen | Sturm, Rückzug |
 | **Ritter** | 9 | 10 | 3 | 1 | 3 | 1 | Ritterlichkeit | Sturm, Durchhalten, Verschanzen |
 | **Paladin** | 13 | 15 | 4 | 2 | 3 | 1 | Ritterorden | Sturm, Durchhalten, Verschanzen |
@@ -32,6 +34,7 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **Boot** | 3 | 10 | 2 | 0 | 2 | 1 | Segeln | Sturm, Verschanzen |
 | **Schiff** | 5 | 14 | 3 | 1 | 2 | 2 | Segeln | Sturm, Verschanzen |
+| **Brander** | 6 | 8 | 4 | 0 | 3 | 1 | Aquatismus | Sturm, Brandsatz |
 | **Kriegsschiff** | 8 | 18 | 4 | 2 | 3 | 2 | Navigation | Sturm, Verschanzen |
 
 ## Luft-Einheiten
@@ -66,6 +69,9 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 | **Belagerung** | Dreifacher Schaden gegen Einheiten in Städten und auf Burgen; dort ohne Gegenschlag. |
 | **Handel** | In oder neben einer anderen Stadt: einmalig Sterne, mehr je weiter von der Heimatstadt entfernt. Erobert keine Städte. |
 | **Pikenwall** | Anderthalbfacher Schaden gegen Reiter, Ritter und Paladine – auch beim Gegenschlag. |
+| **Pfadfinder** | Wald, Hügel und Sumpf kosten nur 1 Bewegung und halten nicht auf; aus dem Wald +1 Angriff. |
+| **Banner** | Eigene Einheiten direkt daneben haben +0,5 Angriff (mehrere Banner zählen nicht doppelt). |
+| **Brandsatz** | Geht beim Angriff unter, trifft aber auch alle Feinde neben dem Ziel mit halbem Schaden. Kein Gegenschlag. |
 
 ## Aufrüsten
 
