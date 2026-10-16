@@ -10,7 +10,7 @@ Alle Modi starten im Menü unter **Spielen**. Stamm und Spieleinstellungen (Kart
 | **Tutorial** | du gegen eine leichte KI, mit Anleitung | nein | im Browser |
 | **Tagesherausforderung** | gleiche Karte für alle, 30 Runden | nur für die Bestenliste | im Browser |
 | **Wochen-Herausforderung** | feste Karte mit Sonderregel | nur für die Bestenliste | im Browser |
-| **Kampagne** | zehn Missionen | nein | im Browser |
+| **Kampagne** | 13 Missionen | nein | im Browser |
 
 ## Hotseat
 

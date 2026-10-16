@@ -1018,6 +1018,8 @@ export function attack(state, attacker, defender) {
           city.owner = attacker.owner;
           events.push({ kind: 'capture', city, from: prev, to: attacker.owner });
           countStat(state, 'capturesBy', attacker.owner);
+          if (prev) countStat(state, 'lostBy', prev);
+          if (hasAbility(attacker.type, 'siege')) countStat(state, 'siegeCapturesBy', attacker.owner);
           logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
           checkWinner(state);
         }
@@ -1084,6 +1086,8 @@ export function moveUnit(state, unit, q, r) {
     city.owner = unit.owner;
     events.push({ kind: 'capture', city, from: prev, to: unit.owner });
     countStat(state, 'capturesBy', unit.owner);
+    if (prev) countStat(state, 'lostBy', prev);
+    if (hasAbility(unit.type, 'siege')) countStat(state, 'siegeCapturesBy', unit.owner);
     const prov = provoke(state, unit.owner, prev);
     if (prov) events.push(prov);
     logEvent(state, { kind: 'cityLost', victim: prev, q: city.q, r: city.r });
@@ -1208,6 +1212,8 @@ export function trade(state, unit, player) {
   if (o.foreign) state.stars[o.city.owner] = (state.stars[o.city.owner] || 0) + 2;
   state.units = state.units.filter(u => u !== unit);
   countStat(state, 'tradesBy', player);
+  if (!state.tradeStarsBy) state.tradeStarsBy = {};
+  state.tradeStarsBy[player] = (state.tradeStarsBy[player] || 0) + o.stars;
   return { ok: true, stars: o.stars, foreign: o.foreign, city: o.city };
 }
 
@@ -1967,6 +1973,15 @@ export function canChooseReward(state, city, id, player) {
   if (!lvl) return { ok: false, reason: 'Keine Belohnung offen' };
   if (!REWARD_CHOICES[lvl].includes(id)) return { ok: false, reason: 'Nicht wählbar' };
   return { ok: true };
+}
+
+// Freies Landfeld neben (q, r) für eine neue Landeinheit (z. B. Missionsstart).
+export function freeLandAround(state, q, r) {
+  for (const [nq, nr] of neighbors(q, r)) {
+    const t = TERRAIN[terrainAt(state, nq, nr)];
+    if (t && t.walkable && !unitAt(state, nq, nr) && !cityAt(state, nq, nr)) return [nq, nr];
+  }
+  return null;
 }
 
 function freeLandNear(state, q, r, type, owner) {
