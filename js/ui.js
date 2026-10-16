@@ -60,13 +60,6 @@ export function initUI(h) {
   });
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('coachBtn').addEventListener('click', () => handlers.onCoach && handlers.onCoach());
-  $('chatBtn').addEventListener('click', () => handlers.onChat('toggle'));
-  $('chatClose').addEventListener('click', () => handlers.onChat('close'));
-  $('chatForm').addEventListener('submit', e => { e.preventDefault(); const t = $('chatInput').value.trim(); if (t) handlers.onChat('send', t); });
-  $('chatInput').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') handlers.onChat('close'); });
-  const QUICK = ['Hallo!', 'Gut gespielt', 'Kurz warten, bin gleich da', 'Frieden?', 'Das war knapp', 'Revanche?'];
-  $('chatQuick').innerHTML = QUICK.map(q => `<button type="button" class="chip-btn" data-quick="${q}">${q}</button>`).join('');
-  $('chatQuick').querySelectorAll('[data-quick]').forEach(b => b.addEventListener('click', () => handlers.onChat('send', b.dataset.quick)));
   // Die Karte reicht bis oben; Elemente darunter richten sich nach der Höhe der Kärtchen.
   const syncTop = () => document.documentElement.style.setProperty('--hud-h', $('topbar').offsetHeight + 'px');
   syncTop();
@@ -1762,23 +1755,6 @@ const TIPS = [
   'Wähle bei Stufe 3 die Stadtmauer, wenn Gegner in der Nähe sind: Verteidiger bekommen dann 4-fache Verteidigung.',
   'Greif nicht an, wenn die Vorschau mehr Gegenschlag als Schaden zeigt – warte lieber auf Verstärkung.'
 ];
-
-// Nachrichten in Online-Partien.
-export function setChat({ visible, open, items = [], unread = 0, nameOf, colorOf, me }) {
-  $('chatBtn').classList.toggle('hidden', !visible);
-  $('chatBadge').classList.toggle('hidden', !unread);
-  $('chatBadge').textContent = unread > 9 ? '9+' : String(unread);
-  const box = $('chat');
-  box.classList.toggle('hidden', !visible || !open);
-  if (!visible || !open) return;
-  const list = $('chatList');
-  const atEnd = list.scrollTop + list.clientHeight >= list.scrollHeight - 8;
-  list.innerHTML = items.length ? items.map(m => `<li class="${m.role === me ? 'mine' : ''}"><span class="dot" style="background:${colorOf(m.role)}"></span><b>${esc(nameOf(m.role))}</b> ${esc(m.text)}</li>`).join('')
-    : '<li class="chat-empty">Noch keine Nachrichten. Schreib etwas oder nimm eine Kurzantwort.</li>';
-  if (atEnd || unread) list.scrollTop = list.scrollHeight;
-}
-
-export function clearChatInput() { $('chatInput').value = ''; }
 
 // KI-Lehrling: Vorschlag mit Erklärung, Ausführen oder Schließen.
 export function showCoach(hint, onRun, onClose) {

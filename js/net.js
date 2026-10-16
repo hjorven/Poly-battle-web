@@ -63,24 +63,6 @@ export function subscribe(gameId, onUpdate) {
     .subscribe();
 }
 
-// --- Nachrichten in Online-Partien (supabase/migrations/…match_messages) ----------
-export const sendMessage = (gameId, text) => rpc('pb_send_message', { p_id: gameId, p_token: getToken(), p_text: text });
-export const fetchMessages = (gameId, after = 0) => rpc('pb_messages_since', { p_id: gameId, p_token: getToken(), p_after: after });
-
-// Echtzeit-Klingel: sagt nur „es gibt Neues“; gelesen wird über die geprüfte Funktion.
-export function chatChannel(gameId, onPing) {
-  const sb = getClient();
-  if (!sb) return null;
-  const ch = sb.channel('chat-' + gameId, { config: { broadcast: { self: false } } })
-    .on('broadcast', { event: 'ping' }, () => onPing())
-    .subscribe();
-  return ch;
-}
-
-export function ringChat(channel) {
-  try { if (channel) channel.send({ type: 'broadcast', event: 'ping', payload: {} }); } catch (e) { /* ignore */ }
-}
-
 export function unsubscribe(channel) {
   const sb = getClient();
   if (!sb || !channel) return;
