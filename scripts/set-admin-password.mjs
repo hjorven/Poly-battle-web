@@ -1,6 +1,7 @@
 // Neues Admin-Passwort setzen: schreibt nur den Prüfwert nach js/admin.js
 // (kein Klartext im Code). Aufruf: npm run admin-passwort -- "dein Passwort"
-// Danach committen und veröffentlichen; im Browser einmal neu freischalten.
+// Danach committen und veröffentlichen, die ausgegebene SQL-Anweisung auf
+// Supabase ausführen und im Browser einmal neu freischalten.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -18,3 +19,6 @@ const next = src.replace(/export const ADMIN_CHECK = '[0-9a-f]{64}';/, `export c
 if (next === src) { console.error('ADMIN_CHECK in js/admin.js nicht gefunden.'); process.exit(1); }
 writeFileSync(file, next);
 console.log('Admin-Passwort gesetzt (nur der Prüfwert steht in js/admin.js).');
+// Der Server prüft Online-Testpartien mit demselben Prüfwert.
+console.log('\nAuf Supabase (SQL Editor) ausführen, damit Online-Testpartien weiter gehen:\n');
+console.log(`create or replace function public.pb_admin_check() returns text language sql immutable set search_path = '' as $$ select '${check}'::text $$;`);

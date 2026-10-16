@@ -60,6 +60,7 @@ Es gibt keinen Build-Schritt und keine npm-Abhängigkeiten. Änderungen im Code 
 - Dateiname `JJJJMMTTHHMMSS_name.sql` (vollständige Uhrzeit). Dieselbe Versionsnummer steht nach dem Einspielen in der Migrationsliste von Supabase, so passen Repository und Datenbank zusammen und `supabase db push` spielt nur Neues ein.
 - Tabellen bleiben für Clients gesperrt (Row Level Security ohne Freigaben). Zugriff nur über `security definer`-Funktionen mit `set search_path = ''`, die alle Eingaben prüfen.
 - Keine Klartext-Kennungen speichern, nur Prüfsummen.
+- Neue Server-Funktionen bekommen Tests in `test/db/` (`npm run test:db` mit lokalem Postgres).
 
 ## Verhalten
 

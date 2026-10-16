@@ -1869,6 +1869,42 @@ function chartSvg(state) {
     <svg class="score-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Punkteverlauf aller Stämme">${grid}${lines}${axis}</svg>`;
 }
 
+// Menü einer laufenden Online-Partie: Aufgeben, freie Plätze und Abwesende.
+export function renderOnlineActions(acts) {
+  const box = $('online-actions');
+  if (!box) return;
+  box.innerHTML = acts.map((a, i) => `<button class="btn small${a.resign ? ' ghost' : ''}" data-online-act="${i}">${esc(a.label)}</button>`).join('');
+  box.classList.toggle('hidden', !acts.length);
+  box.querySelectorAll('[data-online-act]').forEach(b => b.addEventListener('click', () => handlers.onOnlineAction?.(acts[+b.dataset.onlineAct])));
+}
+
+// Eigene Online-Partien; null = wird geladen, [] = keine (Liste ausblenden).
+export function renderMyMatches(list) {
+  const box = $('my-matches');
+  if (!box) return;
+  if (!list || !list.length) { box.classList.add('hidden'); return; }
+  const ago = iso => {
+    const h = Math.floor((Date.now() - Date.parse(iso)) / 3600000);
+    return h < 1 ? 'gerade eben' : h < 48 ? `vor ${h} Std.` : `vor ${Math.floor(h / 24)} Tagen`;
+  };
+  const state = m => m.abandoned ? 'abgebrochen'
+    : m.winner ? (m.winner === m.me ? 'gewonnen' : 'verloren')
+    : m.waiting ? 'wartet auf Mitspieler'
+    : (m.ai || []).includes(m.me) ? 'KI spielt für dich'
+    : m.myTurn ? 'Du bist am Zug'
+    : `${m.turnName} ist dran`;
+  // Wer am Zug ist zuerst, dann laufende, dann beendete Partien.
+  const rank = m => m.myTurn ? 0 : m.open ? 1 : 2;
+  const rows = [...list].sort((a, b) => rank(a) - rank(b)).map(m =>
+    `<button class="match-row${m.myTurn ? ' my-turn' : ''}" data-match="${esc(m.id)}">
+      <span class="match-what">Runde ${m.round} · ${esc(ago(m.last_move_at))}</span>
+      <span class="match-state">${esc(state(m))}</span>
+    </button>`).join('');
+  box.innerHTML = `<h3 class="menu-h">Deine Online-Partien</h3><div class="my-matches-list">${rows}</div>`;
+  box.classList.remove('hidden');
+  box.querySelectorAll('[data-match]').forEach(b => b.addEventListener('click', () => handlers.onOpenMatch?.(b.dataset.match)));
+}
+
 export function setContinue(info) {
   const btn = $('continueBtn');
   if (!btn) return;
