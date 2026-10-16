@@ -1,80 +1,87 @@
 # Poly Battle
 
-Rundenbasierte Eroberung im Browser, angelehnt an *The Battle of Polytopia*: Gründe Städte, erforsche Technologien und erobere eine Welt aus Sechsecken – in Low-Poly-3D, auf PC, Tablet und Handy.
+**English** · [Deutsch](README.de.md)
 
-**[Jetzt spielen](https://hjorven.github.io/Poly-battle-web/)** · [Wiki](https://github.com/hjorven/Poly-battle-web/wiki) · [Fehler melden](https://github.com/hjorven/Poly-battle-web/issues/new/choose)
+Turn-based conquest in the browser, inspired by *The Battle of Polytopia*: found cities, research technologies and conquer a world of hexagons – in low-poly 3D, on PC, tablet and phone.
 
-![Eine Partie in Runde 18: Hauptstadt mit Farmen, Leuchttürme an den Kartenecken, der Rest der Welt unter Nebel](docs/screenshot.png)
+**[Play now](https://hjorven.github.io/Poly-battle-web/)** · [Wiki](https://github.com/hjorven/Poly-battle-web/wiki) · [Report a bug](https://github.com/hjorven/Poly-battle-web/issues/new/choose)
 
-## Was dich erwartet
+> The game itself is in German. The documentation is available in English and German.
 
-- **12 Stämme** mit eigener Start-Technologie und Besonderheit, dazu KI-Gegner mit Persönlichkeit (Eroberer, Händler, Seefahrer, Baumeister).
-- **24 Einheiten** an Land, auf See und in der Luft – vom Krieger über Bogenreiter, Rammbock und Händlerkarren bis zum Kriegsluftschiff, mit Veteranen und Aufrüsten.
-- **55 Technologien** in einem Wabenbaum mit sechs Stufen.
-- **Städte ausbauen** in einer 3D-Ansicht des Stadtgebiets: Feld antippen, Gebäude wählen – jedes zeigt vorher, wie viele Sterne es pro Runde mehr bringt, auch durch Nachbarn wie Windmühle und Farm. Stadtstufen bringen Belohnungen, Monumente werden durch Erfolge freigeschaltet.
-- **Nebel, Diplomatie, Handel, Brücken, Häfen, Wachtürme, Ruinen und Leuchttürme.**
-- **KI-Lehrling:** Der Knopf „Tipp“ zeigt und erklärt, was die KI an deiner Stelle tun würde.
-- **Wiederholung:** Nach Spielende jede Runde ansehen oder die ganze Partie im Zeitraffer ablaufen lassen.
-- **Ausbalanciert:** Stämme und Einheiten werden mit KI-Turnieren gemessen (240 Partien: jeder Stamm gewinnt 16–31 %).
-- **Spielmodi:** gegen die KI, Hotseat an einem Gerät, online per Link, Tutorial, 13 Kampagnen-Missionen, Tages- und Wochen-Herausforderung mit Bestenliste.
-- **Profil** mit Stufen, 20 Erfolgen, freischaltbarem Aussehen und Statistik; mit dem Profil-Code geht es auf jedem Gerät weiter.
-- **Freie Karte:** Die Bedienung liegt in schwebenden Kärtchen an den Rändern. Wählst du eine Stadt oder Einheit, steht ein Schild mit ihren Werten direkt daran, die Aktionen liegen als Werkzeugreihe unten – angelehnt an Mini Metro.
-- **Bedienung** mit Maus und Tastatur oder Touch; Ziehen und Angreifen brauchen zwei Tipps, damit nichts aus Versehen passiert. Kein Rückgängig – jeder Zug zählt.
-- **Hell oder dunkel:** folgt der Systemeinstellung oder ist fest wählbar.
+![A game in turn 22: capital with farms, a second city at the top, a mercenary camp, lighthouses at the map corners, the rest of the world under fog](docs/screenshot.png)
 
-![Gewählte Hauptstadt: Schild mit Stufe und Einkommen an der Stadt, unten die Werkzeugreihe mit Ausbauen, Bevölkerung und Einheiten](docs/city.png)
+## What to expect
 
-![Bau-Fenster: das Stadtgebiet in 3D mit Ertrag je Feld, rechts die Bauoptionen für das gewählte Feld](docs/build.png)
+- **12 tribes**, each with its own starting technology and special trait, plus AI opponents with a personality (conqueror, merchant, seafarer, builder).
+- **27 units** on land, at sea and in the air – from warrior via ranger, banner bearer, battering ram and trader cart to fire ship and war airship, with veterans and upgrades.
+- **55 technologies** in a honeycomb tree with six tiers.
+- **Develop your cities** in a 3D view of the city area: tap a tile, pick a building – each shows in advance how many extra stars per turn it brings, including from neighbours such as windmill and farm. City levels bring rewards, and monuments are unlocked by achievements.
+- **Terrain with forests, mountains, hills, swamps and ice**, plus fog of war, diplomacy, trade, bridges, ports, watchtowers, ruins, lighthouses and **mercenary camps** where you hire units without the matching technology.
+- **AI apprentice:** the “Tipp” (Hint) button shows and explains what the AI would do in your place.
+- **Replay:** after the game, watch every turn or run the whole match as a time-lapse.
+- **Balanced:** tribes and units are measured in AI tournaments (240 games: every tribe wins 16–31 %).
+- **Game modes:** against the AI, hotseat on one device, online via link (with resigning, turn timer and a list of your matches), tutorial, 13 campaign missions, daily and weekly challenge with leaderboard.
+- **Profile** with levels, 20 achievements, unlockable cosmetics and statistics; with the profile code you can continue on any device.
+- **Open map:** the controls sit in floating cards along the edges. Select a city or unit and a sign with its stats appears right next to it, with the actions in a toolbar at the bottom – inspired by Mini Metro.
+- **Controls** with mouse and keyboard or touch; moving and attacking take two taps so nothing happens by accident. No undo – every move counts.
+- **Light or dark:** follows the system setting or can be set manually.
 
-Regeln, Werte und Tabellen stehen im **[Wiki](https://github.com/hjorven/Poly-battle-web/wiki)**.
+![Selected capital: sign with level and income at the city, the toolbar at the bottom with Build, Population and units](docs/city.png)
 
-## Lokal starten
+![Build window: the city area in 3D with the yield of each tile, on the right the building options for the selected tile](docs/build.png)
 
-Kein Build-Schritt, keine Abhängigkeiten außer Node.js für die Tests und einem statischen Webserver.
+Rules, stats and tables are in the **[Wiki](https://github.com/hjorven/Poly-battle-web/wiki)** ([auf Deutsch](https://github.com/hjorven/Poly-battle-web/wiki/Startseite)).
+
+## Running locally
+
+No build step and no dependencies apart from Node.js for the tests and a static web server.
 
 ```bash
 git clone https://github.com/hjorven/Poly-battle-web.git
 cd Poly-battle-web
-npm run serve   # http://localhost:8080
-npm test        # Logiktests
-npm run test:db # Datenbank-Tests (braucht lokales Postgres, siehe scripts/test-db.sh)
+npm run serve        # http://localhost:8080
+npm test             # logic tests
+npm run test:browser # the real game in Chromium (run npm install once first)
+npm run test:db      # database tests (needs a local Postgres, see scripts/test-db.sh)
 ```
 
-Three.js und supabase-js liegen unter `vendor/` im Repository, es wird nichts von fremden Servern nachgeladen. Ein Service Worker (`sw.js`) merkt sich die Dateien, so läuft das Spiel nach dem ersten Besuch auch ohne Verbindung. Gegen KI, Hotseat, Kampagne und Herausforderungen laufen ohne Server; Online-Partien und die Bestenliste nutzen Supabase.
+Three.js and supabase-js live under `vendor/` in the repository; nothing is loaded from third-party servers. A service worker (`sw.js`) caches the files, so the game also works offline after the first visit. Games against the AI, hotseat, campaign and challenges run without a server; online matches and the leaderboard use Supabase.
 
-## Aufbau
+## Structure
 
 ```
-index.html            Einstieg, Importmap, Dialoge
-sw.js                 Service Worker (offline spielen)
-vendor/               Three.js 0.160.0 und supabase-js 2.45.4
-css/style.css         Gestaltung
-js/config.js          Spieldaten und Balancing
-js/rules.js           Spielregeln (reine Funktionen, getestet)
-js/ai.js              KI
-js/render.js          3D-Darstellung mit Three.js (auch die 3D-Ansicht im Bau-Fenster)
-js/ui.js              Kärtchen, Schild und Werkzeugreihe, Bau-Fenster, Forschung, Menüs
-js/main.js            Verkabelung, Eingabe, Zugablauf
-js/net.js             Online-Partien, Profile, Bestenliste (Supabase)
-js/actionlog.js       Zugprotokoll der Herausforderungen, Nachspielen zur Punkteprüfung
-js/save.js            Lokaler Spielstand
-js/profile.js         Profil, Erfolge, Herausforderungen
-js/campaign.js        Kampagne
-supabase/migrations/  Datenbank-Schema und Server-Funktionen
-scripts/gen-wiki.mjs  erzeugt die Datenseiten des Wikis
-test/logic.test.js    Tests
+index.html              entry point, import map, dialogs
+sw.js                   service worker (play offline)
+vendor/                 Three.js 0.160.0 and supabase-js 2.45.4
+css/style.css           styling
+js/config.js            game data and balancing
+js/rules.js             game rules (pure functions, tested)
+js/ai.js                AI
+js/render.js            3D rendering with Three.js (including the 3D view in the build window)
+js/ui.js                cards, sign and toolbar, build window, research, menus
+js/main.js              wiring, input, turn flow
+js/net.js               online matches, profiles, leaderboard (Supabase)
+js/actionlog.js         move log of the challenges, replayed to verify scores
+js/save.js              local save game
+js/profile.js           profile, achievements, challenges
+js/campaign.js          campaign
+supabase/migrations/    database schema and server functions
+scripts/gen-wiki.mjs    generates the wiki data pages (English and German)
+scripts/screenshots.mjs takes the images under docs/
+docs/wiki/              wiki pages (English), German in docs/wiki/de/
+test/                   logic, browser and database tests
 ```
 
-Mehr dazu auf der Wiki-Seite [Technik](https://github.com/hjorven/Poly-battle-web/wiki/Technik).
+More on the wiki page [Technical Overview](https://github.com/hjorven/Poly-battle-web/wiki/Technical-Overview).
 
-## Online und Datenschutz
+## Online and privacy
 
-Clients haben keinen direkten Zugriff auf die Tabellen. Gelesen und geschrieben wird nur über Datenbank-Funktionen, die prüfen, wer mitspielt, wer am Zug ist und ob Namen plausibel sind. Laufende Partien sieht nur, wer mitspielt; nach jedem Zug schickt die Datenbank über Realtime nur eine Klingel, den Stand holt sich der Client geprüft ab. Punkte der Herausforderungen zählen erst, wenn `scripts/verify-scores.mjs` (GitHub Actions, alle 10 Minuten, Secret `SUPABASE_SERVICE_ROLE_KEY`) die Partie aus dem mitgeschickten Zugprotokoll (`js/actionlog.js`) nachgespielt hat. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Gespeichert werden Spielstände, Name, Profildaten und Punkte – keine E-Mail-Adressen, kein Konto.
+Clients have no direct access to the tables. Reading and writing only happens through database functions that check who is playing, whose turn it is and whether names are plausible. Running matches are only visible to their players; after each move the database only sends a ping via Realtime, and the client then fetches the state through a checked function. Challenge scores only count once `scripts/verify-scores.mjs` (GitHub Actions, every 10 minutes, secret `SUPABASE_SERVICE_ROLE_KEY`) has replayed the game from the submitted move log (`js/actionlog.js`). Player IDs are stored in the database only as SHA-256 checksums. Stored are game states, name, profile data and scores – no email addresses, no account.
 
-## Mitmachen
+## Contributing
 
-Fehlerberichte, Ideen und Pull Requests sind willkommen. Wie das abläuft, steht in [CONTRIBUTING.md](CONTRIBUTING.md).
+Bug reports, ideas and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how it works.
 
-## Lizenz
+## License
 
-[MIT](LICENSE). *The Battle of Polytopia* ist ein Spiel von Midjiwan; Poly Battle ist ein unabhängiges Fanprojekt und steht in keiner Verbindung dazu.
+[MIT](LICENSE). *The Battle of Polytopia* is a game by Midjiwan; Poly Battle is an independent fan project and is not affiliated with it.
