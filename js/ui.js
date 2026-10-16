@@ -70,6 +70,7 @@ export function initUI(h) {
   document.addEventListener('keydown', e => { if (build.open && !e.target.closest('input, textarea, select')) buildKey(e); });
   $('winnerRestart').addEventListener('click', () => handlers.onRestart());
   $('winnerEasier').addEventListener('click', () => handlers.onRetry(true));
+  $('winnerHarder').addEventListener('click', () => handlers.onRetry('harder'));
   document.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => handlers.onBoard(b.dataset.board)));
   // Menü-Reiter: Maus/Touch per Antippen, Tastatur mit Pfeiltasten (letzter Reiter bleibt gemerkt).
   const tabs = [...document.querySelectorAll('[data-mtab]')];
@@ -1714,9 +1715,18 @@ export function showWinner(state, ctx) {
   else if (ctx.mode === 'online') text = (winner === ctx.myRole ? 'Du hast gewonnen. ' : 'Dein Gegner hat gewonnen. ') + text;
   $('winner-text').textContent = text + ` · Runde ${state.round}`;
   $('winnerEasier').classList.add('hidden');
+  $('winnerHarder').classList.add('hidden');
   $('winnerRetry').classList.toggle('hidden', ctx.mode !== 'bot');
   $('winner-stats').innerHTML = statsHtml(state, ctx);
   $('winner-overlay').classList.remove('hidden');
+}
+
+// Nach drei Siegen in Folge auf einer Stufe: schwerere Stufe anbieten.
+export function offerHarder(level, label) {
+  const b = $('winnerHarder');
+  b.textContent = `Drei Siege in Folge – nächstes Spiel auf ${label}`;
+  b.dataset.level = level;
+  b.classList.remove('hidden');
 }
 
 const TIPS = [

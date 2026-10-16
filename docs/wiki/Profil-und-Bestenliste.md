@@ -4,6 +4,10 @@
 
 Jede beendete Partie gegen die KI oder online bringt Erfahrung – mehr bei Siegen und höherer Schwierigkeit. Mit den Stufen steigt dein Titel: Häuptling, Fürst, König, Kaiser, Legende. Das Profil liegt im Browser; im Menü unter **Profil** findest du Erfolge, Aussehen und Statistik.
 
+## Passende KI-Stärke
+
+Gewinnst du drei freie Partien gegen die KI in Folge auf derselben Stufe, bietet das Ergebnis direkt ein Spiel auf der nächsten Stufe an. Nach einer Niederlage gibt es „Nochmal – etwas leichter“.
+
 ## Erfolge und Aussehen
 
 20 Erfolge warten, zum Beispiel „Blitzkrieg“ (alles in höchstens 25 Runden erobern) oder „Stammgast“ (drei Tage in Folge die Tagesherausforderung). Stufen und Erfolge schalten Aussehen frei: Banner, Helmbusch und Stadtschmuck für deine eigenen Städte und Einheiten.

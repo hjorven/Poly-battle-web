@@ -2361,5 +2361,20 @@ test('Neue Missionen: Vorbereitung, Handel, Mauern, Wacht; neue Erfolge', () => 
   for (const a of ['trader', 'breaker', 'selfmade']) assert.ok(res.achievements.includes(a), a);
 });
 
+test('Passende KI-Stärke: drei Siege → schwerer, drei Niederlagen → leichter', () => {
+  const p = P.emptyProfile();
+  const game = (won, aiLevel = 'easy', extra = {}) => P.recordGame(p, { won, vsAi: true, aiLevel, mode: 'bot', score: 1, round: 20, techs: 1, techTotal: 99, peakCities: 1, kills: 0, captures: 0, trained: 0, monuments: 0, lighthouses: 0, ruins: 0, ...extra });
+  game(true); game(true);
+  assert.strictEqual(P.difficultyAdvice(p), null, 'erst nach drei');
+  game(true);
+  assert.deepStrictEqual(P.difficultyAdvice(p), { dir: 'up', level: 'normal' });
+  game(true, 'easy', { mission: 'm1' });
+  assert.deepStrictEqual(P.difficultyAdvice(p), { dir: 'up', level: 'normal' }, 'Missionen zählen nicht');
+  game(false, 'hard'); game(false, 'hard'); game(false, 'hard');
+  assert.deepStrictEqual(P.difficultyAdvice(p), { dir: 'down', level: 'normal' });
+  game(true, 'hard');
+  assert.strictEqual(P.difficultyAdvice(p), null, 'gemischt: kein Vorschlag');
+});
+
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
 if (failed) process.exit(1);
