@@ -1,5 +1,5 @@
 import * as R from './rules.js';
-import { UNITS, IMPROVEMENTS, TECHS, BRIDGE, ROAD } from './config.js';
+import { UNITS, IMPROVEMENTS, TECHS, BRIDGE, ROAD, MAP_W, MAP_H } from './config.js';
 import { hexDistance, hk, forEachHex } from './hex.js';
 
 const UNIT_VALUE_BASE = {
@@ -27,8 +27,11 @@ function attackScore(state, attacker, defender) {
 }
 
 // Kriegsziele: Städte aller Stämme ohne Frieden (auch neutrale).
+// Fremde Stadt, deren Feld der Stamm schon entdeckt hat.
+const knownCity = (state, player, c) => c.owner === player || R.isExplored(state, player, c.q, c.r);
+
 function targetCities(state, player) {
-  return state.cities.filter(c => R.hostile(state, player, c.owner) && !R.graceProtects(state, player, c.owner));
+  return state.cities.filter(c => R.hostile(state, player, c.owner) && !R.graceProtects(state, player, c.owner) && knownCity(state, player, c));
 }
 
 // Frieden brechen, wenn er die KI blockiert (keine anderen Ziele mehr) oder
@@ -91,7 +94,8 @@ function spyTrainStep(state, player) {
   return null;
 }
 
-// Spion zieht dorthin, wo er am meisten Unentdecktes aufdeckt.
+// Spion (oder Einheit ohne bekanntes Ziel) zieht dorthin, wo er am meisten
+// Unentdecktes aufdeckt.
 function spyMove(state, spy) {
   const reach = R.reachableMap(state, spy);
   if (!reach.size) return null;
@@ -112,6 +116,36 @@ function spyMove(state, spy) {
     if (!best || sc > best.sc) best = { q, r, sc };
   }
   return best ? { kind: 'move', unit: spy, q: best.q, r: best.r } : null;
+}
+
+// Kampfeinheit ohne bekanntes Ziel: Unentdecktes aufdecken und dabei von der
+// eigenen Hauptstadt wegziehen, damit die Suche nicht im Kreis läuft.
+function exploreMove(state, unit, player) {
+  const reach = R.reachableMap(state, unit);
+  if (!reach.size) return null;
+  const known = new Set((state.explored && state.explored[player]) || []);
+  const unknown = [];
+  forEachHex((q, r) => { if (!known.has(hk(q, r))) unknown.push([q, r]); });
+  if (!unknown.length) return null;
+  const cap = R.citiesFor(state, player).find(c => c.isCapital) || unit;
+  const mid = [Math.round(MAP_W / 2 - MAP_H / 4), Math.round(MAP_H / 2)];
+  const score = (q, r) => {
+    const sight = R.unitSight(state, { ...unit, q, r });
+    const reveal = unknown.filter(([uq, ur]) => hexDistance(q, r, uq, ur) <= sight).length;
+    const near = Math.min(...unknown.map(([uq, ur]) => hexDistance(q, r, uq, ur)));
+    // Weg von der eigenen Hauptstadt und zur Kartenmitte: Die Startplätze
+    // liegen im Ring um die Mitte, dort trifft man am ehesten auf andere.
+    return reveal * 3 - near + hexDistance(q, r, cap.q, cap.r) * 0.5 - hexDistance(q, r, mid[0], mid[1]) - (R.threatened(state, { ...unit, q, r }) ? 8 : 0);
+  };
+  let best = { q: unit.q, r: unit.r, sc: score(unit.q, unit.r) };
+  for (const [k] of reach) {
+    const [q, r] = k.split(',').map(Number);
+    const city = R.cityAt(state, q, r);
+    if (city && city.owner !== player) continue;
+    const sc = score(q, r);
+    if (sc > best.sc) best = { q, r, sc };
+  }
+  return best.q !== unit.q || best.r !== unit.r ? { unit, q: best.q, r: best.r } : null;
 }
 
 // Brücke bauen, wenn sie eine Landeinheit dem Ziel deutlich näher bringt.
@@ -247,7 +281,7 @@ function healerMove(state, mb) {
 function cartMove(state, cart) {
   const home = cart.home;
   const cities = state.cities.filter(c => c.owner && !(home && c.q === home.q && c.r === home.r) &&
-    (c.owner === cart.owner || R.atPeace(state, cart.owner, c.owner)));
+    (c.owner === cart.owner || R.atPeace(state, cart.owner, c.owner)) && knownCity(state, cart.owner, c));
   if (!cities.length) return null;
   const worth = c => (home ? hexDistance(home.q, home.r, c.q, c.r) : 3) * (c.owner === cart.owner ? 1 : 1.5) - hexDistance(cart.q, cart.r, c.q, c.r) * 0.6;
   const goal = cities.reduce((a, b) => (worth(b) > worth(a) ? b : a));
@@ -275,7 +309,9 @@ function bestMove(state, unit, player) {
     target = enemyUnits.reduce((a, b) =>
       hexDistance(unit.q, unit.r, a.q, a.r) <= hexDistance(unit.q, unit.r, b.q, b.r) ? a : b);
   }
-  if (!target) return null;
+  // Noch kein Gegner bekannt: ins Unentdeckte ziehen, weg von der eigenen
+  // Hauptstadt (dort liegen die Nachbarn).
+  if (!target) return exploreMove(state, unit, player);
 
   const currentD = hexDistance(unit.q, unit.r, target.q, target.r);
   const range = R.rangeOf(state, unit);
@@ -428,8 +464,34 @@ function fireshipWorth(state, ship, target) {
   return value >= UNIT_VALUE.fireship;
 }
 
+// Was ein Stamm wissen kann: fremde Einheiten nur in Sichtweite, Ruinen und
+// Söldnerlager nur auf entdeckten Feldern. Städte bleiben drin, weil die Regeln daraus die
+// Stadtgebiete berechnen; als Ziel zählt eine Stadt aber erst, wenn ihr Feld
+// entdeckt ist (knownCity). Die KI
+// plant auf diesem Ausschnitt und sieht so wie ein Mensch nicht durch den
+// Nebel (auch der Tipp für Menschen verrät nichts Verborgenes).
+export function knownState(state, player) {
+  if (!state.explored || !state.explored[player] || state.noFog) return state;
+  return {
+    ...state,
+    units: state.units.filter(u => u.owner === player || R.isVisible(state, player, u.q, u.r)),
+    ruins: state.ruins && Object.fromEntries(Object.entries(state.ruins).filter(([k]) => {
+      const [q, r] = k.split(',').map(Number);
+      return R.isExplored(state, player, q, r);
+    })),
+    camps: state.camps && Object.fromEntries(Object.entries(state.camps).filter(([k]) => {
+      const [q, r] = k.split(',').map(Number);
+      return R.isExplored(state, player, q, r);
+    }))
+  };
+}
+
 export function botStep(state, player) {
   if (state.winner || state.turn !== player) return null;
+  return planStep(knownState(state, player), player);
+}
+
+function planStep(state, player) {
   const mine = state.units.filter(u => u.owner === player);
   const easy = state.aiLevel === 'easy' && R.isBot(state, player);
 
@@ -492,7 +554,7 @@ export function botStep(state, player) {
     const army = mine.filter(u => !UNITS[u.type].abilities.includes('water') && UNITS[u.type].atk > 0);
     const share = t => army.length < 4 ? 0 : army.filter(u => u.type === t).length / army.length;
     // Rammbock, sobald eine feindliche Stadt nahe ist und noch keiner da ist.
-    const enemyCityNear = state.cities.some(e => e.owner && R.hostile(state, player, e.owner) && hexDistance(e.q, e.r, c.q, c.r) <= 6 &&
+    const enemyCityNear = state.cities.some(e => e.owner && R.hostile(state, player, e.owner) && knownCity(state, player, e) && hexDistance(e.q, e.r, c.q, c.r) <= 6 &&
       !R.graceProtects(state, player, e.owner));
     if (enemyCityNear && unlocked.includes('ram') && !mine.some(u => u.type === 'ram') && stars >= R.unitCost(state, player, 'ram') + 2 &&
       R.canTrain(state, c, 'ram', player).ok) return { kind: 'train', city: c, type: 'ram' };
@@ -623,7 +685,13 @@ export function botStep(state, player) {
 export function applyStep(state, step, player) {
   switch (step.kind) {
     case 'attack': return R.attack(state, step.attacker, step.defender);
-    case 'move': return R.moveUnit(state, step.unit, step.q, step.r);
+    case 'move': {
+      const res = R.moveUnit(state, step.unit, step.q, step.r);
+      // Weg von einer im Nebel verborgenen Einheit versperrt: die Einheit
+      // bleibt für diese Runde stehen, statt es immer wieder zu versuchen.
+      if (!res.ok) step.unit.mp = 0;
+      return res;
+    }
     case 'train': return R.trainUnit(state, step.city, step.type, player);
     case 'buyPop': return R.buyPop(state, step.city, player);
     case 'improve': return R.improve(state, step.city, step.type, step.q, step.r, player);
