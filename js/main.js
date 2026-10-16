@@ -444,8 +444,35 @@ function profileCodeDialog() {
     return null;
   }, {
     title: 'Profil-Code', max: 64, ok: 'Übernehmen',
-    text: 'Das ist dein geheimer Profil-Code. Gib ihn auf einem anderen Gerät hier ein, um Name, Stufe und Erfolge mitzunehmen. Verrate ihn niemandem – wer ihn kennt, spielt als du.'
+    text: 'Das ist dein geheimer Profil-Code. Gib ihn auf einem anderen Gerät hier ein, um Name, Stufe, Erfolge und deine Online-Partien mitzunehmen. Verrate ihn niemandem – wer ihn kennt, spielt als du. Speichere ihn als Datei, sonst ist alles weg, wenn der Browser seine Daten löscht.',
+    extra: [
+      { label: 'Als Datei speichern', run: () => downloadProfileCode() },
+      { label: 'Neuen Code erzeugen', run: close => { close(); renewProfileCode(); } }
+    ]
   });
+}
+
+function downloadProfileCode() {
+  const name = P.loadProfile().name;
+  const text = `Poly Battle – Profil-Code${name ? ' von ' + name : ''}\n\n${net.profileCode()}\n\n` +
+    `Im Spiel unter Profil → Profil-Code eingeben, um Profil und Online-Partien auf einem anderen Gerät zu nutzen.\n` +
+    `Geheim halten: Wer den Code kennt, spielt als du.\n`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  a.download = 'poly-battle-profil-code.txt';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+// Hat jemand den Code gesehen: neuen erzeugen, der alte gilt danach nirgends mehr.
+function renewProfileCode() {
+  ui.showConfirm('Neuen Profil-Code erzeugen? Der alte Code funktioniert danach nirgends mehr, auch nicht auf deinen anderen Geräten. Dort musst du den neuen Code eingeben.', async () => {
+    const res = await net.renewProfileCode();
+    if (res.error) { ui.toast(res.error, 'warn'); return; }
+    ui.toast('Neuer Profil-Code aktiv. Speichere ihn am besten gleich als Datei.', 'good');
+    profileCodeDialog();
+  }, { yes: 'Neuen Code erzeugen' });
 }
 
 async function showBoard(kind) {

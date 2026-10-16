@@ -147,6 +147,26 @@ export function profileCode() {
   return getToken();
 }
 
+// Neuen Code erzeugen: Die Datenbank tauscht die Kennung im Profil und auf
+// allen Plätzen in Online-Partien aus, der alte Code gilt danach nirgends mehr.
+export async function renewProfileCode() {
+  const old = getToken();
+  const fresh = crypto.randomUUID();
+  let res = await rpc('pb_rotate_token', { p_old: old, p_new: fresh });
+  // Antwort verloren? Dann prüfen, ob der Tausch trotzdem geklappt hat,
+  // sonst wäre das Profil mit dem alten Code nicht mehr erreichbar.
+  if (res.error === 'Keine Verbindung zum Server.') {
+    const check = await rpc('pb_my_profile', { p_token: fresh });
+    if (check.error || !check.data) return res;
+    res = { data: { profile: true } };
+  }
+  // Noch nie online gewesen: Es gibt nichts umzustellen, nur den Code im Browser.
+  if (res.error && /weder Profil noch Partien/.test(res.error)) res = { data: { profile: false, matches: 0 } };
+  if (res.error) return res;
+  try { localStorage.setItem('pb_token', fresh); } catch (e) { return { error: 'Neuer Code konnte im Browser nicht gespeichert werden: ' + fresh }; }
+  return res;
+}
+
 export function useProfileCode(code) {
   const c = String(code || '').trim();
   if (c.length < 16 || c.length > 64 || !/^[A-Za-z0-9-]+$/.test(c)) return false;
