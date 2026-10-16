@@ -1617,7 +1617,8 @@ function generateTerrain(rand, mapType = 'continents') {
       if (mapType === 'pangaea') {
         // Ein großer Kontinent: zur Mitte hin höher, am Rand Meer.
         const dx = (q - (MAP_W - 1) / 2) / (MAP_W / 2), dy = (r - (MAP_H - 1) / 2) / (MAP_H / 2);
-        e = e * 0.55 + (1 - Math.min(1, Math.hypot(dx, dy))) * 0.55;
+        // sqrt statt hypot: in allen Browsern bitgenau gleich (siehe diamondAngle).
+        e = e * 0.55 + (1 - Math.min(1, Math.sqrt(dx * dx + dy * dy))) * 0.55;
       } else if (mapType === 'archipelago') {
         // Viele kleine Inseln: feineres Rauschen, mehr Wasser.
         e = noise(q, r, 2.2) * 0.7 + noise(q, r, 1.4) * 0.3 - 0.06;
@@ -1830,6 +1831,12 @@ let startSeq = 0;
 // Startplätze (q, r) je Kartengröße und Spielerzahl, siehe createGame.
 const START_TABLE = {small:{"2":[[14,8],[3,3]],"3":[[3,8],[12,8],[10,3]],"4":[[4,3],[13,3],[14,8],[5,8]],"5":[[14,3],[8,3],[6,8],[12,8],[3,6]]},normal:{"2":[[3,3],[22,14]],"3":[[5,14],[16,14],[16,3]],"4":[[10,3],[21,5],[4,12],[15,14]],"5":[[18,6],[5,7],[14,14],[6,14],[13,3]]},large:{"2":[[3,3],[30,18]],"3":[[21,3],[6,18],[21,18]],"4":[[7,16],[18,18],[15,3],[26,5]],"5":[[8,9],[16,16],[17,3],[22,7],[7,18]]}};
 
+// Monoton wie atan2(y, x) (-2 bis 2 statt -π bis π), aber nur mit + − × ÷.
+function diamondAngle(x, y) {
+  if (y >= 0) return x >= 0 ? y / (x + y || 1) : 1 - x / (-x + y);
+  return x < 0 ? -2 - y / (-x - y) : -1 + x / (x - y);
+}
+
 export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   const o = opts && typeof opts === 'object' ? opts : { tribe: opts };
   const tribe = o.tribe;
@@ -1886,8 +1893,11 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   for (const [q, r] of starts) clearAround(q, r, 2);
   // Landwege im Kreis um die Kartenmitte (nicht kreuz und quer) plus eine Diagonale.
   const cx = (MAP_W - 1) / 2 + (MAP_H - 1) / 4, cz = (MAP_H - 1) / 2;
+  // Winkel als „Rautenwinkel“ statt atan2: gleiche Reihenfolge, aber nur
+  // Grundrechenarten – die rechnet jeder Browser bitgenau gleich, und die
+  // Karte einer Herausforderung muss überall dieselbe sein (actionlog.js).
   const ring = starts.slice().sort((a, b) =>
-    Math.atan2(a[1] - cz, a[0] + a[1] / 2 - cx) - Math.atan2(b[1] - cz, b[0] + b[1] / 2 - cx));
+    diamondAngle(a[0] + a[1] / 2 - cx, a[1] - cz) - diamondAngle(b[0] + b[1] / 2 - cx, b[1] - cz));
   // Auf Inselkarten nur schmale Landbrücken, damit es Inseln bleiben.
   const wide = mapType !== 'archipelago';
   for (let i = 0; i < ring.length; i++) {
