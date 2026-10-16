@@ -29,7 +29,7 @@ Es gibt keinen Build-Schritt und keine npm-Abhängigkeiten. Änderungen im Code 
 
 1. Lege einen Branch vom aktuellen `main` an, zum Beispiel `feature/handelsrouten` oder `fix/bruecke-schiff`.
 2. Halte den Pull Request bei einem Thema. Mehrere unabhängige Änderungen lieber getrennt einreichen.
-3. Führe `npm test` und `npm run test:browser` aus – alle Tests müssen grün sein (einmalig vorher `npm install`). Neue Regeln brauchen neue Tests in `test/logic.test.js`, neue Bedienabläufe in `test/browser.test.mjs`.
+3. Führe `npm test` und `npm run test:browser` aus – alle Tests müssen grün sein (einmalig vorher `npm install`). Neue Regeln brauchen neue Tests in `test/logic.test.js`, neue Bedienabläufe in `test/browser.test.mjs`. GitHub führt beide Testläufe bei jedem Pull Request automatisch aus (`.github/workflows/tests.yml`); der Pull Request wird erst zusammengeführt, wenn sie grün sind.
 4. Probiere Oberflächenänderungen im Browser aus: am PC mit Maus und Tastatur und auf einem Tablet oder in der Gerätesimulation mit Touch, hochkant und quer.
 5. Hast du Spieldaten in `js/config.js` oder `js/campaign.js` geändert, führe `npm run wiki` aus und committe die erzeugten Seiten unter `docs/wiki/` mit.
 6. Beschreibe im Pull Request, was sich für Spielende ändert und wie du es getestet hast. Screenshots bei sichtbaren Änderungen.
