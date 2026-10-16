@@ -697,13 +697,17 @@ function buildFog() {
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(w * FOG_PX);
   canvas.height = Math.ceil(h * FOG_PX);
+  // Die Textur ist eine undurchsichtige Graustufen-Maske (schwarz = klar,
+  // weiß = Nebel) und dient nur als alphaMap; die Farbe kommt allein aus dem
+  // Material. Eine halbtransparente Leinwand würde Safari beim Hochladen
+  // ent-multiplizieren: das Rauschen seiner Verlaufs-Glättung wird bei kleiner
+  // Deckkraft vervielfacht und erscheint als bunte Punkte am Nebelrand.
   const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(w, h).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ map: tex, color: FOG_COLOR, transparent: true, depthWrite: false, fog: false })
+    new THREE.MeshBasicMaterial({ alphaMap: tex, color: FOG_COLOR, transparent: true, depthWrite: false, fog: false })
   );
   mesh.position.set(minX + w / 2, FOG_Y, minZ + h / 2);
   mesh.renderOrder = 12;
@@ -714,12 +718,15 @@ function buildFog() {
     const p = toWorld(q, r);
     cells.push({ key, t, px: (p.x - minX) * FOG_PX, pz: (p.z - minZ) * FOG_PX, level: 1 });
   }
-  fog = { mesh, tex, canvas, ctx: canvas.getContext('2d'), cells, dirty: true };
+  fog = { mesh, tex, canvas, ctx: canvas.getContext('2d', { alpha: false }), cells, dirty: true };
 }
 
 function paintFog() {
   const { ctx, canvas, cells } = fog;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Schwarzer Grund, weiße Kreise darüber: Überlagerungen ergeben dieselbe
+  // Deckkraft wie zuvor (a + b·(1 − a)), nur als Grauwert.
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   const rad = FOG_RADIUS * FOG_PX;
   for (const c of cells) {
     if (c.level <= 0.005) continue;
