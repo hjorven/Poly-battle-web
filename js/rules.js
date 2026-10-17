@@ -5,7 +5,7 @@ import {
   RESOURCES, IMPROVEMENTS, CITY_REWARDS, REWARD_CHOICES, RUIN_REWARDS, RUIN_STARS,
   AI_LEVELS, SCORE, BRIDGE, DISBAND_REFUND, setMapSize, MAP_SIZES, MAP_TYPES,
   PERK_DISCOUNT, VETERAN_KILLS, VETERAN_HP, LIGHTHOUSE, TECH_BONUS, MONUMENTS, MONUMENT_POP, ROAD, BOUNTY, UPGRADES, PERSONAS,
-  LANDSCAPE, BANNER_ATK, RANGER_FOREST_ATK, MERC
+  LANDSCAPE, BANNER_ATK, RANGER_FOREST_ATK, MERC, own
 } from './config.js';
 import { hk, inBounds, neighbors, hexDistance, forEachHex, DIRS } from './hex.js';
 
@@ -30,7 +30,7 @@ export function hpCap(u) {
 
 // Die Kartengröße der Partie aktivieren (beim Erstellen, Laden, Beitreten).
 export function useMap(state) {
-  const size = MAP_SIZES[state.mapSize] || MAP_SIZES.normal;
+  const size = own(MAP_SIZES, state.mapSize) || MAP_SIZES.normal;
   setMapSize(state.mapW || size.w, state.mapH || size.h);
 }
 
@@ -46,7 +46,7 @@ export function perkOf(state, player) {
 export function techBonus(state, player, kind, type = null) {
   let sum = 0;
   for (const t of (state.techs && state.techs[player]) || []) {
-    const b = TECH_BONUS[t] && TECH_BONUS[t][kind];
+    const b = own(TECH_BONUS, t) && TECH_BONUS[t][kind];
     if (b == null) continue;
     sum += type == null ? b : (b[type] || 0);
   }
@@ -78,7 +78,7 @@ export function rangeOf(state, unit) {
 }
 
 export function improvementCost(state, player, type) {
-  const def = IMPROVEMENTS[type];
+  const def = own(IMPROVEMENTS, type);
   if (!def || def.monument) return def ? def.cost : 0;
   return Math.max(1, def.cost - (player ? techBonus(state, player, 'buildDiscount') : 0));
 }
@@ -152,7 +152,7 @@ export function canOfferPeace(state, from, to) {
 // nicht kurz vor dem Sieg über ihn steht.
 export function aiAcceptsPeace(state, ai, from) {
   const mine = score(state, ai), theirs = score(state, from);
-  const persona = PERSONAS[personaOf(state, ai)];
+  const persona = own(PERSONAS, personaOf(state, ai));
   return mine <= theirs * (persona ? persona.peace : 1.25);
 }
 
@@ -205,7 +205,7 @@ export function players(state) {
 }
 
 export function tribeOf(state, player) {
-  return state.tribes && TRIBES[state.tribes[player]] ? TRIBES[state.tribes[player]] : null;
+  return (state.tribes && own(TRIBES, state.tribes[player])) || null;
 }
 
 export function tribeName(state, player) {
@@ -342,7 +342,7 @@ export function cityIncome(state, city) {
     if (res) s += 1 + (res === 'fish' && city.owner ? techBonus(state, city.owner, 'fishBonus') : 0);
     else {
       const imp = improvementAt(state, nq, nr);
-      if (imp && IMPROVEMENTS[imp]) s += improvementIncome(state, city.owner, imp, nq, nr);
+      if (imp && own(IMPROVEMENTS, imp)) s += improvementIncome(state, city.owner, imp, nq, nr);
     }
   }
   if (hasReward(city, 'workshop')) s += 1;
@@ -362,7 +362,7 @@ export function tileYield(state, city, q, r) {
   const res = resourceAt(state, q, r);
   if (res) return 1 + (res === 'fish' && city.owner ? techBonus(state, city.owner, 'fishBonus') : 0);
   const imp = improvementAt(state, q, r);
-  if (!imp || !IMPROVEMENTS[imp]) return 0;
+  if (!imp || !own(IMPROVEMENTS, imp)) return 0;
   let s = improvementIncome(state, city.owner, imp, q, r);
   if (imp === 'farm' && city.owner && perkOf(state, city.owner) === 'harvest') s += 1;
   return s;
@@ -383,7 +383,7 @@ export function improvePreview(state, city, type, q, r) {
   let after, y1;
   try {
     state.improvements[k] = type;
-    after = incomeFor(state, owner) + (IMPROVEMENTS[type] && IMPROVEMENTS[type].monument ? MONUMENT_POP : 0);
+    after = incomeFor(state, owner) + (own(IMPROVEMENTS, type) && IMPROVEMENTS[type].monument ? MONUMENT_POP : 0);
     y1 = yieldAt();
   } finally {
     if (had === undefined) delete state.improvements[k]; else state.improvements[k] = had;
@@ -405,7 +405,7 @@ export function incomeFor(state, player) {
   if (techs.includes('harbors')) s += citiesFor(state, player).reduce((a, c) => a + cityPorts(state, c).length, 0);
   if (perkOf(state, player) === 'traders') s += Math.floor(cities / 2);
   if (isBot(state, player)) {
-    const lvl = AI_LEVELS[state.aiLevel] || AI_LEVELS.normal;
+    const lvl = own(AI_LEVELS, state.aiLevel) || AI_LEVELS.normal;
     s = Math.floor(s * lvl.incomeFactor) + (cities ? lvl.incomeBonus : 0);
   }
   return s;
@@ -468,8 +468,8 @@ export function moveCost(state, unit, q, r) {
   if (bridgeAt(state, q, r)) return 1;
   // Wege: im eigenen Gebiet kostet jedes Landfeld nur 1 Bewegung.
   if (hasTech(state, unit.owner, 'roads') && ownLand(state, unit.owner, q, r)) return 1;
-  // Waldläufer kennen die Pfade durch Wald, Hügel und Sumpf.
-  if (hasAbility(unit.type, 'ranger') && TERRAIN[tile].walkable) return 1;
+  // Waldläufer kennen die Pfade durch Wald, Hügel und Sumpf (Berge nicht).
+  if (hasAbility(unit.type, 'ranger') && (tile === 'forest' || tile === 'hills' || tile === 'swamp')) return 1;
   const perk = perkOf(state, unit.owner);
   if (tile === 'forest' && perk === 'woodland') return 1;
   if (tile === 'mountain' && perk === 'mountaineer') return 1;
@@ -622,7 +622,7 @@ export function visibleKeys(state, player) {
     if (c.owner === player) addArea(c.q, c.r, VISION.city);
   }
   for (const [k, imp] of Object.entries(state.improvements || {})) {
-    if (!IMPROVEMENTS[imp] || !IMPROVEMENTS[imp].sight) continue;
+    if (!own(IMPROVEMENTS, imp) || !IMPROVEMENTS[imp].sight) continue;
     const [q, r] = k.split(',').map(Number);
     if (ownLand(state, player, q, r)) addArea(q, r, IMPROVEMENTS[imp].sight);
   }
@@ -851,7 +851,7 @@ export function pathTo(state, unit, q, r) {
 
 export function reachableMap(state, unit, prev = null) {
   const out = new Map();
-  if (!unit || !UNITS[unit.type] || !(unit.mp > 0)) return out;
+  if (!unit || !own(UNITS, unit.type) || !(unit.mp > 0)) return out;
   if (unit.acted && !(hasAbility(unit.type, 'escape') || hasAbility(unit.type, 'persist'))) return out;
   // Intern in halben Schritten rechnen (Straße zu Straße = 1 halber Schritt).
   const budget = Math.round(unit.mp * 2);
@@ -915,7 +915,7 @@ export function canEverAttack(type) {
 }
 
 export function attackTargets(state, unit) {
-  if (!unit || !UNITS[unit.type] || !canEverAttack(unit.type)) return [];
+  if (!unit || !own(UNITS, unit.type) || !canEverAttack(unit.type)) return [];
   if (!canAttackNow(state, unit)) return [];
   const range = rangeOf(state, unit);
   return state.units.filter(u =>
@@ -940,7 +940,7 @@ function finishAction(attacker) {
 // KI selbst angreift oder ihr eine Stadt nimmt.
 
 export function graceUntil(state) {
-  return (AI_LEVELS[state.aiLevel] || AI_LEVELS.normal).grace || 0;
+  return (own(AI_LEVELS, state.aiLevel) || AI_LEVELS.normal).grace || 0;
 }
 
 export function graceProtects(state, ai, target) {
@@ -1059,6 +1059,10 @@ export function attack(state, attacker, defender) {
     for (const [nq, nr] of neighbors(defender.q, defender.r)) {
       const v = unitAt(state, nq, nr);
       if (!v || v === attacker || v === defender || !hostile(state, attacker.owner, v.owner)) continue;
+      // Wie ein direkter Treffer: Begegnung und Ende der KI-Schonfrist.
+      meet(state, attacker.owner, v.owner);
+      const vprov = provoke(state, attacker.owner, v.owner);
+      if (vprov) events.push(vprov);
       v.hp -= splash;
       events.push({ kind: 'splash', from: attacker.id, to: v.id, dmg: splash });
       if (v.hp <= 0) {
@@ -1190,7 +1194,7 @@ export function spawnSpot(state, city, type) {
 export function canTrain(state, city, type, player) {
   if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
   if (city.owner !== player) return { ok: false, reason: 'Fremde Stadt' };
-  const u = UNITS[type];
+  const u = own(UNITS, type);
   if (!u) return { ok: false, reason: 'Unbekannte Einheit' };
   // Zwei Bauplätze: eine Landeinheit und – mit Hafen – zusätzlich ein Schiff pro Runde.
   if (hasAbility(type, 'water') ? city.trainedShip : city.trained) {
@@ -1292,7 +1296,7 @@ export function buyPop(state, city, player) {
 // --- Gebäude (Improvements) ------------------------------------------------
 
 export function canImprove(state, city, type, q, r) {
-  const def = IMPROVEMENTS[type];
+  const def = own(IMPROVEMENTS, type);
   if (!city || !isCoord(q, r)) return { ok: false, reason: 'Ungültiges Feld' };
   if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
   if (!def) return { ok: false, reason: 'Unbekanntes Gebäude' };
@@ -1303,6 +1307,7 @@ export function canImprove(state, city, type, q, r) {
   if (improvementAt(state, q, r)) return { ok: false, reason: 'Bereits bebaut' };
   if (resourceAt(state, q, r)) return { ok: false, reason: 'Ressource wird genutzt' };
   if (bridgeAt(state, q, r)) return { ok: false, reason: 'Brücke im Weg' };
+  if (campAt(state, q, r)) return { ok: false, reason: 'Söldnerlager' };
   if (unitAt(state, q, r)) return { ok: false, reason: 'Einheit im Weg' };
   if (def.monument && city.owner && !monumentReady(state, city.owner, type)) {
     return { ok: false, reason: `Erfolg fehlt: ${MONUMENTS[type].goal}` };
@@ -1423,8 +1428,11 @@ export function destroyBridge(state, unit, q, r, player) {
 
 // --- Auflösen ---------------------------------------------------------------
 
+// Einheiten aus Stadtbelohnungen (Riese) waren geschenkt: kein Erlös.
 export function disbandRefund(unit) {
-  return Math.floor(UNITS[unit.carry || unit.type].cost * DISBAND_REFUND);
+  const def = own(UNITS, unit.carry || unit.type);
+  if (!def || def.reward) return 0;
+  return Math.floor(def.cost * DISBAND_REFUND);
 }
 
 export function disbandUnit(state, unit, player) {
@@ -1448,7 +1456,7 @@ export function disbandUnit(state, unit, player) {
 const isLandType = t => !hasAbility(t, 'water') && !isAir(t);
 
 export function loadOptions(state, balloon) {
-  if (!balloon || !UNITS[balloon.type] || !hasAbility(balloon.type, 'cargo') || balloon.cargo || balloon.acted) return [];
+  if (!balloon || !own(UNITS, balloon.type) || !hasAbility(balloon.type, 'cargo') || balloon.cargo || balloon.acted) return [];
   return state.units.filter(u => u.owner === balloon.owner && u !== balloon && isLandType(u.type) &&
     !u.acted && hexDistance(u.q, u.r, balloon.q, balloon.r) === 1);
 }
@@ -1491,7 +1499,7 @@ export function unloadCargo(state, balloon, q, r) {
 
 export function upgradeOption(state, unit) {
   if (!unit) return null;
-  const to = UPGRADES[unit.type];
+  const to = own(UPGRADES, unit.type);
   if (!to || unit.carry || unit.cargo) return null;
   const cost = Math.max(1, unitCost(state, unit.owner, to) - unitCost(state, unit.owner, unit.type));
   let reason = null;
@@ -1542,6 +1550,7 @@ export function canFound(state, unit, player) {
   if (terrainAt(state, unit.q, unit.r) !== 'field') return { ok: false, reason: 'Nur auf Feldgründen' };
   if (resourceAt(state, unit.q, unit.r)) return { ok: false, reason: 'Ressourcenfeld' };
   if (improvementAt(state, unit.q, unit.r)) return { ok: false, reason: 'Bebautes Feld' };
+  if (campAt(state, unit.q, unit.r)) return { ok: false, reason: 'Söldnerlager' };
   if (cityAt(state, unit.q, unit.r)) return { ok: false, reason: 'Stadt vorhanden' };
   const tooClose = state.cities.some(c => hexDistance(unit.q, unit.r, c.q, c.r) < 2);
   if (tooClose) return { ok: false, reason: 'Zu nah an einer Stadt' };
@@ -1558,7 +1567,7 @@ export function foundCity(state, unit, player) {
 }
 
 export function techCost(state, techId, player) {
-  const t = TECHS[techId];
+  const t = own(TECHS, techId);
   const cities = citiesFor(state, player).length;
   const discount = state.techs[player].includes('philosophy');
   let cost = researchCost(t.tier, cities, discount, state.techs[player].filter(x => x !== 'basic').length);
@@ -1568,7 +1577,7 @@ export function techCost(state, techId, player) {
 
 export function canResearch(state, techId, player) {
   if (state.winner) return { ok: false, reason: 'Spiel vorbei' };
-  const t = TECHS[techId];
+  const t = own(TECHS, techId);
   if (!t) return { ok: false, reason: 'Unbekannte Technologie' };
   if (state.techs[player].includes(techId)) return { ok: false, reason: 'Bereits erforscht' };
   if (t.req && !state.techs[player].includes(t.req)) return { ok: false, reason: 'Voraussetzung fehlt' };
@@ -1790,7 +1799,7 @@ export function assignTribes(seed, count, chosenTribe = null) {
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   const out = {};
-  if (chosenTribe && TRIBES[chosenTribe]) {
+  if (chosenTribe && own(TRIBES, chosenTribe)) {
     out['player_1'] = chosenTribe;
     const rest = pool.filter(t => t !== chosenTribe);
     for (let k = 1; k < count; k++) out['player_' + (k + 1)] = rest[(k - 1) % rest.length];
@@ -1844,8 +1853,8 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   const rand = mulberry32(seed);
   const count = Math.min(Math.max(playerCount, 2), 5);
   const tribes = assignTribes(seed, count, tribe);
-  const mapSize = MAP_SIZES[o.mapSize] ? o.mapSize : 'normal';
-  const mapType = MAP_TYPES[o.mapType] ? o.mapType : 'continents';
+  const mapSize = own(MAP_SIZES, o.mapSize) ? o.mapSize : 'normal';
+  const mapType = own(MAP_TYPES, o.mapType) ? o.mapType : 'continents';
   setMapSize(MAP_SIZES[mapSize].w, MAP_SIZES[mapSize].h);
   const state = {
     mapSize, mapType, mapW: MAP_W, mapH: MAP_H,
@@ -1857,7 +1866,7 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
     stars: {}, techs: {}, explored: {},
     turn: 'player_1', round: 1, winner: null,
     turnLimit: o.turnLimit || null,
-    aiLevel: AI_LEVELS[o.aiLevel] ? o.aiLevel : 'normal',
+    aiLevel: own(AI_LEVELS, o.aiLevel) ? o.aiLevel : 'normal',
     ai: Array.isArray(o.ai) ? o.ai.slice() : [],
     ruins: {}, ruinsBy: {}, history: [],
     rngSeed: (seed ^ 0x5bd1e995) >>> 0
@@ -2011,7 +2020,7 @@ export function stateSummary(state, player) {
 export function growCity(state, city, amount = 1) {
   for (let i = 0; i < amount && city.pop < MAX_POP; i++) {
     city.pop += 1;
-    if (REWARD_CHOICES[city.pop]) {
+    if (own(REWARD_CHOICES, city.pop)) {
       if (!city.rewards) city.rewards = {};
       if (!city.pending) city.pending = [];
       if (!city.rewards[city.pop] && !city.pending.includes(city.pop)) city.pending.push(city.pop);
@@ -2025,7 +2034,7 @@ export function pendingLevel(city) {
 
 export function rewardOptions(city) {
   const lvl = pendingLevel(city);
-  return lvl ? REWARD_CHOICES[lvl] : [];
+  return (lvl && own(REWARD_CHOICES, lvl)) || [];
 }
 
 export function canChooseReward(state, city, id, player) {
@@ -2033,7 +2042,7 @@ export function canChooseReward(state, city, id, player) {
   if (!city || city.owner !== player) return { ok: false, reason: 'Fremde Stadt' };
   const lvl = pendingLevel(city);
   if (!lvl) return { ok: false, reason: 'Keine Belohnung offen' };
-  if (!REWARD_CHOICES[lvl].includes(id)) return { ok: false, reason: 'Nicht wählbar' };
+  if (!own(REWARD_CHOICES, lvl) || !REWARD_CHOICES[lvl].includes(id)) return { ok: false, reason: 'Nicht wählbar' };
   return { ok: true };
 }
 
@@ -2360,7 +2369,7 @@ function placeCamps(state, rand, start) {
 export function hireOption(state, unit) {
   if (!unit || unit.carry || hasAbility(unit.type, 'water') || isAir(unit.type)) return null;
   const camp = campAt(state, unit.q, unit.r);
-  if (!camp || !UNITS[camp.type]) return null;
+  if (!camp || !own(UNITS, camp.type)) return null;
   const p = unit.owner;
   const cost = mercCost(camp.type);
   const base = { type: camp.type, cost, q: unit.q, r: unit.r };

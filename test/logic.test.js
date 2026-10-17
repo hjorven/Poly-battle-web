@@ -640,7 +640,12 @@ test('Kampagne: Fortschritt, Sterne nach Runden, Freischaltung, Profil', () => {
   let s = K.missionStatus(st);
   assert.strictEqual(s.have, 1);
   assert.ok(!s.done);
+  // Eine Stadt zu gründen erfüllt „Nimm ein Dorf ein“ nicht, nur eine Eroberung.
+  st.cities.push({ q: 0, r: 0, owner: 'player_1', pop: 1, trained: false, isCapital: false });
+  assert.ok(!K.missionStatus(st).done, 'Gründung zählt nicht');
+  st.cities.pop();
   st.cities.filter(c => !c.owner).slice(0, 2).forEach(c => { c.owner = 'player_1'; });
+  st.capturesBy = { player_1: 1 };
   st.round = 4;
   s = K.missionStatus(st);
   assert.ok(s.done && s.stars === 3, 'schnell: 3 Sterne');
@@ -2443,6 +2448,10 @@ test('Waldläufer: Wald, Hügel und Sumpf kosten 1 und halten nicht auf, aus dem
   st.units = [r];
   assert.strictEqual(R.moveCost(st, r, 5, 6), 1);
   assert.ok(R.reachableMap(st, r).has('7,5'), 'zwei Sumpffelder weit');
+  // Berge gehören nicht dazu: dort zahlt auch der Waldläufer voll.
+  st.terrain[4 * MAP_W + 5] = 'mountain';
+  st.techs.player_1.push('climbing');
+  assert.strictEqual(R.moveCost(st, r, 5, 4), TERRAIN.mountain.move);
   const base = R.attackOf(st, r);
   r.r = 6;
   assert.strictEqual(R.attackOf(st, r), base + 1, 'Bonus im Wald');
@@ -2601,6 +2610,69 @@ test('Zugprotokoll: gefälschte oder unvollständige Protokolle fallen auf', () 
   assert.match(L.replayChallenge('weekly', '2026-W42', fake).error, /nicht möglich/);
   assert.match(L.replayChallenge('daily', '2026-W42', log).error || 'falsche Karte', /./, 'andere Herausforderung passt nicht');
   assert.ok(L.replayChallenge('weekly', '2026-W42', 'kaputt').error);
+});
+
+test('Zugprotokoll: Schlüssel wie __proto__ oder constructor werden abgelehnt, Sterne bleiben Zahlen', () => {
+  for (const t of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+    const { state: st } = L.challengeGame('daily', '2026-10-16');
+    const before = st.stars.player_1;
+    assert.ok(!R.research(st, t, 'player_1').ok, t);
+    assert.strictEqual(st.stars.player_1, before, t + ': Sterne unverändert');
+    const re = L.replayChallenge('daily', '2026-10-16', [{ k: 'research', t }, { k: 'end' }]);
+    assert.match(re.error, /nicht möglich/, t);
+    assert.ok(re.score == null, t + ': keine Punkte');
+  }
+  // Kein Text- oder Array-Schlüssel, der nur zufällig wie eine Technologie aussieht.
+  const { state: st } = L.challengeGame('daily', '2026-10-16');
+  st.stars.player_1 = 999;
+  assert.ok(!R.research(st, ['organization'], 'player_1').ok, 'Array statt Text');
+  // Einheiten, Gebäude und Belohnungen genauso.
+  const city = st.cities.find(c => c.owner === 'player_1');
+  for (const t of ['__proto__', 'constructor']) {
+    assert.strictEqual(R.trainUnit(st, city, t, 'player_1').ok, false, 'train ' + t);
+    assert.strictEqual(R.canImprove(st, city, t, city.q + 1, city.r).ok, false, 'improve ' + t);
+    assert.strictEqual(R.chooseReward(st, city, t, 'player_1').ok, false, 'reward ' + t);
+  }
+  assert.strictEqual(R.tribeOf({ tribes: { player_1: '__proto__' } }, 'player_1'), null);
+});
+
+test('Söldnerlager: keine Stadt und kein Gebäude auf dem Lager', () => {
+  const st = makeState();
+  const c = { q: 5, r: 5, owner: 'player_1', pop: 1, trained: false, isCapital: true };
+  st.cities = [c];
+  st.camps = { '6,5': { type: 'knight', used: [] }, '8,8': { type: 'knight', used: [] } };
+  st.techs.player_1.push('farming');
+  assert.strictEqual(R.canImprove(st, c, 'farm', 6, 5).reason, 'Söldnerlager');
+  const s = unit('s', 'player_1', 'settler', 8, 8);
+  st.units = [s];
+  assert.strictEqual(R.canFound(st, s, 'player_1').reason, 'Söldnerlager');
+  s.q = 9; s.r = 9;
+  assert.ok(R.canFound(st, s, 'player_1').ok, 'daneben geht es');
+});
+
+test('Brander: Flächentreffer beenden die Schonfrist der KI wie ein direkter Treffer', () => {
+  const st = makeState();
+  st.ai = ['player_2', 'player_3'];
+  for (let q = 3; q < 10; q++) for (let r = 3; r < 9; r++) st.terrain[r * MAP_W + q] = 'water';
+  const f = unit('f', 'player_1', 'fireship', 5, 5);
+  const t = unit('t', 'player_2', 'ship', 6, 5);
+  const n = unit('n', 'player_3', 'boat', 7, 5);
+  st.units = [f, t, n];
+  const { events } = R.attack(st, f, t);
+  assert.ok(st.provoked && st.provoked.player_2 && st.provoked.player_3, 'beide KI provoziert');
+  assert.ok(events.some(e => e.kind === 'provoke' && e.player === 'player_3'));
+  assert.ok(st.met.player_1.includes('player_3'), 'begegnet');
+});
+
+test('Auflösen: Riese aus der Stadtbelohnung bringt keine Sterne', () => {
+  const st = makeState();
+  const g = unit('g', 'player_1', 'giant', 5, 5);
+  st.units = [g];
+  assert.strictEqual(R.disbandRefund(g), 0);
+  const res = R.disbandUnit(st, g, 'player_1');
+  assert.ok(res.ok);
+  assert.strictEqual(st.stars.player_1, 20);
+  assert.strictEqual(R.disbandRefund(unit('w', 'player_1', 'swordsman', 1, 1)), Math.floor(UNITS.swordsman.cost / 2));
 });
 
 test('Namen: Wortliste greift, harmlose Namen bleiben erlaubt', () => {

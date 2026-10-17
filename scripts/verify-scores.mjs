@@ -31,8 +31,8 @@ for (let batch = 0; batch < 10; batch++) {
   for (const c of claims) {
     let re;
     try { re = replayChallenge(c.kind, c.period, c.actions); } catch (e) { re = { error: 'Nachspielen fehlgeschlagen: ' + e.message }; }
-    const ok = !re.error;
-    const reason = re.error || (re.score !== c.score ? `eingereicht ${c.score}, nachgerechnet ${re.score}` : null);
+    const ok = !re.error && Number.isFinite(re.score);
+    const reason = re.error || (!Number.isFinite(re.score) ? 'Punktzahl ist keine Zahl' : null) || (re.score !== c.score ? `eingereicht ${c.score}, nachgerechnet ${re.score}` : null);
     await rpc('pb_settle_claim', {
       p_id: c.id, p_ok: ok, p_score: ok ? re.score : null, p_round: ok ? re.round : null,
       p_tribe: ok ? re.tribe : null, p_reason: reason
