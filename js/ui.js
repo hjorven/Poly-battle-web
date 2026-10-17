@@ -11,7 +11,7 @@ import {
   hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, tradeOption, hireOption, incomeFor, tileYield, improvePreview, monumentProgress, threatenedCities, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS, toWorld, hexDistance } from './hex.js';
-import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks, project } from './render.js';
+import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks, project, setViewInset } from './render.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
@@ -458,8 +458,11 @@ function placeTutor(box, targets, tile) {
     box.style.top = Math.round(hud + 6) + 'px';
     box.style.bottom = 'auto';
     box.style.maxHeight = Math.max(90, Math.round(limit - hud - 6)) + 'px';
+    // Karte rechts daneben zentrieren, damit die Box Einheit und Zielfelder nicht verdeckt.
+    setViewInset(box.getBoundingClientRect().right / 2);
     return;
   }
+  setViewInset(0);
   box.style.maxHeight = '';
   const h = box.offsetHeight || 120;
   const spots = [{ top: hud + 8 }, { top: barTop - 8 - h }, { top: H - 14 - h }];
@@ -474,6 +477,7 @@ function placeTutor(box, targets, tile) {
 
 export function hideTutor() {
   $('tutor').classList.add('hidden');
+  setViewInset(0);
   document.querySelectorAll('.tu-inline').forEach(b => b.remove());
   document.querySelectorAll('.tu-focus').forEach(e => e.classList.remove('tu-focus'));
   tutorSig = '';
@@ -1312,11 +1316,12 @@ function openBuild(state, city, ctx) {
   const radius = Math.max(1, ...cityTiles(state, city).map(([q, r]) => hexDistance(q, r, city.q, city.r)));
   build.view3d = openCityView(box.querySelector('.b3-canvas'), city.q, city.r, radius, placeTags);
   if (build.view3d) {
-    box.querySelector('.b3-canvas').addEventListener('click', e => {
+    // Die Leinwand wird bei jedem Öffnen wiederverwendet: onclick ersetzt den alten Handler.
+    box.querySelector('.b3-canvas').onclick = e => {
       const hex = cityViewPick(e.clientX, e.clientY);
       if (!hex || !box.querySelector(`[data-hex="${hex.q},${hex.r}"]`)) return;
       selectBuildHex(hex.q + ',' + hex.r);
-    });
+    };
   } else {
     box.classList.remove('b3');
     box.innerHTML = '';
