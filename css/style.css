@@ -1327,6 +1327,8 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
 }
 #anchor-tag::after { content: ''; position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); border: 7px solid transparent; border-bottom: 0; border-top-color: var(--panel); }
 #anchor-tag.hidden { display: none; }
+#anchor-tag.at-below { transform: translate(-50%, 30px); }
+#anchor-tag.at-below::after { bottom: auto; top: -7px; border-top: 0; border-bottom: 7px solid var(--panel); }
 .at-head { display: flex; align-items: center; gap: 6px; font-size: 14px; }
 .at-head .dot { width: 9px; height: 9px; flex: none; }
 .at-lvl, .at-vet { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--muted); }

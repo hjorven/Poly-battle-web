@@ -856,7 +856,9 @@ async function playLesson(page, id, device) {
       const inside = r => r.right > cr.left && r.left < cr.right && r.bottom > cr.top && r.top < cr.bottom;
       const focus = [...document.querySelectorAll('.tu-focus')].map(e => e.getBoundingClientRect());
       let tile = null;
-      if (t && t.tile) { const p = window.__pb.project(t.tile[0], t.tile[1]); tile = { x: p.x, y: p.y, on: p.x > 0 && p.y > 0 && p.x < innerWidth && p.y < innerHeight, under: inside({ left: p.x, right: p.x, top: p.y, bottom: p.y }) }; }
+      const tag = document.getElementById('anchor-tag');
+      const tr = tag && !tag.classList.contains('hidden') ? tag.getBoundingClientRect() : null;
+      if (t && t.tile) { const p = window.__pb.project(t.tile[0], t.tile[1]); tile = { x: p.x, y: p.y, on: p.x > 0 && p.y > 0 && p.x < innerWidth && p.y < innerHeight, under: inside({ left: p.x, right: p.x, top: p.y, bottom: p.y }), tagged: !!tr && p.x > tr.left && p.x < tr.right && p.y > tr.top && p.y < tr.bottom }; }
       // Gewählte Einheit und ihre Zielfelder: wie viele liegen unter der Karte?
       let movesUnder = 0;
       const R = window.__pb.R, su = app.sel && app.sel.kind === 'unit' && R.findUnit(app.state, app.sel.id);
@@ -866,7 +868,9 @@ async function playLesson(page, id, device) {
           if (p && inside({ left: p.x, right: p.x, top: p.y, bottom: p.y })) movesUnder++;
         }
       }
-      return { t, open: open && open.id, busy: app.busy || app.state.turn !== 'player_1', active: !!app.state.tutorial, focus: focus.length, covered: !document.querySelector('.tu-inline') && focus.some(inside), tile, movesUnder, pending: app.pending && app.pending.key, sel: app.sel };
+      const coach = document.getElementById('coach');
+      const coachCovered = !document.querySelector('.tu-inline') && !!coach && !coach.classList.contains('hidden') && inside(coach.getBoundingClientRect());
+      return { coachCovered, t, open: open && open.id, busy: app.busy || app.state.turn !== 'player_1', active: !!app.state.tutorial, focus: focus.length, covered: !document.querySelector('.tu-inline') && focus.some(inside), tile, movesUnder, pending: app.pending && app.pending.key, sel: app.sel };
     });
     if (!s.active) throw new Error(`${id}: Tutorial vorzeitig beendet`);
     if (s.open === 'confirm-overlay') { await page.click('#confirmYes'); continue; }
@@ -875,7 +879,8 @@ async function playLesson(page, id, device) {
     if (s.t.finished) return;
     const where = `${device} ${id} Schritt ${s.t.step + 1}: ${s.t.text}`;
     if (s.t.el) { assert.ok(s.focus > 0, 'nicht hervorgehoben: ' + where); assert.ok(!s.covered, 'Karte verdeckt den Knopf: ' + where); }
-    if (s.t.tile) { assert.ok(s.tile.on, 'Feld nicht im Bild: ' + where); assert.ok(!s.tile.under, 'Karte verdeckt das Feld: ' + where); }
+    if (s.t.tile) { assert.ok(s.tile.on, 'Feld nicht im Bild: ' + where); assert.ok(!s.tile.under, 'Karte verdeckt das Feld: ' + where); assert.ok(!s.tile.tagged, 'Schild der Einheit verdeckt das Feld: ' + where); }
+    assert.ok(!s.coachCovered, 'Karte verdeckt den Tipp der KI: ' + where);
     if (device !== 'handy') assert.strictEqual(s.movesUnder, 0, 'Karte verdeckt Einheit oder Zielfelder: ' + where);
     // Kamera-Übungen wie ein Mensch lösen (Tasten wirken wie Maus und Finger).
     const camKey = /verschieben/.test(s.t.text) ? 'ArrowLeft' : /Zoome/.test(s.t.text) ? 'Equal' : /Drehe/.test(s.t.text) ? 'KeyQ' : null;
@@ -923,6 +928,29 @@ await test('Tutorial: Lern-Tabs, Grundlagen durchspielen, jede Lektion startet m
     noErrors(page);
     await page.context().close();
   }
+});
+
+// Alle Lektionen nacheinander, mit gedrehter Karte aus den Grundlagen (dann
+// liegt das Ziel oft hinter dem Schild der Einheit). Die Kampf-Lektion muss
+// der eigene Krieger überleben.
+await test('Tutorial: alle Lektionen am PC durchspielen', async () => {
+  const page = await open('pc');
+  for (const id of ['basics', 'cities', 'build', 'combat', 'explore']) {
+    await page.evaluate(() => { for (const b of ['buildClose', 'techClose', 'overviewClose']) { const e = document.getElementById(b); if (e && e.offsetParent) e.click(); } });
+    if (id !== 'basics') await page.evaluate(() => document.getElementById('menuBtn').click());
+    await playLesson(page, id, 'pc');
+    if (id === 'combat') assert.ok(await page.evaluate(() => { const { app } = window.__pb; return !!app.state.units.find(u => u.id === app.state.tutorial.spots.warrior); }), 'Krieger überlebt den Gegenzug');
+  }
+  assert.deepStrictEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('pb_tutorial_v1')).sort()), ['basics', 'build', 'cities', 'combat', 'explore']);
+  noErrors(page);
+  await page.context().close();
+});
+
+await test('Tutorial iPad hochkant: Erkunden und Hilfen, Karte verdeckt den Tipp nicht', async () => {
+  const page = await open('ipadHoch');
+  await playLesson(page, 'explore', 'ipadHoch');
+  noErrors(page);
+  await page.context().close();
 });
 
 await test('Tutorial Handy quer: Box verdeckt weder Einheit noch Zielfelder', async () => {
