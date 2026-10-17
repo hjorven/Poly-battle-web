@@ -2436,18 +2436,19 @@ export function scoreBreakdown(state, player) {
 // Einheiten [q, r, Besitzer, Art, Nummer], dazu nur die Änderungen an Gebäuden
 // und Wegen. Besitzer = Index in players (-1 neutral), Art = Index in UNITS.
 const UNIT_KEYS = Object.keys(UNITS);
+const unitKey = t => (Number.isInteger(t) && UNIT_KEYS[t]) || 'warrior';
 const lastFrameBase = new WeakMap();
 
 export function recordFrame(state) {
   if (!state.replay) state.replay = [];
   const pl = players(state);
-  const own = o => (o ? pl.indexOf(o) : -1);
+  const ownerIdx = o => (o ? pl.indexOf(o) : -1);
   if (!state.ridSeq) state.ridSeq = 0;
   for (const u of state.units) if (u.rid == null) u.rid = ++state.ridSeq;
   const frame = {
     r: state.round,
-    c: state.cities.map(c => [c.q, c.r, own(c.owner), c.pop]),
-    u: state.units.map(u => [u.q, u.r, own(u.owner), UNIT_KEYS.indexOf(u.type), u.rid])
+    c: state.cities.map(c => [c.q, c.r, ownerIdx(c.owner), c.pop]),
+    u: state.units.map(u => [u.q, u.r, ownerIdx(u.owner), UNIT_KEYS.indexOf(u.type), u.rid])
   };
   // Gebäude und Wege nur als Änderung zum letzten Schnappschuss (nach dem Laden
   // eines Spielstands einmal vollständig).
@@ -2483,7 +2484,7 @@ export function replayState(state, index) {
   const f = frames[Math.max(0, Math.min(frames.length - 1, index))];
   if (!f) return state;
   const pl = players(state);
-  const owner = i => (i >= 0 ? pl[i] : null);
+  const owner = i => (Number.isInteger(i) && i >= 0 && pl[i]) || null;
   const imps = {}, roads = {};
   for (let k = 0; k <= frames.indexOf(f); k++) {
     const fr = frames[k];
@@ -2500,7 +2501,7 @@ export function replayState(state, index) {
     improvements: imps,
     roads,
     cities: f.c.map(([q, r, o, pop]) => ({ q, r, owner: owner(o), pop, isCapital: !!(cityAt(state, q, r) || {}).isCapital })),
-    units: f.u.map(([q, r, o, t, rid]) => ({ id: 'replay_' + rid, q, r, owner: owner(o), type: UNIT_KEYS[t] || 'warrior', hp: maxHp(UNIT_KEYS[t] || 'warrior'), mp: 0, hasMoved: true, acted: true })),
+    units: f.u.map(([q, r, o, t, rid]) => ({ id: 'replay_' + rid, q, r, owner: owner(o), type: unitKey(t), hp: maxHp(unitKey(t)), mp: 0, hasMoved: true, acted: true })),
     noFog: true
   };
 }

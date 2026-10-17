@@ -584,6 +584,46 @@ test('Härtetest: zufällige und unsinnige Aufrufe brechen nichts', () => {
   R.createGame(1, 4);
 });
 
+test('Online-Stand: falsche Datentypen und unbekannte IDs werden abgewiesen', () => {
+  const st = JSON.parse(JSON.stringify(R.createGame(3, 3, { turnLimit: 30 })));
+  assert.ok(validState(st), 'echter Stand gilt');
+  const html = '<img src=x onerror=alert(1)>';
+  const bad = (name, change) => {
+    const c = JSON.parse(JSON.stringify(st));
+    change(c);
+    assert.ok(!validState(c), name);
+  };
+  bad('Sterne als Text', c => { c.stars.player_2 = html; });
+  bad('Sterne NaN', c => { c.stars.player_2 = NaN; });
+  bad('Runde als Text', c => { c.round = html; });
+  bad('rev als Text', c => { c.rev = '7'; });
+  bad('Rundenlimit als Text', c => { c.turnLimit = html; });
+  bad('Spieler-ID mit HTML', c => { c.players[1] = html; });
+  bad('Spieler-ID ist keine Zeichenkette', c => { c.players[1] = 2; c.turn = 'player_1'; });
+  bad('Einheiten keine Liste', c => { c.units = {}; });
+  bad('Städte keine Liste', c => { c.cities = 'x'; });
+  bad('unbekannter Einheitentyp', c => { c.units[0].type = 'dragon'; });
+  bad('Einheitentyp __proto__', c => { c.units[0].type = '__proto__'; });
+  bad('Einheiten-ID mit HTML', c => { c.units[0].id = html; });
+  bad('Leben als Text', c => { c.units[0].hp = html; });
+  bad('Besitzer unbekannt', c => { c.units[0].owner = 'player_9'; });
+  bad('Stadtstufe als Text', c => { c.cities[0].pop = html; });
+  bad('unbekannte Belohnung', c => { c.cities[0].rewards = { 2: 'constructor' }; });
+  bad('unbekannte Technologie', c => { c.techs.player_1.push('__proto__'); });
+  bad('unbekannter Stamm', c => { c.tribes.player_2 = html; });
+  bad('unbekanntes Gebäude', c => { c.improvements = { '3,3': 'tower<script>' }; });
+  bad('Besiegt-Runde als Text', c => { c.eliminated = { player_2: { round: html, by: 'player_1' } }; });
+  bad('Punkte als Text', c => { c.finalScores = { player_1: html }; });
+  bad('Gewinner unbekannt', c => { c.winner = html; });
+  bad('Zähler als Text', c => { c.killsBy = { player_1: html }; });
+  bad('Aussehen mit HTML', c => { c.looks = { player_1: { banner: html } }; });
+  bad('Wiederholung mit Text', c => { c.replay = [{ r: 1, c: [], u: [[1, 1, 0, 0, html]] }]; });
+  // Der Stand aus dem Prüfbericht (Sterne als HTML) und eine laufende Partie.
+  const played = JSON.parse(JSON.stringify(playLogged('daily', '2026-10-16', 8)));
+  assert.ok(validState(played), 'gespielter Stand gilt');
+  bad('Prüfbericht: Sterne mit onerror', c => { c.stars.player_2 = '<img src=x onerror=alert(localStorage.pb_token)>'; });
+});
+
 test('Beschädigte Spielstände und Profile werden abgewiesen bzw. bereinigt', () => {
   const st = R.createGame(3, 2);
   assert.ok(validState(st));
