@@ -80,6 +80,10 @@ More on the wiki page [Technical Overview](https://github.com/hjorven/Poly-battl
 
 Clients have no direct access to the tables. Reading and writing only happens through database functions that check who is playing, whose turn it is and whether names are plausible. Running matches are only visible to their players; after each move the database only sends a ping via Realtime, and the client then fetches the state through a checked function. Challenge scores only count once `scripts/verify-scores.mjs` (GitHub Actions, every 10 minutes, secret `SUPABASE_SERVICE_ROLE_KEY`) has replayed the game from the submitted move log (`js/actionlog.js`). Player IDs are stored in the database only as SHA-256 checksums. Stored are game states, name, profile data and scores – no email addresses, no account. The privacy policy for players is [datenschutz.html](datenschutz.html) (German, linked in the game menu under the title).
 
+`save_match` also checks the turn order (next player in order, round, turn limit, score victory only at the limit) and that cities, units, techs and stars of tribes that did not move in this step only change the way the rules allow. What the moving player does with their own units is not recomputed on the server (that would need a replay like the leaderboard). In online matches the fog of war only exists in the display: co-players receive the full state and could read it from the browser console. Rate limits: per network 20 new matches and 60 leaderboard submissions per hour, per player 20 running matches, per profile 3 submissions waiting for verification, move logs up to 96 KB; the same log counts only once per challenge.
+
+Retention (the database cleans up on every new match, submission and name choice, see `pb_cleanup`): online matches 30 days after the last move (7 days without opponents), submissions with move log 30 days, leaderboard entries 90 days, profiles 365 days after the last change (180 days without progress), salted IP checksums 1 day.
+
 ## Contributing
 
 Bug reports, ideas and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how it works.
