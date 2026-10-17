@@ -61,7 +61,7 @@ const TEXT = {
     },
     techs: {
       title: 'Technologien',
-      intro: n => `Der Forschungsbaum hat ${n} Technologien in sechs Stufen. Die Kosten steigen mit der Stufe, der Zahl deiner Städte und der Zahl bereits erforschter Technologien.`,
+      intro: n => `Der Forschungsbaum hat ${n} Technologien in fünf Stufen. Die Kosten steigen mit der Stufe, der Zahl deiner Städte und der Zahl bereits erforschter Technologien.`,
       cols: ['Stufe', 'Technologie', 'Voraussetzung', 'Bringt']
     },
     cities: {
@@ -149,7 +149,7 @@ const TEXT = {
     },
     techs: {
       title: 'Technologies',
-      intro: n => `The tech tree has ${n} technologies in six tiers. Costs rise with the tier, the number of your cities and the number of technologies you have already researched.`,
+      intro: n => `The tech tree has ${n} technologies in five tiers. Costs rise with the tier, the number of your cities and the number of technologies you have already researched.`,
       cols: ['Tier', 'Technology', 'Requires', 'Unlocks']
     },
     cities: {

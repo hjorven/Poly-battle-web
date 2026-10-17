@@ -774,6 +774,14 @@ function bannerMove(state, b) {
 
 // Waldläufer: Deckungsfeld neben dem Ziel, von dem aus er angreifen kann.
 const COVER = { forest: 3, hills: 2, swamp: 1 };
+
+// Schwere Reiterei: zusammen höchstens dieser Anteil der Landkämpfer.
+const CAVALRY = ['knight', 'paladin'];
+const CAVALRY_MAX = 0.25;
+function cavalryShare(mine) {
+  const army = mine.filter(u => !UNITS[u.type].abilities.includes('water') && UNITS[u.type].atk > 0);
+  return army.length < 4 ? 0 : army.filter(u => CAVALRY.includes(u.type)).length / army.length;
+}
 function rangerCover(state, u, target) {
   if (u.hasMoved || u.mp <= 0 || COVER[R.terrainAt(state, u.q, u.r)]) return null;
   let best = null;
@@ -888,9 +896,12 @@ function planStep(state, player) {
   if (settle) return settle;
 
   // Aufrüsten, wenn genug Sterne übrig sind (Einheit steht noch im eigenen Gebiet).
+  // Reiter nur zum Ritter, solange die Reiterei unter ihrem Anteil bleibt.
   for (const u of mine) {
     const up = R.upgradeOption(state, u);
-    if (up && up.ok && state.stars[player] >= up.cost + 8) return { kind: 'upgrade', unit: u };
+    if (up && up.ok && state.stars[player] >= up.cost + 8 && !(u.type === 'rider' && cavalryShare(mine) > CAVALRY_MAX)) {
+      return { kind: 'upgrade', unit: u };
+    }
   }
 
   const spyTrain = spyTrainStep(state, player);
@@ -910,9 +921,10 @@ function planStep(state, player) {
     'giant', 'paladin', 'knight', 'horsearcher', 'battleship', 'airship', 'ship', 'swordsman', 'catapult', 'crossbow',
     'boat', 'mindbender', 'ranger', 'archer', 'pikeman', 'defender', 'rider', 'warrior'
   ];
-  // Gemischte Armee: keine Einheitenart über 35 % der Landtruppen.
+  // Gemischte Armee: keine Einheitenart über 35 % der Landtruppen, Ritter und
+  // Paladine zusammen nicht über CAVALRY_MAX.
   const army = mine.filter(u => !UNITS[u.type].abilities.includes('water') && UNITS[u.type].atk > 0);
-  const share = t => army.length < 4 ? 0 : army.filter(u => u.type === t).length / army.length;
+  const share = t => army.length < 4 ? 0 : CAVALRY.includes(t) ? cavalryShare(mine) : army.filter(u => u.type === t).length / army.length;
   for (const c of R.citiesFor(state, player)) {
     const stars = state.stars[player];
     // Schiffsplatz frei und Hafen da? Sonst scheitert canTrain für Schiffe ohnehin;
@@ -950,7 +962,7 @@ function planStep(state, player) {
     // Bestes Wunschziel, das hier gerade möglich ist (Land- und Schiffsplatz getrennt).
     for (const t of order) {
       if (!unlocked.includes(t)) continue;
-      if (share(t) > 0.35) continue;
+      if (share(t) > (CAVALRY.includes(t) ? CAVALRY_MAX : 0.35)) continue;
       if (R.unitCost(state, player, t) > stars) continue;
       if (water(t) && !canShip) continue;
       if (R.canTrain(state, c, t, player).ok) return { kind: 'train', city: c, type: t };
@@ -1032,10 +1044,10 @@ function planStep(state, player) {
     'organization', 'hunting', 'archery', 'farming', 'riding', 'roads',
     'climbing', 'mining', 'shields', 'forestry', 'mathematics', 'meditation',
     'philosophy', 'smithery', 'construction', 'freespirit', 'chivalry', 'crossbows', 'pikes',
-    'trade', 'mills', 'smelting', 'markets', 'spiritualism', 'fishing', 'sailing', 'ramming', 'navigation', 'aquatism',
-    'scholarship', 'horseshoes', 'engineering', 'ballooning', 'cartography', 'fishfarming', 'diplomacy',
-    'banking', 'steel', 'planning', 'medicine', 'tournaments', 'printing', 'seapower', 'harbors', 'espionage',
-    'paladins', 'airships', 'plate', 'rotation', 'guilds', 'marksmen', 'monastic', 'castles', 'naval', 'shipyards'
+    'trade', 'mills', 'smelting', 'markets', 'fishing', 'sailing', 'ramming', 'navigation', 'aquatism',
+    'scholarship', 'horseshoes', 'ballooning', 'cartography', 'fishfarming', 'diplomacy',
+    'steel', 'medicine', 'seapower', 'harbors',
+    'paladins', 'airships', 'rotation', 'guilds', 'marksmen', 'monastic', 'castles'
   ];
   if (R.citiesFor(state, player).some(c => R.coastal(state, c))) {
     techOrder.splice(techOrder.indexOf('roads') + 1, 0, ...techOrder.splice(techOrder.indexOf('fishing'), 2));
