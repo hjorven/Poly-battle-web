@@ -29,7 +29,10 @@ const DEVICES = {
   pc: { viewport: { width: 1400, height: 860 } },
   ipadQuer: { viewport: { width: 1080, height: 700 }, hasTouch: true, isMobile: true },
   ipadHoch: { viewport: { width: 810, height: 950 }, hasTouch: true, isMobile: true },
-  handy: { viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true }
+  handy: { viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true },
+  // iPhone SE quer: die kleinste übliche Handy-Fläche im Querformat.
+  handyQuer: { viewport: { width: 667, height: 375 }, screen: { width: 375, height: 667 }, hasTouch: true, isMobile: true,
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' }
 };
 
 // PB_CHROMIUM: eigener Chromium-Pfad, falls Playwrights eigener fehlt.
@@ -596,6 +599,37 @@ await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async ()
   await page.context().close();
 });
 
+await test('Akku: Bau-Fenster nutzt einen Renderer, Handy-Auflösung höchstens 1,5', async () => {
+  const page = await open('pc');
+  await startGame(page);
+  await page.evaluate(() => {
+    const { app, sync } = window.__pb; const st = app.state;
+    const c = st.cities.find(x => x.owner === 'player_1');
+    st.units = st.units.filter(u => !(u.q === c.q && u.r === c.r));
+    app.sel = { kind: 'city', q: c.q, r: c.r }; sync();
+  });
+  await page.waitForTimeout(300);
+  const seen = [];
+  for (let i = 0; i < 4; i++) {
+    await page.click('#panel [data-build-open]');
+    await page.waitForTimeout(200);
+    assert.ok(await page.isVisible('.build-map.b3 canvas'), '3D-Ansicht im Bau-Fenster');
+    seen.push(await page.evaluate(() => { const c = document.querySelector('.b3-canvas'); c.pbId = c.pbId || Math.random(); return c.pbId; }));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+  }
+  assert.strictEqual(new Set(seen).size, 1, 'Leinwand (und WebGL-Kontext) wird wiederverwendet');
+  noErrors(page);
+  await page.context().close();
+  const ctx = await browser.newContext({ ...DEVICES.handy, deviceScaleFactor: 3 });
+  const phone = await ctx.newPage();
+  await phone.goto(URL_);
+  await phone.waitForTimeout(400);
+  const ratio = await phone.evaluate(() => { const c = document.getElementById('gameCanvas'); return c.width / c.clientWidth; });
+  assert.ok(ratio <= 1.51, 'Handy zeichnet mit Auflösung ' + ratio);
+  await ctx.close();
+});
+
 await test('Online langsam: „Verbinde …“, gesperrte Knöpfe, späte Antwort überschreibt kein neues Spiel', async () => {
   const page = await open('pc');
   await page.unroute(/supabase\.co/);
@@ -715,7 +749,16 @@ async function playLesson(page, id, device) {
       const focus = [...document.querySelectorAll('.tu-focus')].map(e => e.getBoundingClientRect());
       let tile = null;
       if (t && t.tile) { const p = window.__pb.project(t.tile[0], t.tile[1]); tile = { x: p.x, y: p.y, on: p.x > 0 && p.y > 0 && p.x < innerWidth && p.y < innerHeight, under: inside({ left: p.x, right: p.x, top: p.y, bottom: p.y }) }; }
-      return { t, open: open && open.id, busy: app.busy || app.state.turn !== 'player_1', active: !!app.state.tutorial, focus: focus.length, covered: !document.querySelector('.tu-inline') && focus.some(inside), tile, pending: app.pending && app.pending.key, sel: app.sel };
+      // Gewählte Einheit und ihre Zielfelder: wie viele liegen unter der Karte?
+      let movesUnder = 0;
+      const R = window.__pb.R, su = app.sel && app.sel.kind === 'unit' && R.findUnit(app.state, app.sel.id);
+      if (su && !document.querySelector('.tu-inline')) {
+        for (const k of [su.q + ',' + su.r, ...R.reachableMap(app.state, su).keys()]) {
+          const [q, r] = k.split(',').map(Number), p = window.__pb.project(q, r);
+          if (p && inside({ left: p.x, right: p.x, top: p.y, bottom: p.y })) movesUnder++;
+        }
+      }
+      return { t, open: open && open.id, busy: app.busy || app.state.turn !== 'player_1', active: !!app.state.tutorial, focus: focus.length, covered: !document.querySelector('.tu-inline') && focus.some(inside), tile, movesUnder, pending: app.pending && app.pending.key, sel: app.sel };
     });
     if (!s.active) throw new Error(`${id}: Tutorial vorzeitig beendet`);
     if (s.open === 'confirm-overlay') { await page.click('#confirmYes'); continue; }
@@ -725,6 +768,7 @@ async function playLesson(page, id, device) {
     const where = `${device} ${id} Schritt ${s.t.step + 1}: ${s.t.text}`;
     if (s.t.el) { assert.ok(s.focus > 0, 'nicht hervorgehoben: ' + where); assert.ok(!s.covered, 'Karte verdeckt den Knopf: ' + where); }
     if (s.t.tile) { assert.ok(s.tile.on, 'Feld nicht im Bild: ' + where); assert.ok(!s.tile.under, 'Karte verdeckt das Feld: ' + where); }
+    if (device === 'handyQuer') assert.strictEqual(s.movesUnder, 0, 'Karte verdeckt Einheit oder Zielfelder: ' + where);
     if (s.t.manual) await page.click('[data-tu="next"]');
     else if (s.t.el) { const b = await (await page.$('.tu-focus')).boundingBox(); await tap(b.x + b.width / 2, b.y + b.height / 2); }
     else {
@@ -768,6 +812,14 @@ await test('Tutorial: Lern-Tabs, Grundlagen durchspielen, jede Lektion startet m
     noErrors(page);
     await page.context().close();
   }
+});
+
+await test('Tutorial Handy quer: Box verdeckt weder Einheit noch Zielfelder', async () => {
+  const page = await open('handyQuer');
+  assert.ok(await page.evaluate(() => document.documentElement.classList.contains('phone')), 'Handy-Ansicht');
+  await playLesson(page, 'basics', 'handyQuer');
+  noErrors(page);
+  await page.context().close();
 });
 
 await browser.close();

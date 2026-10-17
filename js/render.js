@@ -25,6 +25,10 @@ let selectedKey = null;
 let tweens = [];
 let shadowDirty = true;
 let frameNo = 0;
+// Zeichnen nach Bedarf (siehe loop): letzte Bewegung, erzwungenes Bild.
+let lastActive = 0;
+let forceFrame = true;
+let idleTick = 0;
 let effects = [];
 let onPick = null;
 let pointerDownAt = null;
@@ -43,6 +47,12 @@ const matCache = new Map();
 function mat(color) {
   if (!matCache.has(color)) matCache.set(color, freshMat(color));
   return matCache.get(color);
+}
+
+// Auflösung: auf Handys höchstens 1,5 (spart Akku, kaum sichtbar), sonst 2.
+function maxPixelRatio() {
+  const phone = document.documentElement.classList.contains('phone');
+  return Math.min(window.devicePixelRatio || 1, phone ? 1.5 : 2);
 }
 
 function freshMat(color) {
@@ -78,7 +88,7 @@ export function initRender(canvas, opts = {}) {
     boardSignature = null;
     if (lastSync) syncBoard(lastSync.state, lastSync.viewer);
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(maxPixelRatio());
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   // Die Schattenkarte zeichnet jedes Objekt ein zweites Mal. Sonne und Karte
@@ -163,6 +173,16 @@ export function initRender(canvas, opts = {}) {
     new ResizeObserver(resize).observe(canvas.parentElement);
   }
 
+  // Zeichnen nur, wenn man es sieht: Hinter dem Menü, der Anleitung, dem
+  // Technologiebaum und der Übersicht ruht das Bild (die Leinwand zeigt das
+  // letzte Bild weiter). Ohne Bewegung (Kamera, Animationen, Eingabe) reichen
+  // 30 Bilder pro Sekunde für pulsierende Marker und Leuchttürme.
+  const covers = ['menu-overlay', 'learn-overlay', 'tech-overlay', 'overview-overlay'].map(id => document.getElementById(id)).filter(Boolean);
+  const covered = () => covers.some(e => !e.classList.contains('hidden'));
+  controls.addEventListener('change', () => { lastActive = performance.now(); });
+  canvas.addEventListener('pointerdown', () => { lastActive = performance.now(); });
+  canvas.addEventListener('wheel', () => { lastActive = performance.now(); }, { passive: true });
+
   let last = performance.now();
   function loop(now) {
     requestAnimationFrame(loop);
@@ -184,8 +204,14 @@ export function initRender(canvas, opts = {}) {
     }
     controls.update();
     clampTarget();
+    // Kamera-Matrizen auch in Bildern ohne Zeichnen aktuell halten (project, pick).
+    camera.updateMatrixWorld();
+    if (tweens.length || effects.length || shadowDirty) lastActive = now;
+    const idle = now - lastActive > 1500;
+    const skip = covered() ? !forceFrame : idle && !forceFrame && (++idleTick & 1);
     // Solange das Bau-Fenster seine eigene 3D-Ansicht zeigt, ruht das Hauptbild.
-    if (!contextLost && !cityCam) {
+    if (!contextLost && !cityCam && !skip) {
+      forceFrame = false;
       // Schatten: bei Bewegung (Einheiten, Kampf, neuer Stand) jedes Bild,
       // sonst jedes vierte (Windmühlen, Masten und Leuchttürme drehen sich langsam).
       frameNo++;
@@ -225,9 +251,34 @@ function resize() {
   const el = canvasEl();
   const w = el.clientWidth || window.innerWidth;
   const h = el.clientHeight || window.innerHeight;
+  const ratio = maxPixelRatio();
+  if (renderer.getPixelRatio() !== ratio) renderer.setPixelRatio(ratio);
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
+  applyViewInset(w, h);
+  // setSize leert die Leinwand: auch hinter einem Fenster einmal neu zeichnen.
+  forceFrame = true;
+  lastActive = performance.now();
+}
+
+// Bildmitte nach rechts schieben, wenn links eine Spalte (Tutorial-Box auf dem
+// Handy quer) über der Karte liegt: Kamera und Ziel landen dann mittig im
+// freien Teil. project() und pick() rechnen mit derselben Matrix.
+let viewInset = 0;
+function applyViewInset(w, h) {
+  if (viewInset > 0) camera.setViewOffset(w, h, -viewInset, 0, w, h);
+  else camera.clearViewOffset();
   camera.updateProjectionMatrix();
+}
+
+export function setViewInset(px) {
+  const v = Math.max(0, Math.round(px || 0));
+  if (!initialized || v === viewInset) return;
+  viewInset = v;
+  const el = canvasEl();
+  applyViewInset(el.clientWidth || window.innerWidth, el.clientHeight || window.innerHeight);
+  forceFrame = true;
+  lastActive = performance.now();
 }
 
 function canvasEl() {
@@ -1559,9 +1610,19 @@ function syncImprovement(t, imp, env = {}) {
   t.impNode = inode;
 }
 
+// Materialien, die nur zu diesem Knoten gehören (Flammen, Schatten, Lichtkegel),
+// beim Abbau freigeben; geteilte (Caches) bleiben. Geometrien sind alle geteilt.
+function disposeOwned(root, shared) {
+  root.traverse(o => {
+    const list = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of list) if (!shared.has(m)) m.dispose();
+  });
+}
+
 // Alles vom vorherigen Spiel entfernen, damit eine neue Karte (neues Spiel,
 // geladener Spielstand, Online-Partie) korrekt aufgebaut wird.
 function clearBoard() {
+  const shared = new Set([...matCache.values(), ...dimMats.values(), ...discMats.values(), ...geoCache.values(), lampOn, lampOff, fogTileMat, fogTargetMat]);
   for (const t of tiles.values()) {
     scene.remove(t.mesh);
   }
@@ -1572,11 +1633,12 @@ function clearBoard() {
     node.sprite.userData.texture?.dispose();
     node.sprite.material.dispose();
     for (const m of node.group.userData.teamMats) m.dispose();
+    disposeOwned(node.group, shared);
   }
   unitNodes.clear();
-  for (const node of cityNodes.values()) scene.remove(node.group);
+  for (const node of cityNodes.values()) { scene.remove(node.group); disposeOwned(node.group, shared); }
   cityNodes.clear();
-  for (const g of lightNodes.values()) scene.remove(g);
+  for (const g of lightNodes.values()) { scene.remove(g); disposeOwned(g, shared); }
   lightNodes.clear();
   // Laufende Animationen beenden, damit wartende Promises nicht hängen.
   const pending = tweens;
@@ -2385,6 +2447,8 @@ function reportOnce(e) {
 }
 
 export function syncBoard(state, viewer = null) {
+  forceFrame = true;
+  lastActive = performance.now();
   if (!initialized) return Promise.resolve();
   lastSync = { state, viewer };
   shadowDirty = true;
@@ -2871,13 +2935,35 @@ export function project(q, r) {
 // Stadtgebiet. Ziehen dreht um die Stadt, Rad/zwei Finger zoomen, Antippen
 // wählt ein Feld (Raycast auf die Feld-Kacheln).
 let cityCam = null;
+// Ein einziger Renderer für das Bau-Fenster, der bei jedem Öffnen wieder
+// benutzt wird (sonst bliebe pro Öffnen ein WebGL-Kontext im Speicher und alle
+// Shader würden neu übersetzt). Seine Leinwand ersetzt die übergebene.
+let cityRenderer = null;
+
+function cityRendererFor(placeholder) {
+  if (!cityRenderer || cityRenderer.pbLost) {
+    try { cityRenderer = new THREE.WebGLRenderer({ antialias: true }); } catch (e) { cityRenderer = null; return null; }
+    const r2 = cityRenderer;
+    r2.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); r2.pbLost = true; });
+  }
+  const c = cityRenderer.domElement;
+  if (placeholder !== c) {
+    c.className = placeholder.className;
+    for (const a of ['aria-hidden', 'aria-label', 'role']) {
+      if (placeholder.hasAttribute(a)) c.setAttribute(a, placeholder.getAttribute(a)); else c.removeAttribute(a);
+    }
+    placeholder.replaceWith(c);
+  }
+  return cityRenderer;
+}
 
 export function openCityView(canvas, q, r, radius = 1, onMove = null) {
   if (!initialized) return false;
   closeCityView();
-  let r2;
-  try { r2 = new THREE.WebGLRenderer({ canvas, antialias: true }); } catch (e) { return false; }
-  r2.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const r2 = cityRendererFor(canvas);
+  if (!r2) return false;
+  canvas = r2.domElement;
+  r2.setPixelRatio(maxPixelRatio());
   const cam = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
   const marks = new THREE.Group();
   marks.visible = false;
@@ -2966,8 +3052,8 @@ export function closeCityView() {
   c.removeEventListener('wheel', cv.wheel);
   scene.remove(cv.marks);
   for (const m of cv.marks.children) m.material.dispose();
-  cv.renderer.dispose();
-  try { cv.renderer.forceContextLoss(); } catch (e) { /* ignore */ }
+  // Renderer bleibt für das nächste Öffnen erhalten; das Hauptbild gleich neu zeichnen.
+  forceFrame = true;
 }
 
 // War die letzte Berührung ein Tipp (kein Ziehen)? Dann das Feld darunter.
