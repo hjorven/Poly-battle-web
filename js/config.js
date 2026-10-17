@@ -157,11 +157,12 @@ export const UNITS = {
     tech: 'trade', abilities: ['trade', 'land']
   },
   knight: {
-    name: 'Ritter', hp: 10, atk: 3, def: 1, move: 3, range: 1, cost: 9, sight: 1,
+    name: 'Ritter', hp: 10, atk: 3, def: 1, move: 3, range: 1, cost: 11, sight: 1,
     tech: 'chivalry', abilities: ['dash', 'persist', 'fortify', 'land']
   },
+  // Riese: nur als Stadtbelohnung, kostet beim Wählen `cost` Sterne.
   giant: {
-    name: 'Riese', hp: 40, atk: 5, def: 4, move: 1, range: 1, cost: 10, sight: 1,
+    name: 'Riese', hp: 40, atk: 5, def: 4, move: 1, range: 1, cost: 25, sight: 1,
     tech: null, abilities: ['static', 'land'], reward: true
   },
   boat: {
@@ -185,20 +186,22 @@ export const UNITS = {
     tech: 'crossbows', abilities: ['dash', 'fortify', 'land']
   },
   paladin: {
-    name: 'Paladin', hp: 15, atk: 4, def: 2, move: 3, range: 1, cost: 13, sight: 1,
+    name: 'Paladin', hp: 15, atk: 4, def: 2, move: 3, range: 1, cost: 15, sight: 1,
     tech: 'paladins', abilities: ['dash', 'persist', 'fortify', 'land']
   },
   balloon: {
     name: 'Heißluftballon', hp: 4, atk: 0, def: 1, move: 3, range: 1, cost: 4, sight: 3,
     tech: 'ballooning', abilities: ['air', 'fragile']
   },
+  // Ausgemustert (`retired`: nicht mehr ausbildbar). Bleiben in der Liste,
+  // weil Wiederholungen die Einheitenart als Position speichern.
   cargoballoon: {
     name: 'Lastenballon', hp: 6, atk: 0, def: 1, move: 3, range: 1, cost: 6, sight: 2,
-    tech: 'ballooning', abilities: ['air', 'fragile', 'cargo']
+    tech: 'ballooning', abilities: ['air', 'fragile', 'cargo'], retired: true
   },
   fireballoon: {
     name: 'Brandballon', hp: 6, atk: 3, def: 0, move: 2, range: 1, cost: 8, sight: 2,
-    tech: 'airships', abilities: ['air', 'fragile']
+    tech: 'airships', abilities: ['air', 'fragile'], retired: true
   },
   airship: {
     name: 'Kriegsluftschiff', hp: 12, atk: 3, def: 2, move: 2, range: 2, cost: 12, sight: 3,
@@ -231,7 +234,7 @@ export const UNITS = {
 export const UNIT_ORDER = [
   'warrior', 'archer', 'ranger', 'rider', 'defender', 'pikeman', 'swordsman', 'crossbow',
   'catapult', 'ram', 'mindbender', 'bannerman', 'horsearcher', 'knight', 'paladin', 'cart', 'giant',
-  'boat', 'ship', 'fireship', 'battleship', 'balloon', 'cargoballoon', 'fireballoon', 'airship', 'spy', 'settler'
+  'boat', 'ship', 'fireship', 'battleship', 'balloon', 'airship', 'spy', 'settler'
 ];
 
 // Echter Technologiebaum (Basis-Äste; `req` = Voraussetzung, `tier` = Stufe/Kosten).
@@ -261,7 +264,7 @@ export const TECHS = {
   rotation: { name: 'Fruchtfolge', tier: 6, req: 'planning', desc: 'Jede Farm bringt +1 Stern zusätzlich' },
 
   pikes: { name: 'Pikeniere', tier: 3, req: 'shields', desc: 'Pikenier: stark gegen Reiter, Ritter und Paladine' },
-  diplomacy: { name: 'Diplomatie', tier: 4, req: 'pikes', desc: 'Botschaften und Bündnisse' },
+  diplomacy: { name: 'Diplomatie', tier: 4, req: 'pikes', desc: 'Frieden mit anderen Stämmen anbieten' },
   espionage: { name: 'Spionage', tier: 5, req: 'diplomacy', desc: 'Spione kosten 2 Sterne weniger und sehen 1 Feld weiter' },
   castles: { name: 'Burgbau', tier: 6, req: 'espionage', desc: 'Burg: Einheiten darauf haben 3-fache Verteidigung' },
 
@@ -292,8 +295,8 @@ export const TECHS = {
 
   mathematics: { name: 'Mathematik', tier: 3, req: 'forestry', desc: 'Katapult ausbilden' },
   engineering: { name: 'Ingenieurwesen', tier: 4, req: 'mathematics', desc: 'Katapulte kosten 3 Sterne weniger' },
-  ballooning: { name: 'Ballonfahrt', tier: 5, req: 'engineering', desc: 'Ballonplatz, Heißluftballon (Späher) und Lastenballon' },
-  airships: { name: 'Luftschiffbau', tier: 6, req: 'ballooning', desc: 'Brandballon und Kriegsluftschiff' },
+  ballooning: { name: 'Ballonfahrt', tier: 5, req: 'engineering', desc: 'Ballonplatz und Heißluftballon (Späher)' },
+  airships: { name: 'Luftschiffbau', tier: 6, req: 'ballooning', desc: 'Kriegsluftschiff' },
 
   trade: { name: 'Handel', tier: 3, req: 'roads', desc: '+1 Stern pro Stadt' },
   markets: { name: 'Märkte', tier: 4, req: 'trade', desc: 'Markt: +1 Stern je angrenzendem Gebäude (bis 4)' },
@@ -353,7 +356,7 @@ export function tribeColor(tribeId) {
 
 // Kosten: Stufenfaktor × (1 + Städte) + 2 je bereits erforschter Technologie.
 // Späte Stufen sind deutlich teurer, damit nicht jeder den ganzen Baum hat.
-const TIER_FACTOR = [1, 2, 4, 6, 8, 10];
+const TIER_FACTOR = [1, 2, 4, 6, 7, 8];
 export function researchCost(tier, cityCount, hasPhilosophy = false, known = 0) {
   let cost = TIER_FACTOR[tier - 1] * (1 + cityCount) + 2 * known;
   if (hasPhilosophy) cost = Math.ceil(cost * 0.8);
@@ -423,7 +426,7 @@ export const DISBAND_REFUND = 0.5;
 export const UPGRADES = {
   warrior: 'swordsman', archer: 'crossbow', rider: 'knight', knight: 'paladin',
   boat: 'ship', ship: 'battleship',
-  balloon: 'fireballoon', fireballoon: 'airship'
+  balloon: 'airship'
 };
 
 // Rabatte durch Stammes-Fähigkeiten (Perk-ID → Einheit).
@@ -447,8 +450,8 @@ export const CITY_REWARDS = {
   resources: { name: 'Vorräte', desc: '+5 Sterne sofort' },
   growth: { name: 'Wachstum', desc: '+1 Bevölkerung (nächste Stufe)' },
   borders: { name: 'Grenzerweiterung', desc: 'Stadtgebiet wächst auf 2 Felder Umkreis' },
-  park: { name: 'Park', desc: '+1 Stern pro Runde' },
-  giant: { name: 'Riese', desc: 'Ein Riese (40 Leben) erscheint bei der Stadt' }
+  park: { name: 'Park', desc: '+2 Sterne pro Runde' },
+  giant: { name: 'Riese', desc: 'Ein Riese (40 Leben) erscheint bei der Stadt, kostet 25 Sterne' }
 };
 export const REWARD_CHOICES = {
   2: ['workshop', 'explorer'],

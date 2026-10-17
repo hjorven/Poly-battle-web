@@ -642,7 +642,8 @@ function rewardStep(state, player) {
       const threat = state.units.some(u => u.owner !== player && hexDistance(u.q, u.r, city.q, city.r) <= 3);
       pick = threat ? 'wall' : 'resources';
     } else if (opts.includes('borders')) pick = 'borders';
-    else if (opts.includes('giant')) pick = 'giant';
+    // Riese nur, wenn danach noch genug Sterne übrig sind, sonst Park.
+    else if (opts.includes('giant')) pick = state.stars[player] >= UNITS.giant.cost + 5 ? 'giant' : 'park';
     else if (opts.includes('workshop')) pick = 'workshop';
     return { kind: 'reward', city, choice: pick };
   }
@@ -906,7 +907,7 @@ function planStep(state, player) {
   const targets = targetCities(state, player);
   const unlocked = R.unlockedUnits(state, player);
   const order = [
-    'giant', 'paladin', 'knight', 'horsearcher', 'battleship', 'airship', 'ship', 'swordsman', 'catapult', 'crossbow', 'fireballoon',
+    'giant', 'paladin', 'knight', 'horsearcher', 'battleship', 'airship', 'ship', 'swordsman', 'catapult', 'crossbow',
     'boat', 'mindbender', 'ranger', 'archer', 'pikeman', 'defender', 'rider', 'warrior'
   ];
   // Gemischte Armee: keine Einheitenart über 35 % der Landtruppen.
@@ -951,7 +952,6 @@ function planStep(state, player) {
       if (!unlocked.includes(t)) continue;
       if (share(t) > 0.35) continue;
       if (R.unitCost(state, player, t) > stars) continue;
-      if (t === 'giant' && stars < 10) continue;
       if (water(t) && !canShip) continue;
       if (R.canTrain(state, c, t, player).ok) return { kind: 'train', city: c, type: t };
       // Nur bis zum ersten bezahlbaren Landwunsch suchen: sonst spart die KI nie.

@@ -221,7 +221,8 @@ function generate(lang) {
   // --- Einheiten ---------------------------------------------------------------------
   {
     const T = L.units;
-    const order = [...UNIT_ORDER, ...Object.keys(UNITS).filter(t => !UNIT_ORDER.includes(t))];
+    // Ausgemusterte Einheiten stehen nicht mehr im Wiki.
+    const order = [...UNIT_ORDER, ...Object.keys(UNITS).filter(t => !UNIT_ORDER.includes(t) && !UNITS[t].retired)];
     const picks = [
       t => !UNITS[t].abilities.includes('water') && !UNITS[t].abilities.includes('air'),
       t => UNITS[t].abilities.includes('water'),
@@ -233,7 +234,7 @@ function generate(lang) {
       for (const t of order.filter(pick)) {
         const u = UNITS[t];
         const ab = u.abilities.filter(a => a !== 'land' && a !== 'water' && ABILITY_INFO[a]).map(a => tr(ABILITY_INFO[a].name)).join(', ') || L.none;
-        md += row([`**${tr(u.name)}**${u.reward ? T.reward : ''}`, u.reward ? L.none : u.cost, u.hp, fmt(u.atk), u.def, u.move, u.range, techName(u.tech), ab]) + '\n';
+        md += row([`**${tr(u.name)}**${u.reward ? T.reward : ''}`, u.cost, u.hp, fmt(u.atk), u.def, u.move, u.range, techName(u.tech), ab]) + '\n';
       }
       md += '\n';
     });
