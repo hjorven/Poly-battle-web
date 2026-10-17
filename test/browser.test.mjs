@@ -581,6 +581,36 @@ await test('Online am Zug: Mitteilung und blinkender Titel im Hintergrund', asyn
   await page.context().close();
 });
 
+await test('Online: gebauter Spielstand mit HTML führt keinen Code aus', async () => {
+  const page = await open('pc', { online: true });
+  const html = '<img src=x onerror="window.__xss=1">';
+  // 1. Beitreten: der Server liefert einen Stand mit HTML statt Zahlen → wird abgewiesen.
+  const state = await page.evaluate(() => JSON.parse(JSON.stringify(window.__pb.R.createGame(5, 2, { mapSize: 'small' }))));
+  state.stars.player_2 = html;
+  state.units[0].type = 'drache';
+  await page.route(/rpc\/join_match/, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ match: { id: 't1', game_state: state, joined: ['player_1'] }, role: 'player_2' }) }));
+  await page.goto(URL_ + '?x=1#t1');
+  await page.waitForTimeout(800);
+  assert.ok(!(await page.evaluate(() => window.__xss)), 'kein Code ausgeführt');
+  assert.ok(!(await page.evaluate(() => window.__pb.app.state && window.__pb.app.state.stars.player_2 === '<img src=x onerror="window.__xss=1">')), 'Stand nicht übernommen');
+  assert.ok(await page.$('#player-strip img') === null);
+  // 2. Auch wenn ein solcher Wert doch einmal im Stand landet, wird er nur als Text gezeigt.
+  await page.goto(URL_);
+  await page.waitForTimeout(300);
+  await startGame(page);
+  await page.evaluate(html => {
+    const st = window.__pb.app.state;
+    st.stars.player_2 = html;
+    st.stars.player_1 = html;
+    st.eliminated = { player_2: { round: html, by: 'player_1' } };
+    window.__pb.sync();
+  }, html);
+  await page.waitForTimeout(300);
+  assert.ok(!(await page.evaluate(() => window.__xss)), 'Spielerleiste escaped');
+  assert.strictEqual(await page.$$eval('#player-strip img, #treasury img', l => l.length), 0);
+  await page.context().close();
+});
+
 await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async () => {
   const page = await open('pc');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
