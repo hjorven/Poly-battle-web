@@ -447,12 +447,13 @@ function profileCodeDialog() {
   ui.askName(net.profileCode(), async code => {
     code = String(code || '').trim();
     if (code === net.profileCode()) return null;
-    if (!net.useProfileCode(code)) return 'Das ist kein gültiger Profil-Code.';
-    const res = await net.myRemoteProfile();
-    if (res.error || !res.data) return 'Zu diesem Code gibt es kein Profil (oder keine Verbindung).';
-    const loaded = P.sanitizeProfile({ ...(res.data.data || {}), name: res.data.name });
-    P.saveProfile(loaded);
-    ui.toast(`Profil von ${res.data.name} geladen`, 'good');
+    const res = await net.adoptProfileCode(code);
+    if (res.error) return res.error;
+    const { profile, matches } = res.data;
+    if (profile) {
+      P.saveProfile(P.sanitizeProfile({ ...(profile.data || {}), name: profile.name }));
+      ui.toast(`Profil von ${profile.name} geladen`, 'good');
+    } else ui.toast(`Code übernommen: ${matches} Online-${matches === 1 ? 'Partie' : 'Partien'}`, 'good');
     showMenu();
     return null;
   }, {
@@ -483,7 +484,8 @@ function renewProfileCode() {
   ui.showConfirm('Neuen Profil-Code erzeugen? Der alte Code funktioniert danach nirgends mehr, auch nicht auf deinen anderen Geräten. Dort musst du den neuen Code eingeben.', async () => {
     const res = await net.renewProfileCode();
     if (res.error) { ui.toast(res.error, 'warn'); return; }
-    ui.toast('Neuer Profil-Code aktiv. Speichere ihn am besten gleich als Datei.', 'good');
+    ui.toast(res.data && res.data.recovered ? 'Der neue Code vom letzten Versuch ist aktiv. Speichere ihn am besten gleich als Datei.'
+      : 'Neuer Profil-Code aktiv. Speichere ihn am besten gleich als Datei.', 'good');
     profileCodeDialog();
   }, { yes: 'Neuen Code erzeugen' });
 }
