@@ -23,10 +23,10 @@ Stats: cost in stars, health, attack, defence, movement, range. Veterans (after 
 | **Mind Bender** | 5 | 10 | 0 | 1 | 1 | 1 | Philosophy | Heal, Convert, Rigid |
 | **Banner Bearer** | 6 | 10 | 1 | 2 | 1 | 1 | Free Spirit | Fortify, Banner |
 | **Horse Archer** | 6 | 10 | 2 | 1 | 2 | 2 | Horseshoes | Dash, Escape |
-| **Knight** | 9 | 10 | 3 | 1 | 3 | 1 | Chivalry | Dash, Persist, Fortify |
-| **Paladin** | 13 | 15 | 4 | 2 | 3 | 1 | Knightly Orders | Dash, Persist, Fortify |
+| **Knight** | 11 | 10 | 3 | 1 | 3 | 1 | Chivalry | Dash, Persist, Fortify |
+| **Paladin** | 15 | 15 | 4 | 2 | 3 | 1 | Knightly Orders | Dash, Persist, Fortify |
 | **Trader Cart** | 5 | 6 | 0 | 1 | 2 | 1 | Trade | Trade |
-| **Giant** (reward only) | – | 40 | 5 | 4 | 1 | 1 | – | Static |
+| **Giant** (reward only) | 25 | 40 | 5 | 4 | 1 | 1 | – | Static |
 | **Spy** | 4 | 6 | 0 | 1 | 2 | 1 | – | Scout |
 | **Settler** | 5 | 10 | 0 | 0 | 1 | 1 | – | Static, Settle |
 
@@ -44,8 +44,6 @@ Stats: cost in stars, health, attack, defence, movement, range. Veterans (after 
 | Unit | Cost | Health | Attack | Defence | Movement | Range | Technology | Abilities |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **Hot Air Balloon** | 4 | 4 | 0 | 1 | 3 | 1 | Ballooning | Fly, Fragile |
-| **Cargo Balloon** | 6 | 6 | 0 | 1 | 3 | 1 | Ballooning | Fly, Fragile, Transport |
-| **Fire Balloon** | 8 | 6 | 3 | 0 | 2 | 1 | Airship Building | Fly, Fragile |
 | **War Airship** | 12 | 12 | 3 | 2 | 2 | 2 | Airship Building | Fly, Large Hull |
 
 ## Abilities
@@ -85,5 +83,4 @@ A unit that starts its turn inside your own territory can be upgraded for the di
 - Knight becomes Paladin
 - Boat becomes Ship
 - Ship becomes Battleship
-- Hot Air Balloon becomes Fire Balloon
-- Fire Balloon becomes War Airship
+- Hot Air Balloon becomes War Airship

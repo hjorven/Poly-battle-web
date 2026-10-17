@@ -153,7 +153,6 @@
   "Verteidiger ausbilden": "Train defenders",
   "Pikenier: stark gegen Reiter, Ritter und Paladine": "Pikeman: strong against riders, knights and paladins",
   "Diplomatie": "Diplomacy",
-  "Botschaften und Bündnisse": "Embassies and alliances",
   "Spionage": "Espionage",
   "Spione kosten 2 Sterne weniger und sehen 1 Feld weiter": "Spies cost 2 stars less and see 1 tile further",
   "Burgbau": "Castle Building",
@@ -206,7 +205,6 @@
   "Katapult ausbilden": "Train catapults",
   "Ingenieurwesen": "Engineering",
   "Katapulte kosten 3 Sterne weniger": "Catapults cost 3 stars less",
-  "Ballonplatz, Heißluftballon (Späher) und Lastenballon": "Balloon field, hot air balloon (scout) and cargo balloon",
   "Brandballon und Kriegsluftschiff": "Fire balloon and war airship",
   "Zweig: Wege, Freier Geist": "Branch: Roads, Free Spirit",
   "Wege (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1": "Build roads (half movement) and bridges; forest and mountains cost only 1 in own territory",
@@ -234,7 +232,6 @@
   "Grenzerweiterung": "Border Growth",
   "Stadtgebiet wächst auf 2 Felder Umkreis": "City area grows to a radius of 2 tiles",
   "Park": "Park",
-  "Ein Riese (40 Leben) erscheint bei der Stadt": "A giant (40 health) appears at the city",
   "Farm": "Farm",
   "Feld": "Field",
   "Sägewerk": "Sawmill",
@@ -311,5 +308,9 @@
   "Titanen": "Titans",
   "Jede Hauptstadt startet mit einem Riesen.": "Every capital starts with a giant.",
   "Blitz": "Blitz",
-  "Nur 20 Runden – schnell Punkte sammeln.": "Only 20 turns – score points fast."
+  "Nur 20 Runden – schnell Punkte sammeln.": "Only 20 turns – score points fast.",
+  "Frieden mit anderen Stämmen anbieten": "Offer peace to other tribes",
+  "Ballonplatz und Heißluftballon (Späher)": "Balloon field and hot-air balloon (scout)",
+  "+2 Sterne pro Runde": "+2 stars per turn",
+  "Ein Riese (40 Leben) erscheint bei der Stadt, kostet 25 Sterne": "A giant (40 HP) appears next to the city, costs 25 stars"
 }

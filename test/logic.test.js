@@ -437,7 +437,7 @@ test('Luftwaffe: fliegen, Nahkampf erreicht sie nicht, Fernkampf zerstört Ballo
   assert.ok(plain.damage < R.battleResults(st, a, ship).damage, 'doppelter Schaden gegen große Hülle');
 });
 
-test('Ballonplatz und Lastenballon: aufsteigen, aufnehmen, absetzen', () => {
+test('Ballonplatz und Lastenballon: aufsteigen, aufnehmen, absetzen (Lastenballon ausgemustert)', () => {
   const st = makeState();
   const city = { q: 5, r: 5, owner: 'player_1', pop: 1 };
   st.cities = [city];
@@ -445,10 +445,15 @@ test('Ballonplatz und Lastenballon: aufsteigen, aufnehmen, absetzen', () => {
   st.stars.player_1 = 50;
   assert.strictEqual(R.canTrain(st, city, 'balloon', 'player_1').reason, 'Ballonplatz nötig');
   assert.ok(R.improve(st, city, 'airfield', 6, 5, 'player_1').ok);
-  assert.ok(R.trainUnit(st, city, 'cargoballoon', 'player_1').ok);
-  const cb = st.units.find(u => u.type === 'cargoballoon');
-  assert.deepStrictEqual([cb.q, cb.r], [6, 5], 'steigt am Ballonplatz auf');
+  assert.strictEqual(R.canTrain(st, city, 'cargoballoon', 'player_1').reason, 'Nicht mehr im Spiel');
+  assert.ok(!R.unlockedUnits(st, 'player_1').includes('cargoballoon'));
+  assert.ok(R.trainUnit(st, city, 'balloon', 'player_1').ok);
+  const b = st.units.find(u => u.type === 'balloon');
+  assert.deepStrictEqual([b.q, b.r], [6, 5], 'steigt am Ballonplatz auf');
   assert.ok(!R.canTrain(st, city, 'warrior', 'player_1').ok, 'teilt den Landbauplatz');
+  // Vorhandene Lastenballone (alte Spielstände) funktionieren weiter.
+  const cb = unit('cb', 'player_1', 'cargoballoon', 6, 6);
+  st.units.push(cb);
   const w = unit('w', 'player_1', 'warrior', 7, 5);
   st.units.push(w);
   assert.ok(R.loadCargo(st, cb, w).ok);
@@ -1001,7 +1006,7 @@ test('Forschung: Voraussetzungen, Kostenskalierung, Philosophie-Rabatt', () => {
   assert.strictEqual(R.techCost(st, 'hunting', 'player_1'), 3 + 2 * 2, 'Tier1 * (1 + 2 Städte) + 2 je bekannter Technik');
   assert.strictEqual(R.techCost(st, 'smithery', 'player_1'), 4 * 3 + 2 * 2, 'Stufe 3: Faktor 4');
   assert.strictEqual(R.techCost(st, 'markets', 'player_1'), 6 * 3 + 2 * 2, 'Stufe 4: Faktor 6');
-  assert.strictEqual(R.techCost(st, 'banking', 'player_1'), 8 * 3 + 2 * 2, 'Stufe 5: Faktor 8');
+  assert.strictEqual(R.techCost(st, 'banking', 'player_1'), 7 * 3 + 2 * 2, 'Stufe 5: Faktor 7');
 
   const before = R.techCost(st, 'philosophy', 'player_1');
   st.techs.player_1.push('philosophy');
@@ -1482,7 +1487,12 @@ test('Riese nur als Belohnung, erscheint bei der Stadt', () => {
   assert.ok(!R.unlockedUnits(st, 'player_1').includes('giant'));
   assert.strictEqual(R.canTrain(st, city, 'giant', 'player_1').ok, false);
   city.pop = 4; city.pending = [5]; city.rewards = {};
-  R.chooseReward(st, city, 'giant', 'player_1');
+  st.stars.player_1 = UNITS.giant.cost - 1;
+  assert.strictEqual(R.chooseReward(st, city, 'giant', 'player_1').ok, false, 'kostet Sterne');
+  assert.deepStrictEqual(city.pending, [5], 'Belohnung bleibt offen');
+  st.stars.player_1 = UNITS.giant.cost + 3;
+  assert.ok(R.chooseReward(st, city, 'giant', 'player_1').ok);
+  assert.strictEqual(st.stars.player_1, 3);
   const g = st.units.find(u => u.type === 'giant');
   assert.ok(g && g.owner === 'player_1' && hexDistance(g.q, g.r, city.q, city.r) <= 1);
 });
@@ -1807,8 +1817,8 @@ test('Einheit auflösen erstattet die halben Kosten', () => {
   st.units = [k];
   const res = R.disbandUnit(st, k, 'player_1');
   assert.ok(res.ok);
-  assert.strictEqual(res.refund, 4);
-  assert.strictEqual(st.stars.player_1, 24);
+  assert.strictEqual(res.refund, 5);
+  assert.strictEqual(st.stars.player_1, 25);
   assert.strictEqual(st.units.length, 0);
   assert.strictEqual(R.disbandUnit(st, unit('x', 'player_2', 'warrior', 1, 1), 'player_1').ok, false);
 });

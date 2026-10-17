@@ -348,7 +348,7 @@ export function cityIncome(state, city) {
     }
   }
   if (hasReward(city, 'workshop')) s += 1;
-  if (hasReward(city, 'park')) s += 1;
+  if (hasReward(city, 'park')) s += 2;
   const perk = city.owner ? perkOf(state, city.owner) : null;
   if (perk === 'harvest') {
     s += cityTiles(state, city).filter(([q, r]) => improvementAt(state, q, r) === 'farm').length;
@@ -1206,6 +1206,7 @@ export function canTrain(state, city, type, player) {
     return { ok: false, reason: hasAbility(type, 'water') ? 'Schon ein Schiff gebaut' : 'Bereits ausgebildet' };
   }
   if (u.reward) return { ok: false, reason: 'Nur als Stadtbelohnung' };
+  if (u.retired) return { ok: false, reason: 'Nicht mehr im Spiel' };
   if (u.capital && !city.isCapital) return { ok: false, reason: 'Nur in der Hauptstadt' };
   if (u.tech && !state.techs[player].includes(u.tech)) return { ok: false, reason: 'Technologie fehlt' };
   // Schiffe laufen im Hafen vom Stapel, Landeinheiten in der Stadt.
@@ -2048,6 +2049,7 @@ export function canChooseReward(state, city, id, player) {
   const lvl = pendingLevel(city);
   if (!lvl) return { ok: false, reason: 'Keine Belohnung offen' };
   if (!own(REWARD_CHOICES, lvl) || !REWARD_CHOICES[lvl].includes(id)) return { ok: false, reason: 'Nicht wählbar' };
+  if (id === 'giant' && state.stars[player] < UNITS.giant.cost) return { ok: false, reason: `Zu wenig Sterne (Riese kostet ${UNITS.giant.cost})` };
   return { ok: true };
 }
 
@@ -2104,9 +2106,12 @@ export function chooseReward(state, city, id, player) {
   else if (id === 'explorer') revealAround(state, player, city.q, city.r, 4);
   else if (id === 'growth') growCity(state, city, 1);
   else if (id === 'giant') {
+    // Ohne freien Platz wird nichts bezahlt.
     const spot = freeLandNear(state, city.q, city.r, 'giant', player);
-    if (spot) spawnUnitAt(state, player, 'giant', spot[0], spot[1]);
-    else { state.stars[player] += UNITS.giant.cost; events.push({ kind: 'note', text: 'Kein Platz – stattdessen 10 Sterne' }); }
+    if (spot) {
+      state.stars[player] -= UNITS.giant.cost;
+      spawnUnitAt(state, player, 'giant', spot[0], spot[1]);
+    } else events.push({ kind: 'note', text: 'Kein Platz für den Riesen – keine Sterne bezahlt' });
     updateExplored(state, player);
   }
   return { ok: true, events };
