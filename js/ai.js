@@ -43,7 +43,19 @@ function seenOwner(state, player, c) {
   return mem ? mem.owner : null;
 }
 
+// Daten, die innerhalb eines Planungsschritts gleich bleiben (planStep legt
+// für jeden Schritt ein neues Objekt an, nichts überdauert einen Schritt).
+let stepCtx = { state: null };
+const stepData = state => (stepCtx.state === state ? stepCtx : (stepCtx = { state }));
+
 function targetCities(state, player) {
+  const ctx = stepData(state);
+  const key = 'targets|' + player;
+  if (!ctx[key]) ctx[key] = findTargetCities(state, player);
+  return ctx[key];
+}
+
+function findTargetCities(state, player) {
   return state.cities.filter(c => {
     if (!knownCity(state, player, c)) return false;
     const owner = seenOwner(state, player, c);
@@ -97,7 +109,9 @@ function defendStep(state, player) {
     if (R.unitAt(state, city.q, city.r) || !threatTo(state, player, city)) continue;
     const k = hk(city.q, city.r);
     const guard = state.units.find(u => u.owner === player && u.type !== 'settler' && u.type !== 'spy' && !R.isAir(u.type) &&
-      !u.carry && UNITS[u.type].atk > 0 && !R.cityAt(state, u.q, u.r) && reachOf(state, u).has(k));
+      !u.carry && UNITS[u.type].atk > 0 && !R.cityAt(state, u.q, u.r) &&
+      // Weiter als 2 Felder je Bewegung (Weg zu Weg) kommt keine Einheit.
+      hexDistance(u.q, u.r, city.q, city.r) <= Math.round(2 * u.mp) && reachOf(state, u).has(k));
     if (guard) return { kind: 'move', unit: guard, q: city.q, r: city.r };
     for (const t of ['defender', 'swordsman', 'archer', 'warrior']) {
       if (R.canTrain(state, city, t, player).ok) return { kind: 'train', city, type: t };
@@ -464,14 +478,37 @@ function cartMove(state, cart) {
 // Wertung beeinflusst (Einheit, Ziel, Einheiten und Städte in Reichweite,
 // Wege, Brücken, Gebäude wie Häfen, Frieden, Schonfrist) – der Merker ändert also nie das Ergebnis.
 const noMoveCache = new WeakMap();
+function noMoveMemo(state) {
+  let memo = noMoveCache.get(state.terrain);
+  if (!memo) { memo = new Map(); noMoveCache.set(state.terrain, memo); }
+  return memo;
+}
 
 function moveSig(state, unit, player, target) {
   const rad = 2 * Math.max(0, unit.mp) + 3;
-  const parts = [unit.q, unit.r, unit.mp, unit.hp, unit.acted ? 1 : 0, unit.hasMoved ? 1 : 0, unit.type, unit.carry || '',
-    target.q, target.r, state.round, state.techs[player].length,
-    Object.keys(state.roads || {}).length, Object.keys(state.bridges || {}).length, Object.keys(state.improvements || {}).length,
-    JSON.stringify(state.peace || null), JSON.stringify(state.provoked || null), (blockedList(state, player) || []).length];
-  for (const u of state.units) if (hexDistance(u.q, u.r, unit.q, unit.r) <= rad) parts.push(u.q, u.r, u.owner);
+  const ctx = stepData(state);
+  const base = 'sig|' + player;
+  if (!ctx[base]) {
+    ctx[base] = [state.round, state.techs[player].length,
+      Object.keys(state.roads || {}).length, Object.keys(state.bridges || {}).length, Object.keys(state.improvements || {}).length,
+      JSON.stringify(state.peace || null), JSON.stringify(state.provoked || null), (blockedList(state, player) || []).length].join(',');
+  }
+  const parts = [ctx[base], unit.q, unit.r, unit.mp, unit.hp, unit.acted ? 1 : 0, unit.hasMoved ? 1 : 0, unit.type, unit.carry || '',
+    target.q, target.r];
+  // Einheiten in Reichweite über ein grobes Raster (8×8-Felder) statt alle durchsuchen.
+  if (!ctx.grid) {
+    ctx.grid = new Map();
+    for (const u of state.units) {
+      const g = (u.q >> 3) + ':' + (u.r >> 3);
+      if (!ctx.grid.has(g)) ctx.grid.set(g, []);
+      ctx.grid.get(g).push(u);
+    }
+  }
+  for (let gr = (unit.r - rad) >> 3; gr <= (unit.r + rad) >> 3; gr++) {
+    for (let gq = (unit.q - rad) >> 3; gq <= (unit.q + rad) >> 3; gq++) {
+      for (const u of ctx.grid.get(gq + ':' + gr) || []) if (hexDistance(u.q, u.r, unit.q, unit.r) <= rad) parts.push(u.q, u.r, u.owner);
+    }
+  }
   parts.push('|');
   // Belohnungen zählen mit: die Grenzerweiterung ändert, wo eigene Wege gelten.
   for (const c of state.cities) {
@@ -493,8 +530,7 @@ function bestMove(state, unit, player) {
   }
   let memo = null, sig = null;
   if (target && unit.id) {
-    memo = noMoveCache.get(state.terrain);
-    if (!memo) { memo = new Map(); noMoveCache.set(state.terrain, memo); }
+    memo = noMoveMemo(state);
     sig = moveSig(state, unit, player, target);
     if (memo.get(unit.id) === sig) return null;
   }
@@ -543,12 +579,17 @@ function lighthouseMove(state, unit) {
   const [lq, lr] = open.reduce((a, b) =>
     hexDistance(unit.q, unit.r, a[0], a[1]) <= hexDistance(unit.q, unit.r, b[0], b[1]) ? a : b);
   const cur = hexDistance(unit.q, unit.r, lq, lr);
+  // Wie bei bestMove: "kein Zug" gilt weiter, solange sich nichts ändert.
+  const memo = unit.id ? noMoveMemo(state) : null;
+  const sig = memo && 'L' + moveSig(state, unit, unit.owner, { q: lq, r: lr });
+  if (memo && memo.get('L' + unit.id) === sig) return null;
   let best = null;
   for (const k of reachOf(state, unit).keys()) {
     const [q, r] = k.split(',').map(Number);
     const d = hexDistance(q, r, lq, lr);
     if (d < cur && (!best || d < best.d)) best = { q, r, d };
   }
+  if (memo) { if (best) memo.delete('L' + unit.id); else memo.set('L' + unit.id, sig); }
   return best ? { kind: 'move', unit, q: best.q, r: best.r } : null;
 }
 
@@ -802,6 +843,7 @@ export function botStep(state, player) {
 }
 
 function planStep(state, player) {
+  stepCtx = { state };
   const mine = state.units.filter(u => u.owner === player);
   const easy = state.aiLevel === 'easy' && R.isBot(state, player);
 
