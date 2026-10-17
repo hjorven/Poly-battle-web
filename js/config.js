@@ -103,6 +103,13 @@ export const ABILITY_INFO = {
 export const BANNER_ATK = 0.5;
 export const RANGER_FOREST_ATK = 1;
 
+// Eintrag einer Tabelle nur über eigene Schlüssel: IDs aus Zugprotokoll,
+// Online-Stand oder Klicks dürfen nie auf Object.prototype zeigen
+// („__proto__“, „constructor“ …).
+export function own(table, key) {
+  return (typeof key === 'string' || typeof key === 'number') && Object.hasOwn(table, key) ? table[key] : undefined;
+}
+
 export function hasAbility(type, name) {
   return (UNITS[type].abilities || []).includes(name);
 }
@@ -340,7 +347,7 @@ export const TRIBES = {
 export const TRIBE_POOL = Object.keys(TRIBES);
 
 export function tribeColor(tribeId) {
-  const t = TRIBES[tribeId];
+  const t = own(TRIBES, tribeId);
   return t ? t.color : COLORS.neutral;
 }
 

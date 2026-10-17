@@ -297,27 +297,27 @@ export function toast(text, cls = '') {
 }
 
 function chip(player, state, ctx) {
-  const s = state.stars[player];
+  const s = num(state.stars[player]);
   const cities = state.cities.filter(c => c.owner === player).length;
   const units = state.units.filter(u => u.owner === player).length;
   const active = state.turn === player && !state.winner;
   const me = ctx.mode !== 'online' || ctx.myRole === player;
-  const name = tribeName(state, player) || NAMES[player];
+  const name = esc(tribeName(state, player) || NAMES[player] || player);
   if (cities === 0) {
     const e = state.eliminated && state.eliminated[player];
-    const by = e && e.by ? ` von ${tribeName(state, e.by) || NAMES[e.by]}` : '';
-    return `<div class="chip dead" title="Besiegt${by}${e ? ` in Runde ${e.round}` : ''}">
+    const by = e && e.by ? ` von ${esc(tribeName(state, e.by) || NAMES[e.by] || e.by)}` : '';
+    return `<div class="chip dead" title="Besiegt${by}${e ? ` in Runde ${num(e.round)}` : ''}">
       <span class="dot" style="background:${hex(playerColor(state, player))}"></span>
       <span class="dead-name">${name}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
-      <span class="dead-tag">besiegt${e ? ` · Runde ${e.round}` : ''}</span>
+      <span class="dead-tag">besiegt${e ? ` · Runde ${num(e.round)}` : ''}</span>
     </div>`;
   }
   const meta = `${cities} ${cities === 1 ? 'Stadt' : 'Städte'}, ${units} ${units === 1 ? 'Einheit' : 'Einheiten'}${state.turnLimit ? `, ${score(state, player)} Punkte` : ''}`;
-  return `<div class="chip ${active ? 'active' : ''}" title="${esc(name)}: ${s} Sterne, ${meta}">
+  return `<div class="chip ${active ? 'active' : ''}" title="${name}: ${s} Sterne, ${esc(meta)}">
     <span class="dot" style="background:${hex(playerColor(state, player))}"></span>
     <span>${name}${ctx.mode === 'online' && me ? ' (du)' : ''}</span>
     <span class="stars">${s}</span>
-    ${state.turnLimit ? `<span class="pts">${score(state, player)} P</span>` : ''}
+    ${state.turnLimit ? `<span class="pts">${num(score(state, player))} P</span>` : ''}
   </div>`;
 }
 
@@ -331,7 +331,8 @@ export function updateStrip(state, ctx) {
   const tr = $('treasury');
   if (me && state.stars[me] != null) {
     const inc = incomeFor(state, me);
-    tr.innerHTML = `<span class="tr-hex" aria-hidden="true"></span><span class="tr-num">${state.stars[me]}</span><span class="tr-txt"><span class="tr-lbl">${state.stars[me] === 1 ? 'Stern' : 'Sterne'}</span><span class="tr-inc">+${inc} nächste Runde</span></span>`;
+    const have = num(state.stars[me]);
+    tr.innerHTML = `<span class="tr-hex" aria-hidden="true"></span><span class="tr-num">${have}</span><span class="tr-txt"><span class="tr-lbl">${have === 1 ? 'Stern' : 'Sterne'}</span><span class="tr-inc">+${num(inc)} nächste Runde</span></span>`;
     tr.title = `${state.stars[me]} Sterne, nächste Runde kommen ${inc} dazu`;
   } else tr.innerHTML = '';
   $('round-label').textContent = 'Runde ' + state.round + (state.turnLimit ? ' / ' + state.turnLimit : '');
@@ -1008,7 +1009,7 @@ export function showUnitPanel(state, unit, ctx) {
     }
     const loads = loadOptions(state, unit);
     if (loads.length) {
-      extra += `<div class="action-list">${loads.map(u => `<button class="btn action" data-load="${u.id}">
+      extra += `<div class="action-list">${loads.map(u => `<button class="btn action" data-load="${esc(u.id)}">
         <span>Aufnehmen: ${esc(UNITS[u.type].name)} (${DIR_NAMES[dirTo(u.q, u.r)]})<span class="sub">Die Einheit fliegt mit</span></span></button>`).join('')}</div>`;
     }
     const breakable = destroyableBridges(state, unit);
@@ -1099,7 +1100,7 @@ function switchToUnit(state, city, ctx) {
   if (!u) return '';
   const def = UNITS[u.carry || u.type];
   const mine = u.owner === ctx.actAs;
-  return `<button class="btn small unit-in-city" data-open-unit="${u.id}" title="Steht in der Stadt${mine ? ' – ziehen, angreifen, auflösen' : ''}">${mine ? 'Einheit wählen' : 'Einheit ansehen'}: ${def.name}</button>`;
+  return `<button class="btn small unit-in-city" data-open-unit="${esc(u.id)}" title="Steht in der Stadt${mine ? ' – ziehen, angreifen, auflösen' : ''}">${mine ? 'Einheit wählen' : 'Einheit ansehen'}: ${def.name}</button>`;
 }
 
 export function showCityPanel(state, city, ctx) {
@@ -1516,7 +1517,7 @@ const stars = n => `${n} ${n === 1 ? 'Stern' : 'Sterne'}`;
 
 function buildHead(after = null) {
   const st = build.state, owner = build.city.owner;
-  return `${stars(st.stars[owner])}<span class="bh-inc">, Einkommen ${build.income}${after != null && after !== build.income ? `, danach <b>${after}</b>` : ''} pro Runde</span>`;
+  return `${stars(num(st.stars[owner]))}<span class="bh-inc">, Einkommen ${build.income}${after != null && after !== build.income ? `, danach <b>${after}</b>` : ''} pro Runde</span>`;
 }
 
 function neighbourText(state, changed) {
@@ -1787,7 +1788,7 @@ function renderTechDetail(state, ctx) {
   let reason = '';
   if (status === 'done') reason = 'Bereits erforscht';
   else if (status === 'locked') reason = `Benötigt zuerst: ${TECHS[t.req].name}`;
-  else if (status === 'poor') reason = `Zu wenig Sterne (${state.stars[ctx.actAs]} von ${cost})`;
+  else if (status === 'poor') reason = `Zu wenig Sterne (${num(state.stars[ctx.actAs])} von ${cost})`;
   else if (!ctx.myTurn) reason = 'Nicht dein Zug';
   box.innerHTML = `
     <div class="td-head">
@@ -2043,8 +2044,8 @@ function statsHtml(state, ctx) {
     const sc = state.finalScores ? state.finalScores[player] : b.score;
     return `<tr class="${player === me ? 'me' : ''}">
       <td class="num">${i + 1}.</td>
-      <td><span class="dot" style="background:${hex(playerColor(state, player))}"></span>${playerLabel(state, player)}${player === me ? ' (du)' : ''}</td>
-      <td class="num">${sc}</td><td class="num">${b.cities}</td><td class="num">${b.pop}</td>
+      <td><span class="dot" style="background:${hex(playerColor(state, player))}"></span>${esc(playerLabel(state, player))}${player === me ? ' (du)' : ''}</td>
+      <td class="num">${num(sc)}</td><td class="num">${b.cities}</td><td class="num">${b.pop}</td>
       <td class="num">${b.techs}</td><td class="num">${b.units}</td><td class="num">${b.ruins}</td><td class="num">${b.lighthouses}</td>
     </tr>`;
   }).join('');
@@ -2108,7 +2109,7 @@ export function renderMyMatches(list) {
   const rank = m => m.myTurn ? 0 : m.open ? 1 : 2;
   const rows = [...list].sort((a, b) => rank(a) - rank(b)).map(m =>
     `<button class="match-row${m.myTurn ? ' my-turn' : ''}" data-match="${esc(m.id)}">
-      <span class="match-what">Runde ${m.round} · ${esc(ago(m.last_move_at))}</span>
+      <span class="match-what">Runde ${num(m.round)} · ${esc(ago(m.last_move_at))}</span>
       <span class="match-state">${esc(state(m))}</span>
     </button>`).join('');
   box.innerHTML = `<h3 class="menu-h">Deine Online-Partien</h3><div class="my-matches-list">${rows}</div>`;
@@ -2151,6 +2152,8 @@ export function hideConfirm() {
 
 const fmtMp = n => String(n).replace('.', ',');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Zahlen aus dem Spielstand (online von Mitspielern) nie als Text ins HTML.
+const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
 function unitStatus(u, actAs) {
   if (u.owner !== actAs) return 'fremd';
@@ -2189,7 +2192,7 @@ export function showOverview(state, ctx) {
     body = myUnits.length ? `<table class="ov-table"><thead><tr><th>Einheit</th><th>Werte</th><th>Status</th></tr></thead><tbody>${myUnits.slice().sort((a, b) => order(a) - order(b)).map(u => {
       const def = UNITS[u.type];
       const st = unitStatus(u, actAs);
-      return `<tr data-unit="${u.id}" tabindex="0" class="${st === 'aktiv' ? '' : 'ov-dim'}"><td><b>${def.name}</b>${u.vet ? ' <span class="ov-tag good">Veteran</span>' : ''}</td>
+      return `<tr data-unit="${esc(u.id)}" tabindex="0" class="${st === 'aktiv' ? '' : 'ov-dim'}"><td><b>${def.name}</b>${u.vet ? ' <span class="ov-tag good">Veteran</span>' : ''}</td>
         <td><span class="ov-stats">${stat('heart', `${u.hp}/${hpCap(u)}`)}${stat('sword', fmtMp(attackOf(state, u)))}${stat('shield', defenseOf(state, u))}</span></td>
         <td>${st === 'aktiv' ? '<span class="ov-tag">bereit</span>' : esc(st)}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="hint">Du hast keine Einheiten.</div>';
@@ -2204,10 +2207,10 @@ export function showOverview(state, ctx) {
       if (pendingOffer(state, actAs, p)) status += ', Angebot gesendet';
       let action = '';
       if (met && ctx.myTurn) {
-        if (peace) action = `<button class="btn ghost small" data-war="${p}">Krieg erklären</button>`;
+        if (peace) action = `<button class="btn ghost small" data-war="${esc(p)}">Krieg erklären</button>`;
         else {
           const chk = canOfferPeace(state, actAs, p);
-          action = `<button class="btn ghost small" data-peace="${p}" ${chk.ok ? '' : 'disabled'} title="${esc(chk.reason || 'Frieden anbieten')}">Frieden anbieten</button>`;
+          action = `<button class="btn ghost small" data-peace="${esc(p)}" ${chk.ok ? '' : 'disabled'} title="${esc(chk.reason || 'Frieden anbieten')}">Frieden anbieten</button>`;
           if (!chk.ok) status += `, ${chk.reason}`;
         }
       }
@@ -2227,9 +2230,9 @@ export function showOverview(state, ctx) {
 
   menu.innerHTML = `
     <div class="ov-sum">
-      <div class="stat">Sterne<b>${state.stars[actAs]}</b></div>
+      <div class="stat">Sterne<b>${num(state.stars[actAs])}</b></div>
       <div class="stat">Einkommen<b>+${incomeFor(state, actAs)}</b></div>
-      <div class="stat">Runde<b>${state.round}${state.turnLimit ? '/' + state.turnLimit : ''}</b></div>
+      <div class="stat">Runde<b>${num(state.round)}${state.turnLimit ? '/' + num(state.turnLimit) : ''}</b></div>
       <div class="stat">Punkte<b>${score(state, actAs)}</b></div>
     </div>
     ${perk ? `<div class="hint ov-perk"><b>${esc(perk.name)}:</b> ${esc(perk.desc)}</div>` : ''}
