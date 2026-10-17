@@ -177,6 +177,12 @@ function loadSettings() {
   if (!GAME_MODES[settings.gamemode]) settings.gamemode = 'conquest';
 }
 
+export function markTips() {
+  let on = true;
+  try { on = localStorage.getItem('pb_tips') !== '0'; } catch (e) { on = true; }
+  document.querySelectorAll('[data-tips]').forEach(b => b.classList.toggle('active', (b.dataset.tips === '1') === on));
+}
+
 function buildSettings() {
   const wrap = $('settings-box');
   if (!wrap) return;
@@ -221,6 +227,12 @@ function buildSettings() {
     markView();
   }));
   markView();
+  // Spielhinweise in normalen Partien (main.js tipTick).
+  wrap.querySelectorAll('[data-tips]').forEach(b => b.addEventListener('click', () => {
+    try { localStorage.setItem('pb_tips', b.dataset.tips); } catch (e) { /* ignore */ }
+    markTips();
+  }));
+  markTips();
   loadSettings();
   wrap.addEventListener('click', e => { if (e.target.closest('button')) saveSettings(); });
   const bots = wrap.querySelectorAll('[data-bots]');
@@ -453,28 +465,32 @@ export function showTutor({ head, progress, text, buttons = [], focus = null, ti
   if (!inline) placeTutor(box, targets, tile);
 }
 
-// Oben oder unten hinsetzen: dort, wo die Karte weder das Ziel noch Tipp,
-// Meldungen oder die untere Leiste verdeckt.
+// Links neben die Karte, damit sie die Karte nicht verdeckt; die Kamera rückt
+// die Mitte dafür nach rechts. Nur auf schmalen Bildschirmen (Handy hochkant)
+// oben oder unten: dort, wo sie weder Ziel noch Tipp, Meldungen oder die
+// untere Leiste verdeckt.
 function placeTutor(box, targets, tile) {
   const avoid = targets.map(e => e.getBoundingClientRect());
   if (tile) { const p = project(tile[0], tile[1]); if (p) avoid.push({ left: p.x - 40, right: p.x + 40, top: p.y - 50, bottom: p.y + 30 }); }
   const shown = id => { const e = $(id); return e && !e.classList.contains('hidden') && e.getBoundingClientRect().height ? e.getBoundingClientRect() : null; };
   const others = ['coach', 'news', 'mission-bar'].map(shown).filter(Boolean);
-  const H = window.innerHeight;
+  const W = window.innerWidth, H = window.innerHeight;
   const hud = $('topbar').getBoundingClientRect().bottom;
-  // Handy quer: wenig Höhe, deshalb schmal links neben der Karte.
-  const side = document.documentElement.classList.contains('phone') && window.innerWidth > H;
+  const portraitPhone = document.documentElement.classList.contains('phone') && H > W;
+  const side = !portraitPhone && W >= 640;
   box.classList.toggle('tu-side', side);
   // Untere Leisten (Stadt, Einheit), sofern sie nicht selbst das Ziel enthalten.
   const bars = ['panel', 'unit-chip'].map(shown).filter(Boolean);
   const barTop = Math.min(H, ...bars.map(r => r.top));
   if (side) {
-    const bottomBars = ['panel', 'unit-chip'].map(shown).filter(Boolean);
-    const limit = Math.min(H, ...bottomBars.map(r => r.top)) - 8;
-    box.style.top = Math.round(hud + 6) + 'px';
+    const limit = Math.min(H, ...bars.filter(r => r.left < 340).map(r => r.top)) - 8;
+    // Meldungen stehen ebenfalls links oben: darunter, wenn genug Platz bleibt.
+    const news = shown('news');
+    let top = hud + 6;
+    if (news && limit - (news.bottom + 8) >= 150) top = news.bottom + 8;
+    box.style.top = Math.round(top) + 'px';
     box.style.bottom = 'auto';
-    box.style.maxHeight = Math.max(90, Math.round(limit - hud - 6)) + 'px';
-    // Karte rechts daneben zentrieren, damit die Box Einheit und Zielfelder nicht verdeckt.
+    box.style.maxHeight = Math.max(90, Math.round(limit - top)) + 'px';
     setViewInset(box.getBoundingClientRect().right / 2);
     return;
   }
@@ -482,7 +498,6 @@ function placeTutor(box, targets, tile) {
   box.style.maxHeight = '';
   const h = box.offsetHeight || 120;
   const spots = [{ top: hud + 8 }, { top: barTop - 8 - h }, { top: H - 14 - h }];
-  const portraitPhone = document.documentElement.classList.contains('phone') && H > window.innerWidth;
   if (portraitPhone) spots.unshift(spots.splice(1, 1)[0]);
   const hits = (top, rects) => rects.some(r => r.bottom > top && r.top < top + h);
   const free = spots.filter(s => s.top >= hud + 4 && s.top + h <= H);
