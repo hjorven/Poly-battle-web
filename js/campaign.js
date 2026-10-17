@@ -12,7 +12,8 @@ export const MISSIONS = [
     story: 'Ein kleines Tal, ein schwacher Nachbar. Gründe dein Reich.',
     goal: 'Nimm ein Dorf ein (2 Städte).',
     setup: { mapSize: 'small', mapType: 'continents', count: 2, aiLevel: 'easy', tribe: 'imperius' },
-    progress: st => [mine(st).length, 2], par: [8, 5]
+    // Nur Eroberungen zählen, eine selbst gegründete Stadt erfüllt das Ziel nicht.
+    progress: st => [Math.min(mine(st).length, 1 + ((st.capturesBy && st.capturesBy[ME]) || 0)), 2], par: [8, 5]
   },
   {
     id: 'm2', title: 'Alte Mauern',

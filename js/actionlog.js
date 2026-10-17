@@ -125,8 +125,13 @@ export function replayChallenge(kind, key, log) {
     let valid = false;
     try { valid = apply(state, log[i], me); } catch (e) { valid = false; }
     if (!valid) return { error: `Eintrag ${i} (${log[i] && log[i].k}) ist nach den Regeln nicht möglich` };
+    // Sterne müssen immer eine normale Zahl bleiben (NaN machte früher jede
+    // Kostenprüfung wirkungslos).
+    const bad = Object.keys(state.stars || {}).find(p => !Number.isFinite(state.stars[p]));
+    if (bad) return { error: `Eintrag ${i}: Sterne von ${bad} sind keine Zahl` };
   }
   if (!state.winner && !R.isEliminated(state, me)) return { error: 'Partie ist nicht zu Ende gespielt' };
   const score = state.finalScores && state.finalScores[me] != null ? state.finalScores[me] : R.score(state, me);
+  if (!Number.isFinite(score)) return { error: 'Punktzahl ist keine Zahl' };
   return { state, score, round: state.round, tribe: state.tribes ? state.tribes[me] : null };
 }
