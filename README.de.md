@@ -18,7 +18,7 @@ Rundenbasierte Eroberung im Browser, angelehnt an *The Battle of Polytopia*: Gr�
 - **KI-Lehrling:** Der Knopf „Tipp“ zeigt und erklärt, was die KI an deiner Stelle tun würde.
 - **Wiederholung:** Nach Spielende jede Runde ansehen oder die ganze Partie im Zeitraffer ablaufen lassen.
 - **Ausbalanciert:** Stämme und Einheiten werden mit KI-Turnieren gemessen (240 Partien: jeder Stamm gewinnt 16–31 %).
-- **Spielmodi:** gegen die KI, Hotseat an einem Gerät, online per Link (mit Aufgeben, Zugzeit und einer Liste deiner Partien), Tutorial, 13 Kampagnen-Missionen, Tages- und Wochen-Herausforderung mit Bestenliste.
+- **Spielmodi:** gegen die KI, Hotseat an einem Gerät, online per Link (mit Aufgeben, Zugzeit und einer Liste deiner Partien), Tutorial in fünf Lektionen (Grundlagen, Städte, Forschung und Bauen, Kampf, Erkunden), 13 Kampagnen-Missionen, Tages- und Wochen-Herausforderung mit Bestenliste.
 - **Profil** mit Stufen, 20 Erfolgen, freischaltbarem Aussehen und Statistik; mit dem Profil-Code geht es auf jedem Gerät weiter.
 - **Freie Karte:** Die Bedienung liegt in schwebenden Kärtchen an den Rändern. Wählst du eine Stadt oder Einheit, steht ein Schild mit ihren Werten direkt daran, die Aktionen liegen als Werkzeugreihe unten – angelehnt an Mini Metro.
 - **Bedienung** mit Maus und Tastatur oder Touch; Ziehen und Angreifen brauchen zwei Tipps, damit nichts aus Versehen passiert. Kein Rückgängig – jeder Zug zählt.

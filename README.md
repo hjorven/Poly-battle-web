@@ -20,7 +20,7 @@ Turn-based conquest in the browser, inspired by *The Battle of Polytopia*: found
 - **AI apprentice:** the “Tipp” (Hint) button shows and explains what the AI would do in your place.
 - **Replay:** after the game, watch every turn or run the whole match as a time-lapse.
 - **Balanced:** tribes and units are measured in AI tournaments (240 games: every tribe wins 16–31 %).
-- **Game modes:** against the AI, hotseat on one device, online via link (with resigning, turn timer and a list of your matches), tutorial, 13 campaign missions, daily and weekly challenge with leaderboard.
+- **Game modes:** against the AI, hotseat on one device, online via link (with resigning, turn timer and a list of your matches), tutorial in five lessons (basics, cities, research and building, combat, exploring), 13 campaign missions, daily and weekly challenge with leaderboard.
 - **Profile** with levels, 20 achievements, unlockable cosmetics and statistics; with the profile code you can continue on any device.
 - **Open map:** the controls sit in floating cards along the edges. Select a city or unit and a sign with its stats appears right next to it, with the actions in a toolbar at the bottom – inspired by Mini Metro.
 - **Controls** with mouse and keyboard or touch; moving and attacking take two taps so nothing happens by accident. No undo – every move counts.

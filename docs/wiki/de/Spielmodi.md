@@ -9,7 +9,7 @@ Alle Modi starten im Menü unter **Spielen**. Stamm und Spieleinstellungen (Kart
 | **Gegen KI** | du gegen 1–5 KI-Stämme | nein | im Browser, „Weiterspielen“ im Menü |
 | **Hotseat** | 2–5 Menschen an einem Gerät | nein | im Browser |
 | **Online** | 2–5 Menschen, optional 0–3 KI | ja | auf dem Server, über den Link erreichbar |
-| **Tutorial** | du gegen eine leichte KI, mit Anleitung | nein | im Browser |
+| **Tutorial** | fünf kurze Lektionen (Grundlagen, Städte, Forschung und Bauen, Kampf, Erkunden und Hilfen), jede auf einer eigenen kleinen Übungskarte; jeder Schritt hebt den Knopf oder das Feld hervor, um das es geht | nein | im Browser |
 | **Tagesherausforderung** | gleiche Karte für alle, 30 Runden | nur für die Bestenliste | im Browser |
 | **Wochen-Herausforderung** | feste Karte mit Sonderregel | nur für die Bestenliste | im Browser |
 | **Kampagne** | 13 Missionen | nein | im Browser |

@@ -8,6 +8,7 @@ import { saveGame, loadGame, saveInfo, clearSave, validState } from './save.js';
 import * as P from './profile.js';
 import { shareResult } from './share.js';
 import * as K from './campaign.js';
+import * as T from './tutorial.js';
 import * as AP from './admin-panel.js';
 import * as L from './actionlog.js';
 import { checkName } from './names.js';
@@ -109,10 +110,10 @@ function refresh() {
   announceMonuments();
   showNews();
   turnStartFeedback();
-  tutorTick();
   missionTick();
   render.drawMinimap(app.state, viewer());
   updateSelection();
+  tutorTick();
   checkWinnerUI();
   AP.update();
 }
@@ -1180,59 +1181,153 @@ async function onHexPick(key) {
 }
 
 // --- Tutorial ---------------------------------------------------------------
-// Schritte mit Erfolgsbedingung; `base` merkt sich Werte vom Schrittbeginn.
-const TUTOR = [
-  { text: 'Willkommen! Das ist deine Hauptstadt mit einem Krieger. Tippe den Krieger an (oder drücke die Leertaste).',
-    done: () => app.sel && app.sel.kind === 'unit' },
-  { text: 'Die hellen Felder zeigen, wohin er ziehen kann. Tippe ein helles Feld an – es leuchtet gelb – und tippe es zum Bestätigen noch einmal an. So ziehst du nie aus Versehen. Der Nebel lichtet sich, wo deine Einheiten sind.',
-    done: st => st.units.some(u => u.owner === 'player_1' && u.hasMoved) },
-  { text: 'Gut! Graue Städte sind neutrale Dörfer: Ziehe hinein, um sie einzunehmen. Ruinen (Steinsäulen) bringen Belohnungen. Wenn deine Einheiten fertig sind, tippe oben auf „Zug beenden“.',
-    done: (st, base) => st.round > base.round },
-  { text: 'Jede Runde bekommst du Sterne: die große Zahl oben links, darunter steht, wie viele nächste Runde dazukommen. Tippe deine Hauptstadt an und bilde unter „Einheiten ausbilden“ eine Einheit aus. Steht dort eine Einheit, tippe die Stadt mehrmals an.',
-    init: st => ({ units: st.units.filter(u => u.owner === 'player_1').length }),
-    done: (st, base) => st.cities.some(c => c.owner === 'player_1' && c.trained) },
-  { text: 'Öffne oben die „Forschung“ und erforsche eine Technologie. Sie schaltet neue Einheiten, Gebäude und Fähigkeiten frei – zum Beispiel Landwirtschaft für Farmen.',
-    init: st => ({ techs: st.techs.player_1.length }),
-    done: (st, base) => st.techs.player_1.length > base.techs },
-  { text: 'Tippe deine Hauptstadt an und dann „Ausbauen“: Du siehst dein Stadtgebiet in 3D. Orange markierte Felder kannst du jetzt bebauen – tippe eins an und wähle ein Gebäude. Jedes zeigt, wie viele Sterne es pro Runde mehr bringt.',
-    init: st => ({ built: Object.keys(st.improvements || {}).filter(k => { const [q, r] = k.split(',').map(Number); const c = R.tileCity(st, q, r); return c && c.owner === 'player_1'; }).length }),
-    done: (st, base) => Object.keys(st.improvements || {}).filter(k => { const [q, r] = k.split(',').map(Number); const c = R.tileCity(st, q, r); return c && c.owner === 'player_1'; }).length > base.built,
-    next: 'Später' },
-  { text: 'Der Knopf „bereit“ oben zeigt, wie viele Einheiten noch handeln können, und springt zur nächsten (auch mit der Leertaste). Ein roter Ring warnt dich, wenn eine Stadt im nächsten Zug angegriffen werden kann.',
-    next: 'Weiter' },
-  { text: 'Ziel: Nimm die Hauptstadt des Gegners ein. Mehr steht im Menü unter „Anleitung“, z. B. zu Brücken, Wegen, Leuchttürmen und Monumenten. Viel Erfolg!',
-    next: 'Fertig' }
-];
+// Lektionen und Schritte stehen in tutorial.js. Hier läuft der Ablauf: Schritt
+// prüfen, Ziel (Knopf oder Feld) hervorheben, Text erst zeigen, wenn das Ziel
+// zu sehen ist. Ein kurzer Takt fängt auch Fenster ein, die ohne refresh()
+// auf- und zugehen (Forschung, Ausbauen, Übersicht).
+const tutor = { timer: null, focusKey: '' };
+// Fenster, in denen die Tutorial-Karte als Leiste oben im Fenster weiterläuft.
+const TUTOR_INLINE = { 'tech-overlay': '#techClose', 'build-overlay': '#buildClose', 'overview-overlay': '#overviewClose' };
+
+function tutorCtx() {
+  return {
+    st: app.state, sel: app.sel, pending: app.pending, open: ui.openOverlay(),
+    phone: document.documentElement.classList.contains('phone'),
+    touch: !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches),
+    has: sel => ui.tutorVisible(sel)
+  };
+}
+
+function stopTutor() {
+  tutor.last = null;
+  if (tutor.timer) { clearInterval(tutor.timer); tutor.timer = null; }
+  tutor.focusKey = '';
+  ui.hideTutor();
+  render.setTutorMarker(null);
+}
+
+function tutorAdvance(t, lesson) {
+  t.step++;
+  const nx = lesson.steps[t.step];
+  t.base = nx ? { round: app.state.round, ...(nx.init ? nx.init(app.state) : {}) } : {};
+}
 
 function tutorTick() {
   const st = app.state;
-  const t = st && st.tutorial;
-  if (!t || app.mode !== 'bot' || st.winner) { ui.hideTutor(); return; }
-  let step = TUTOR[t.step];
-  while (step && step.done && step.done(st, t.base || {})) {
-    t.step++;
-    step = TUTOR[t.step];
-    t.base = step ? { round: st.round, ...(step.init ? step.init(st) : {}) } : {};
-    sfx('select');
-    persist();
+  let t = st && st.tutorial;
+  // Spielstände mit dem alten Tutorial (eine lange Schrittliste) laufen frei weiter.
+  if (t && !t.lesson) { delete st.tutorial; t = null; }
+  const lesson = t && T.lessonById(t.lesson);
+  if (!t || !lesson || app.mode !== 'bot' || st.winner || app.reviewing) { stopTutor(); return; }
+  if (!tutor.timer) tutor.timer = setInterval(tutorTick, 400);
+  const c = tutorCtx();
+  tutor.last = null;
+  if (t.finished) {
+    render.setTutorMarker(null);
+    if (c.open && !TUTOR_INLINE[c.open]) { ui.hideTutor(); return; }
+    tutor.last = { lesson: lesson.id, finished: true };
+    const idx = T.LESSONS.indexOf(lesson), nx = T.LESSONS[idx + 1];
+    ui.showTutor({
+      head: `Tutorial · ${lesson.title}`, progress: 1,
+      text: `Lektion „${lesson.title}“ geschafft!${nx ? ` Als Nächstes: „${nx.title}“.` : ' Du kennst jetzt alle Lektionen.'}`,
+      buttons: [['free', 'Frei weiterspielen'], ['lessons', 'Alle Lektionen'], ...(nx ? [['nextLesson', 'Nächste Lektion', true]] : [])],
+      inline: c.open || null
+    });
+    return;
   }
-  if (!step) { delete st.tutorial; ui.hideTutor(); persist(); return; }
-  ui.showTutor({ text: step.text, step: t.step, total: TUTOR.length, next: step.next });
+  let step = lesson.steps[t.step];
+  if (myTurn() && !app.busy) {
+    while (step && step.done && step.done(st, t.base || {}, c)) {
+      tutorAdvance(t, lesson);
+      step = lesson.steps[t.step];
+      sfx('select');
+      persist();
+    }
+  }
+  if (!step) { finishLesson(); return; }
+  // Während die KI zieht oder ein Dialog offen ist (Menü, Bestätigung,
+  // Belohnung): Karte ausblenden, die Dialoge erklären sich selbst.
+  if (!myTurn() || app.busy || (c.open && !TUTOR_INLINE[c.open])) { ui.hideTutor(); render.setTutorMarker(null); return; }
+
+  // Fehlt eine Voraussetzung, zeigt der Schritt erst deren Text.
+  let v = step, needIdx = -1;
+  (step.need || []).some((n, i) => { if (n.when(c)) { v = n; needIdx = i; return true; } return false; });
+  let text = typeof v.text === 'function' ? v.text(c) : v.text;
+  let el = v.el || null;
+  let tile = v.tile ? v.tile(st) : null;
+  let manual = v === step && !!step.next;
+  const closeOpen = () => { text = 'Schließe zuerst dieses Fenster.'; el = TUTOR_INLINE[c.open]; tile = null; manual = false; };
+  if (tile && (c.open || !R.isExplored(st, 'player_1', tile[0], tile[1]))) {
+    if (c.open) closeOpen();
+    else tile = null;
+  }
+  if (el && !ui.tutorVisible(el)) {
+    const node = document.querySelector(el);
+    const inOpen = node && c.open && node.closest('#' + c.open);
+    if (inOpen) { /* im offenen Fenster, nur weggescrollt: Text bleibt */ } else if (c.open) closeOpen();
+    else if (c.phone && node && node.closest('#topbar') && ui.tutorVisible('#moreBtn')) {
+      text = `Der Knopf „${node.textContent.trim()}“ liegt unter „Mehr“. Tippe oben rechts auf „Mehr“ (die drei Striche).`; el = '#moreBtn'; manual = false;
+    } else { ui.hideTutor(); render.setTutorMarker(null); return; }
+  }
+  // Kamera einmal pro Schritt zum Feld fahren, dann darf man frei schauen.
+  const key = `${lesson.id}:${t.step}:${needIdx}:${tile ? tile.join(',') : ''}`;
+  if (key !== tutor.focusKey) {
+    tutor.focusKey = key;
+    if (tile) render.cameraTo(tile[0], tile[1]);
+  }
+  render.setTutorMarker(tile);
+  tutor.last = { lesson: lesson.id, step: t.step, text, el, tile, manual };
+  ui.showTutor({
+    head: `Tutorial · ${lesson.title} · Schritt ${t.step + 1} von ${lesson.steps.length}`,
+    progress: (t.step + 1) / lesson.steps.length,
+    text, focus: el, tile, inline: c.open || null,
+    buttons: [['skip', 'Tutorial beenden'], ...(manual ? [['next', step.next, true]] : [])]
+  });
+}
+
+function finishLesson() {
+  const t = app.state.tutorial;
+  T.markDone(t.lesson);
+  t.finished = true;
+  persist();
+  sfx('promote');
+  tutorTick();
 }
 
 function onTutor(action) {
   const st = app.state;
   if (!st || !st.tutorial) return;
-  const step = TUTOR[st.tutorial.step];
-  if (action === 'next' && step && step.next) {
-    st.tutorial.step++;
-    const nx = TUTOR[st.tutorial.step];
-    st.tutorial.base = nx ? { round: st.round, ...(nx.init ? nx.init(st) : {}) } : {};
-  } else if (action === 'skip') {
+  const t = st.tutorial;
+  const lesson = T.lessonById(t.lesson);
+  if (action === 'next' && lesson && lesson.steps[t.step] && lesson.steps[t.step].next) {
+    tutorAdvance(t, lesson);
+    if (!lesson.steps[t.step]) { finishLesson(); return; }
+  } else if (action === 'skip' || action === 'free') {
     delete st.tutorial;
+  } else if (action === 'nextLesson' && lesson) {
+    const nx = T.LESSONS[T.LESSONS.indexOf(lesson) + 1];
+    if (nx) { startLesson(nx.id); return; }
+  } else if (action === 'lessons') {
+    ui.showLearn(T.LESSONS, T.doneLessons());
+    return;
   }
   persist();
   tutorTick();
+}
+
+// Lektion auf ihrer eigenen kleinen Übungskarte starten (immer dieselbe Karte).
+function startLesson(id) {
+  const lesson = T.lessonById(id);
+  if (!lesson) return;
+  resetLocal('bot');
+  const state = R.createGame(lesson.seed, 2, { tribe: 'imperius', aiLevel: 'easy', mapSize: 'small', mapType: 'continents', ai: ['player_2'], turnLimit: null });
+  T.prepareLesson(state, lesson);
+  state.looks = { player_1: P.lookOf(P.loadProfile()) };
+  app.state = state;
+  tutor.focusKey = '';
+  ui.hideLearn();
+  enterLocal();
+  persist();
 }
 
 // Tages- und Wochen-Herausforderung: Aufbau wie beim Nachprüfen der Punkte
@@ -1286,15 +1381,6 @@ const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;
 function startWeekly() {
   const ch = startChallenge('weekly');
   ui.toast(`Wochen-Herausforderung „${ch.name}“: ${ch.desc} Nach ${ch.turnLimit} Runden zählt die Punktzahl.`, 'good');
-}
-
-function startTutorial() {
-  startLocal('bot', {
-    count: 2, tribe: 'imperius', mapSize: 'small', mapType: 'continents', aiLevel: 'easy', turnLimit: null
-  });
-  app.state.tutorial = { step: 0, base: { round: app.state.round } };
-  persist();
-  refresh();
 }
 
 // --- KI-Lehrling ------------------------------------------------------------------
@@ -1902,8 +1988,9 @@ function boot() {
       if (easier) ui.toast(`Neues Spiel: ${AI_LEVELS[aiLevel].label}, ${count - 1} ${count === 2 ? 'Gegner' : 'Gegner'}`, 'good');
     },
     onContinue: continueGame,
-    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? startTutorial() : mode === 'daily' ? startDaily() : mode === 'weekly' ? startWeekly() : mode.startsWith('mission:') ? startMission(mode.slice(8)) : startLocal(mode),
+    onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? ui.showLearn(T.LESSONS, T.doneLessons()) : mode === 'daily' ? startDaily() : mode === 'weekly' ? startWeekly() : mode.startsWith('mission:') ? startMission(mode.slice(8)) : startLocal(mode),
     onTutor,
+    onLesson: startLesson,
     onCopyLink: copyLink,
     onOnlineAction,
     onOpenMatch: openMatch
@@ -1947,7 +2034,7 @@ function boot() {
     AP.open();
   });
 
-  window.__pb = { app, notifyTurn, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera };
+  window.__pb = { app, notifyTurn, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera, tutor: () => tutor.last };
 }
 
 // Offline spielen: der Service Worker hält die Dateien des Spiels vor.
