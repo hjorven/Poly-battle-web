@@ -8,7 +8,7 @@ Turn-based conquest in the browser, inspired by *The Battle of Polytopia*: found
 
 > The game itself is in German. The documentation is available in English and German.
 
-![A game in turn 22: capital with farms, a second city at the top, a mercenary camp, lighthouses at the map corners, the rest of the world under fog](docs/screenshot.png)
+![A game in turn 21: two cities with farms and roads, hills, swamp, a mercenary camp, ships off the coast and lighthouses at the map corners](docs/screenshot.png)
 
 ## What to expect
 
@@ -20,11 +20,13 @@ Turn-based conquest in the browser, inspired by *The Battle of Polytopia*: found
 - **AI apprentice:** the “Tipp” (Hint) button shows and explains what the AI would do in your place.
 - **Replay:** after the game, watch every turn or run the whole match as a time-lapse.
 - **Balanced:** tribes and units are measured in AI tournaments (240 games: every tribe wins 16–31 %).
-- **Game modes:** against the AI, hotseat on one device, online via link (with resigning, turn timer and a list of your matches), tutorial, 13 campaign missions, daily and weekly challenge with leaderboard.
+- **Game modes:** against the AI, hotseat on one device, online via link (with resigning, turn timer and a list of your matches), tutorial in five lessons (basics, cities, research and building, combat, exploring), 13 campaign missions, daily and weekly challenge with leaderboard.
 - **Profile** with levels, 20 achievements, unlockable cosmetics and statistics; with the profile code you can continue on any device.
 - **Open map:** the controls sit in floating cards along the edges. Select a city or unit and a sign with its stats appears right next to it, with the actions in a toolbar at the bottom – inspired by Mini Metro.
 - **Controls** with mouse and keyboard or touch; moving and attacking take two taps so nothing happens by accident. No undo – every move counts.
 - **Light or dark:** follows the system setting or can be set manually.
+
+![Main menu in dark mode: game modes, daily and weekly challenge, tribe selection and game settings](docs/menu.png)
 
 ![Selected capital: sign with level and income at the city, the toolbar at the bottom with Build, Population and units](docs/city.png)
 
@@ -76,7 +78,7 @@ More on the wiki page [Technical Overview](https://github.com/hjorven/Poly-battl
 
 ## Online and privacy
 
-Clients have no direct access to the tables. Reading and writing only happens through database functions that check who is playing, whose turn it is and whether names are plausible. Running matches are only visible to their players; after each move the database only sends a ping via Realtime, and the client then fetches the state through a checked function. Challenge scores only count once `scripts/verify-scores.mjs` (GitHub Actions, every 10 minutes, secret `SUPABASE_SERVICE_ROLE_KEY`) has replayed the game from the submitted move log (`js/actionlog.js`). Player IDs are stored in the database only as SHA-256 checksums. Stored are game states, name, profile data and scores – no email addresses, no account. The privacy policy for players is [datenschutz.html](datenschutz.html) (German, linked in the game under "Anleitung").
+Clients have no direct access to the tables. Reading and writing only happens through database functions that check who is playing, whose turn it is and whether names are plausible. Running matches are only visible to their players; after each move the database only sends a ping via Realtime, and the client then fetches the state through a checked function. Challenge scores only count once `scripts/verify-scores.mjs` (GitHub Actions, every 10 minutes, secret `SUPABASE_SERVICE_ROLE_KEY`) has replayed the game from the submitted move log (`js/actionlog.js`). Player IDs are stored in the database only as SHA-256 checksums. Stored are game states, name, profile data and scores – no email addresses, no account. The privacy policy for players is [datenschutz.html](datenschutz.html) (German, linked in the game menu under the title).
 
 ## Contributing
 

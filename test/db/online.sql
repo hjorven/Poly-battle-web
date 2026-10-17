@@ -64,3 +64,9 @@ select public.create_match(:'st'::jsonb, 'AAAAAAAAAAAAAAAAAAAA')->>'id' as m5 \g
 select 'B tritt bei: ' || (public.join_match(:'m5', 'BBBBBBBBBBBBBBBBBBBB')->>'role');
 select 'A gibt im eigenen Zug auf: ai=' || (public.pb_hand_to_ai(:'m5', 'AAAAAAAAAAAAAAAAAAAA', 'player_1')->'match'->'game_state'->>'ai');
 select 'B übernimmt sofort: ' || public.save_match(:'m5', 'BBBBBBBBBBBBBBBBBBBB', jsonb_set(jsonb_set(jsonb_set(:'st'::jsonb, '{rev}', '2'), '{turn}', '"player_2"'), '{ai}', '["player_1"]'))::text;
+-- Namensprüfung: dieselben Fälle wie im Spiel (test/names.json)
+reset role;
+select 'Namen erlaubt: ' || coalesce(string_agg(n, ', ') filter (where pg_temp.fails(format('select public.pb_check_name(%L)', n)) <> 'KEIN FEHLER'), 'alle ok')
+  from jsonb_array_elements_text((:'names')::jsonb->'erlaubt') n;
+select 'Namen verboten: ' || coalesce(string_agg(n, ', ') filter (where pg_temp.fails(format('select public.pb_check_name(%L)', n)) <> 'Dieser Name ist nicht erlaubt'), 'alle gesperrt')
+  from jsonb_array_elements_text((:'names')::jsonb->'verboten') n;
