@@ -91,6 +91,8 @@ const AUDIT = () => {
   const vw = innerWidth, vh = innerHeight;
   const SEL = 'button, [role=button], a.btn, input[type=range], .tech-hex, .tj-btn, [data-city], [data-mission]';
   const vis = el => el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+  // Nur für Vorleseprogramme versteckt (1x1 px, weggeschnitten), z. B. „bereit“ auf schmalen Bildschirmen.
+  const srOnly = el => { const cs = getComputedStyle(el); return cs.clipPath === 'inset(50%)' || (cs.position === 'absolute' && el.offsetWidth <= 1 && el.offsetHeight <= 1); };
   const name = el => {
     const t = (el.innerText || el.getAttribute('aria-label') || el.title || el.value || '').replace(/\s+/g, ' ').trim();
     const id = el.id ? '#' + el.id : '';
@@ -143,7 +145,7 @@ const AUDIT = () => {
       issues.push({ kind: centre ? 'verdeckt' : 'teilweise verdeckt', el: n, info: `von ${desc(by)}${by && by.closest('[id]') ? ' in #' + by.closest('[id]').id : ''} (${covered}/5 Punkte)` });
     }
     // 4. Text vollständig?
-    const textEls = [el, ...el.querySelectorAll('*')].filter(e => vis(e));
+    const textEls = [el, ...el.querySelectorAll('*')].filter(e => vis(e) && !srOnly(e));
     for (const t of textEls) {
       const cs = getComputedStyle(t);
       const clips = cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || cs.textOverflow === 'ellipsis';
@@ -155,7 +157,7 @@ const AUDIT = () => {
     const range = document.createRange();
     let worst = 0;
     for (let tn; (tn = walker.nextNode());) {
-      if (!tn.textContent.trim() || !tn.parentElement || !vis(tn.parentElement)) continue;
+      if (!tn.textContent.trim() || !tn.parentElement || !vis(tn.parentElement) || srOnly(tn.parentElement)) continue;
       range.selectNodeContents(tn);
       for (const tr of range.getClientRects()) {
         if (tr.width < 1) continue;
@@ -468,15 +470,35 @@ async function runDevice(dev) {
   await record(page, dev, 'Spielende: Niederlage');
   await page.close();
 
-  // --- Tutorial -----------------------------------------------------------
+  // --- Tutorial: Lektionsauswahl, jede Lektion starten, Schritte mit „Weiter“ -----
   page = await open(ctx);
   await page.click('[data-mtab="play"]').catch(() => {});
   await page.click('[data-mode="tutorial"]').catch(() => {});
-  await page.waitForTimeout(800);
-  await record(page, dev, 'Tutorial');
-  await page.click('[data-tu-next]').catch(() => {});
-  await record(page, dev, 'Tutorial: Schritt 2');
+  await page.waitForTimeout(600);
+  const lessons = await page.$$eval('[data-learn-tab]', l => l.map(e => e.dataset.learnTab)).catch(() => []);
+  if (!lessons.length) await record(page, dev, 'Tutorial');
+  for (const id of lessons) {
+    await page.click(`[data-learn-tab="${id}"]`).catch(() => {});
+    await record(page, dev, `Lernen: Auswahl ${id}`);
+  }
   await page.close();
+  for (const id of lessons) {
+    page = await open(ctx);
+    await page.click('[data-mtab="play"]').catch(() => {});
+    await page.click('[data-mode="tutorial"]').catch(() => {});
+    await page.waitForTimeout(400);
+    await page.click(`[data-learn-tab="${id}"]`).catch(() => {});
+    await page.click(`[data-learn-start="${id}"]`).catch(() => {});
+    await page.waitForTimeout(1200);
+    await record(page, dev, `Lektion ${id}: Schritt 1`);
+    // Schritte, die nur Lesen verlangen, haben einen „Weiter“-Knopf.
+    for (let k = 2; k <= 6 && await page.isVisible('[data-tu="next"]'); k++) {
+      await page.click('[data-tu="next"]').catch(() => {});
+      await page.waitForTimeout(600);
+      await record(page, dev, `Lektion ${id}: Schritt ${k}`);
+    }
+    await page.close();
+  }
 
   // --- Hotseat: Spielerwechsel ---------------------------------------------
   page = await open(ctx);
