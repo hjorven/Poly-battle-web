@@ -2401,9 +2401,13 @@ test('Wiederholung: jede Runde nachbaubar, kompakt genug für Online', () => {
     assert.deepStrictEqual(Object.keys(rs.roads).sort(), t.roads, 'Wege Runde ' + t.round);
   }
   const bytes = JSON.stringify(st.replay).length;
-  // Je Runde gemessen: Wie lange eine KI-Partie dauert, schwankt mit jeder
-  // Regeländerung; entscheidend ist, dass eine Runde klein bleibt.
-  assert.ok(bytes < 1800 * st.round, 'Wiederholung ' + bytes + ' Bytes in ' + st.round + ' Runden');
+  // Je Runde und je Einheit gemessen: Wie lange eine KI-Partie dauert und wie
+  // groß die Heere werden, schwankt mit jeder Regel- und KI-Änderung (seit die
+  // KI-Siedler Städte gründen, sind es etwa doppelt so viele Einheiten).
+  // Entscheidend ist, dass jeder Eintrag klein bleibt.
+  const unitEntries = st.replay.reduce((n, f) => n + (f.u ? f.u.length : 0), 0);
+  assert.ok(bytes < 400 * st.replay.length + 20 * unitEntries, 'Wiederholung ' + bytes + ' Bytes für ' + unitEntries + ' Einheiten-Einträge');
+  assert.ok(bytes < 2600 * st.round, 'Wiederholung ' + bytes + ' Bytes in ' + st.round + ' Runden');
   // Nach dem Laden (Kopie ohne Zwischenspeicher) geht es lückenlos weiter.
   const loaded = JSON.parse(JSON.stringify(st));
   if (!loaded.winner) { R.endTurn(loaded); }
@@ -2754,6 +2758,142 @@ test('Namen: Wortliste im Spiel und auf dem Server gleich', () => {
   const list = re => sql.match(re)[1].match(/'([^']+)'/g).map(w => w.slice(1, -1));
   assert.deepStrictEqual(list(/bad constant text\[\] := array\[([^\]]+)\]/), N.BAD_WORDS);
   assert.deepStrictEqual(list(/ok_words constant text\[\] := array\[([^\]]+)\]/), N.OK_WORDS);
+});
+
+console.log('\n-- KI: Siedler, Nebel, neue Einheiten --');
+
+// Kleine KI-Runde ohne Darstellung: Schritte bis nichts mehr geht, dann frische Bewegung.
+function aiRounds(st, player, rounds) {
+  for (let i = 0; i < rounds; i++) {
+    for (let k = 0; k < 50; k++) { const s = botStep(st, player); if (!s) break; applyStep(st, s, player); }
+    st.round++;
+    for (const u of st.units) Object.assign(u, { mp: UNITS[u.type].move, hasMoved: false, acted: false });
+  }
+}
+
+test('KI-Siedler verlässt die Hauptstadt und gründet 2 bis 4 Felder entfernt', () => {
+  const st = makeState();
+  st.ai = ['player_1', 'player_2']; // ohne Schonfrist
+  st.stars.player_1 = 0;
+  const cap = { q: 6, r: 6, owner: 'player_1', pop: 1, isCapital: true, trained: true };
+  st.cities = [cap];
+  st.units = [unit('s', 'player_1', 'settler', 6, 6)];
+  const first = botStep(st, 'player_1');
+  assert.strictEqual(first.kind, 'move', 'Siedler zieht los');
+  assert.notDeepStrictEqual([first.q, first.r], [6, 6]);
+  aiRounds(st, 'player_1', 4);
+  const fresh = st.cities.find(c => c !== cap);
+  assert.ok(fresh, 'neue Stadt gegründet');
+  const d = hexDistance(fresh.q, fresh.r, cap.q, cap.r);
+  assert.ok(d >= 2 && d <= 4, 'Abstand ' + d);
+  assert.ok(st.settlerAt && st.settlerAt.player_1 >= 1, 'Wartezeit gemerkt');
+});
+
+test('KI-Siedler ohne Gründungsplatz blockiert die Hauptstadt nicht', () => {
+  const st = makeState();
+  st.ai = ['player_1', 'player_2']; // ohne Schonfrist
+  st.stars.player_1 = 0;
+  // Nur Berge ringsum: Gründen geht nirgends, ein Feld daneben ist frei.
+  st.terrain = st.terrain.map(() => 'mountain');
+  st.terrain[6 * MAP_W + 6] = 'field';
+  st.terrain[6 * MAP_W + 7] = 'field';
+  st.cities = [{ q: 6, r: 6, owner: 'player_1', pop: 1, isCapital: true, trained: true }];
+  st.units = [unit('s', 'player_1', 'settler', 6, 6)];
+  const step = botStep(st, 'player_1');
+  assert.ok(step && step.kind === 'move', 'Siedler macht die Stadt frei');
+  assert.deepStrictEqual([step.q, step.r], [7, 6]);
+});
+
+test('KI merkt sich die Siedler-Wartezeit auch im Nebel auf dem echten Stand', () => {
+  const st = R.createGame(4242, 2, { ai: ['player_2'] });
+  let spot = null;
+  forEachHex((q, r) => {
+    if (!spot && R.canFound(st, { owner: 'player_2', type: 'settler', q, r }, 'player_2').ok && !R.unitAt(st, q, r)) spot = [q, r];
+  });
+  const s = unit('s2', 'player_2', 'settler', spot[0], spot[1]);
+  st.units.push(s);
+  st.turn = 'player_2';
+  const step = botStep(st, 'player_2');
+  assert.strictEqual(step.kind, 'settle');
+  assert.ok(applyStep(st, step, 'player_2').ok);
+  assert.strictEqual(st.settlerAt.player_2, st.round);
+});
+
+test('KI: gescheiterter Zug sperrt nur das Ziel, nicht die ganze Runde', () => {
+  const st = makeState();
+  st.ai = ['player_1', 'player_2']; // ohne Schonfrist
+  const w = unit('w', 'player_1', 'warrior', 5, 5);
+  st.units = [w, unit('x', 'player_2', 'warrior', 6, 5), unit('y', 'player_2', 'warrior', 5, 6), unit('z', 'player_2', 'warrior', 4, 6)];
+  assert.ok(!applyStep(st, { kind: 'move', unit: w, q: 6, r: 5 }, 'player_1').ok);
+  assert.ok(w.mp > 0, 'Einheit darf noch woandershin');
+  assert.ok(st.aiBlocked.keys.includes('w|6,5'));
+  applyStep(st, { kind: 'move', unit: w, q: 5, r: 6 }, 'player_1');
+  assert.ok(w.mp > 0);
+  applyStep(st, { kind: 'move', unit: w, q: 4, r: 6 }, 'player_1');
+  assert.strictEqual(w.mp, 0, 'nach drei Fehlversuchen bleibt sie stehen');
+  // Neue Runde: alte Sperren gelten nicht mehr.
+  st.round++;
+  w.mp = 1;
+  st.units = [w];
+  assert.ok(applyStep(st, { kind: 'move', unit: w, q: 6, r: 5 }, 'player_1').ok);
+});
+
+test('KI im Nebel: Besitzerwechsel einer Stadt außer Sicht bleibt verborgen', () => {
+  const st = makeState();
+  st.ai = ['player_1', 'player_2']; // ohne Schonfrist
+  st.stars.player_1 = 0;
+  st.round = 10;
+  const all = [];
+  forEachHex((q, r) => all.push(hk(q, r)));
+  st.explored = { player_1: all };
+  st.cities = [{ q: 3, r: 3, owner: 'player_1', pop: 1, isCapital: true, trained: true }, { q: 20, r: 12, owner: 'player_2', pop: 1 }];
+  // Zuletzt gesehen gehörte die Stadt dem Friedenspartner player_3.
+  st.cityMemory = { player_1: { '20,12': { owner: 'player_3', pop: 1 } } };
+  st.peace = { 'player_1|player_3': 9 };
+  st.units = [unit('w', 'player_1', 'warrior', 3, 4)];
+  // Keine (bekannten) Ziele: Frieden brechen. Mit dem echten Besitzer hätte sie ein Ziel.
+  const step = botStep(st, 'player_1');
+  assert.deepStrictEqual(step, { kind: 'war', target: 'player_3' });
+});
+
+test('KI: Bannerträger greift nie an und stellt sich neben die Kämpfer', () => {
+  const st = makeState();
+  st.ai = ['player_1', 'player_2']; // ohne Schonfrist
+  st.stars.player_1 = 0;
+  const b = unit('b', 'player_1', 'bannerman', 5, 8);
+  st.units = [b, unit('e', 'player_2', 'warrior', 4, 8, { hp: 1 })];
+  const s1 = botStep(st, 'player_1');
+  assert.ok(!s1 || s1.kind !== 'attack', 'kein Angriff durch den Bannerträger');
+  st.units = [b, unit('w1', 'player_1', 'warrior', 7, 8, { mp: 0, acted: true }), unit('w2', 'player_1', 'warrior', 6, 9, { mp: 0, acted: true })];
+  const s2 = botStep(st, 'player_1');
+  assert.deepStrictEqual([s2.kind, s2.q, s2.r], ['move', 6, 8]);
+});
+
+test('KI: Waldläufer greift aus dem Wald an', () => {
+  const st = makeState();
+  st.ai = ['player_1', 'player_2']; // ohne Schonfrist
+  st.stars.player_1 = 0;
+  st.terrain[4 * MAP_W + 6] = 'forest';
+  const ranger = unit('r', 'player_1', 'ranger', 5, 5);
+  st.units = [ranger, unit('e', 'player_2', 'warrior', 6, 5, { hp: 3 })];
+  const s1 = botStep(st, 'player_1');
+  assert.deepStrictEqual([s1.kind, s1.q, s1.r], ['move', 6, 4], 'erst in den Wald');
+  applyStep(st, s1, 'player_1');
+  const s2 = botStep(st, 'player_1');
+  assert.strictEqual(s2.kind, 'attack');
+  assert.strictEqual(s2.attacker, ranger);
+});
+
+test('KI baut einen Brander, wenn feindliche Schiffe nahe sind', () => {
+  const st = makeState();
+  st.ai = ['player_1', 'player_2']; // ohne Schonfrist
+  st.techs.player_1 = ['basic', 'fishing', 'sailing', 'ramming', 'aquatism'];
+  for (let q = 0; q < MAP_W; q++) for (let r = 6; r < MAP_H; r++) st.terrain[r * MAP_W + q] = 'water';
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 2, trained: true }];
+  st.improvements = { '5,6': 'port' };
+  st.units = [unit('boat', 'player_2', 'boat', 6, 8)];
+  const step = botStep(st, 'player_1');
+  assert.deepStrictEqual([step.kind, step.type], ['train', 'fireship']);
 });
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);

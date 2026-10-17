@@ -284,7 +284,9 @@ export function territory(city) {
 
 function inTerritory(city, q, r) {
   const d = hexDistance(city.q, city.r, q, r);
-  return d >= 1 && d <= territoryRadius(city);
+  // Gebiet reicht 1 oder 2 Felder weit: die Belohnung nur im seltenen Fall
+  // d = 2 nachschlagen (tileCity läuft für jedes Feld über alle Städte).
+  return d === 1 || (d === 2 && territoryRadius(city) === 2);
 }
 
 // Stadt, zu der ein Feld gehört. Überlappen sich Gebiete (Grenzerweiterung),
@@ -610,9 +612,12 @@ export function visibleKeys(state, player) {
   const keys = new Set();
   if (state.noFog) { forEachHex((q, r) => keys.add(hk(q, r))); return keys; }
   const addArea = (q, r, rad) => {
-    forEachHex((nq, nr) => {
-      if (hexDistance(q, r, nq, nr) <= rad) keys.add(hk(nq, nr));
-    });
+    // Nur das Rechteck um (q, r) statt der ganzen Karte; gleiche Reihenfolge wie forEachHex.
+    for (let nr = r - rad; nr <= r + rad; nr++) {
+      for (let nq = q - rad; nq <= q + rad; nq++) {
+        if (inBounds(nq, nr) && hexDistance(q, r, nq, nr) <= rad) keys.add(hk(nq, nr));
+      }
+    }
   };
   for (const u of state.units) {
     if (u.owner !== player) continue;
