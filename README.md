@@ -14,7 +14,7 @@ Turn-based conquest in the browser, inspired by *The Battle of Polytopia*: found
 
 - **12 tribes**, each with its own starting technology and special trait, plus AI opponents with a personality (conqueror, merchant, seafarer, builder).
 - **27 units** on land, at sea and in the air – from warrior via ranger, banner bearer, battering ram and trader cart to fire ship and war airship, with veterans and upgrades.
-- **55 technologies** in a honeycomb tree with six tiers.
+- **45 technologies** in a honeycomb tree with five tiers.
 - **Develop your cities** in a 3D view of the city area: tap a tile, pick a building – each shows in advance how many extra stars per turn it brings, including from neighbours such as windmill and farm. City levels bring rewards, and monuments are unlocked by achievements.
 - **Terrain with forests, mountains, hills, swamps and ice**, plus fog of war, diplomacy, trade, bridges, ports, watchtowers, ruins, lighthouses and **mercenary camps** where you hire units without the matching technology.
 - **AI apprentice:** the “Tipp” (Hint) button shows and explains what the AI would do in your place.

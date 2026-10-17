@@ -80,7 +80,6 @@ Steht eine Einheit zu Zugbeginn im eigenen Gebiet, kann sie gegen den Preisunter
 - Krieger wird zu Schwertkämpfer
 - Bogenschütze wird zu Armbrustschütze
 - Reiter wird zu Ritter
-- Ritter wird zu Paladin
 - Boot wird zu Schiff
 - Schiff wird zu Kriegsschiff
 - Heißluftballon wird zu Kriegsluftschiff

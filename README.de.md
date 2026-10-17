@@ -12,7 +12,7 @@ Rundenbasierte Eroberung im Browser, angelehnt an *The Battle of Polytopia*: Gr�
 
 - **12 Stämme** mit eigener Start-Technologie und Besonderheit, dazu KI-Gegner mit Persönlichkeit (Eroberer, Händler, Seefahrer, Baumeister).
 - **27 Einheiten** an Land, auf See und in der Luft – vom Krieger über Waldläufer, Bannerträger, Rammbock und Händlerkarren bis zu Brander und Kriegsluftschiff, mit Veteranen und Aufrüsten.
-- **55 Technologien** in einem Wabenbaum mit sechs Stufen.
+- **45 Technologien** in einem Wabenbaum mit fünf Stufen.
 - **Städte ausbauen** in einer 3D-Ansicht des Stadtgebiets: Feld antippen, Gebäude wählen – jedes zeigt vorher, wie viele Sterne es pro Runde mehr bringt, auch durch Nachbarn wie Windmühle und Farm. Stadtstufen bringen Belohnungen, Monumente werden durch Erfolge freigeschaltet.
 - **Gelände mit Wald, Bergen, Hügeln, Sumpf und Eis**, dazu Nebel, Diplomatie, Handel, Brücken, Häfen, Wachtürme, Ruinen, Leuchttürme und **Söldnerlager**, in denen du Einheiten ohne die passende Technologie anwirbst.
 - **KI-Lehrling:** Der Knopf „Tipp“ zeigt und erklärt, was die KI an deiner Stelle tun würde.
