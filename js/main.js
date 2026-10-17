@@ -369,7 +369,9 @@ function checkWinnerUI() {
   if (app.state.winner) { clearSave(); ui.showWinner(app.state, ctx()); recordProfile(); }
   else if (humanDefeated()) {
     clearSave();
-    const easier = app.state.aiLevel !== 'easy' || app.state.players.length > 2;
+    // Mission, Herausforderung und Lektion starten beim Wiederholen sich selbst neu, nicht leichter.
+    const fixed = app.state.mission || app.state.daily || app.state.weekly || app.state.tutorial;
+    const easier = !fixed && (app.state.aiLevel !== 'easy' || app.state.players.length > 2);
     ui.showDefeat(app.state, ctx(), { easier, retry: true });
     recordProfile();
   }
@@ -612,7 +614,7 @@ function doOfferPeace(to) {
   if (res.accepted) { ui.toast(`Frieden mit ${name} geschlossen`, 'good'); quote(to, 'peaceYes'); sfx('peace'); }
   else if (res.pending) ui.toast(`Friedensangebot an ${name} gesendet`, 'good');
   else { ui.toast(`${name} lehnt ab (neuer Versuch in 3 Runden)`, 'warn'); quote(to, 'peaceNo'); sfx('error'); }
-  ui.showOverview(app.state, ctx());
+  ui.showOverview(app.state, overviewCtx());
   afterAction();
 }
 
@@ -629,26 +631,36 @@ function doDeclareWar(to) {
   }, { yes: 'Krieg erklären' });
 }
 
+// Friedensangebot beantworten (Dialog oder Übersicht).
+function doRespondPeace(from, accept) {
+  if (!myTurn()) return;
+  const res = R.respondPeace(app.state, actAs(), from, accept);
+  if (!res.ok) return;
+  L.logAction(app.state, L.entry.respond(from, accept));
+  if (accept) { ui.toast(`Frieden mit ${needName(app.state, from)} geschlossen`, 'good'); sfx('peace'); }
+  else ui.toast('Angebot abgelehnt');
+  if (ui.isOverviewOpen()) ui.showOverview(app.state, overviewCtx());
+  afterAction();
+}
+
 // Eingehendes Friedensangebot dem Spieler am Zug vorlegen.
 function offerDiplomacy() {
   if (!myTurn() || ui.isRewardOpen() || ui.isConfirmOpen()) return;
   const me = actAs();
   const offer = (app.state.peaceOffers || []).find(o => o.to === me);
   if (!offer) return;
-  const answer = accept => {
-    const res = R.respondPeace(app.state, me, offer.from, accept);
-    if (!res.ok) return;
-    L.logAction(app.state, L.entry.respond(offer.from, accept));
-    if (accept) { ui.toast(`Frieden mit ${needName(app.state, offer.from)} geschlossen`, 'good'); sfx('peace'); }
-    else ui.toast('Angebot abgelehnt');
-    afterAction();
-  };
+  const answer = accept => doRespondPeace(offer.from, accept);
   ui.showConfirm(`${needName(app.state, offer.from)} bietet dir Frieden an. Solange er gilt, könnt ihr euch nicht angreifen und nicht die Städte des anderen betreten.`,
     () => answer(true), { onNo: () => answer(false), yes: 'Frieden schließen', no: 'Ablehnen' });
 }
 
 function actAs() {
   return ctx().actAs;
+}
+
+// Übersicht immer mit dem Knopf für den letzten Rundenbericht, wenn es einen gibt.
+function overviewCtx() {
+  return { ...ctx(), hasReport: !!app.lastReport };
 }
 
 // Panels und Dialoge halten Objekte aus dem Stand, mit dem sie gezeichnet
@@ -1482,8 +1494,11 @@ function missionTick() {
   const m = s.mission;
   const par = m.par ? ` · 2 Sterne bis Runde ${m.par[0]}, 3 bis Runde ${m.par[1]}` : ' · ' + (m.starHint || 'Sterne für 3 bzw. 5 Städte am Ende');
   ui.showMission(`<b>${esc2(m.title)}</b>: ${esc2(m.goal)} (${Math.min(s.have, s.need)}/${s.need})${par}`, s.have / s.need);
-  if (s.done && !st.winner) {
-    st.missionStars = s.stars;
+  // Die letzte Eroberung beendet die Partie schon in den Regeln (checkWinner):
+  // Dann zählt die Mission trotzdem, Überlebensmissionen gelten als geschafft.
+  const conquered = st.winner === 'player_1' && st.endReason === 'conquest' && st.missionStars == null;
+  if ((!st.winner || conquered) && (s.done || (conquered && m.survive))) {
+    st.missionStars = s.done ? s.stars : m.stars(st);
     st.winner = 'player_1';
     st.endReason = 'mission';
     R.recordHistory(st, true);
@@ -1638,7 +1653,7 @@ function startLocal(mode, override = null) {
         tribe, stars: settings.stars, turnLimit: settings.turnLimit, aiLevel: settings.aiLevel,
         ai: Array.from({ length: count - 1 }, (_, k) => 'player_' + (k + 2)), ...map
       }
-    : { turnLimit: settings.turnLimit, ...map };
+    : { stars: settings.stars, turnLimit: settings.turnLimit, ...map };
   app.state = R.createGame(override && override.seed != null ? override.seed : Math.floor(Math.random() * 2 ** 31), count, opts);
   // Eigenes Aussehen (Kosmetik) für den Menschen gegen die KI.
   if (mode === 'bot') app.state.looks = { player_1: P.lookOf(P.loadProfile()) };
@@ -1743,6 +1758,9 @@ async function startOnline() {
     focusHome();
     refresh();
     if (!app.myRole) ui.toast('Partie beendet – du siehst sie dir an.');
+    // Offene Belohnung oder Friedensangebot gleich beim Öffnen zeigen.
+    offerReward();
+    offerDiplomacy();
   } else {
     const settings = ui.getSettings();
     const humans = settings.humans;
@@ -1788,7 +1806,7 @@ async function startOnline() {
       app.busy = false;
       app.botDriver = false;
       render.syncBoard(app.state, viewer());
-      if (!wasMine && myTurn()) notifyTurn();
+      if (!wasMine && myTurn()) { notifyTurn(); offerReward(); offerDiplomacy(); }
       checkWinnerUI();
     }
     refresh();
@@ -2020,7 +2038,7 @@ function boot() {
       if (key === 'next') nextIdle();
       else if (key === 'end') { if (myTurn()) doEndTurn(); }
       else if (key === 'tech') ui.openTech(app.state, ctx());
-      else if (key === 'overview') ui.showOverview(app.state, ctx());
+      else if (key === 'overview') ui.showOverview(app.state, overviewCtx());
       else if (key === 'details') { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = !app.panelOpen; refresh(); } }
       else if (key === 'home') focusHome();
       else if (key === 'report') { if (app.lastReport) ui.showNews(app.lastReport); else ui.toast('Noch kein Rundenbericht in diesem Spiel'); }
@@ -2036,9 +2054,10 @@ function boot() {
     onToggleSound: () => { setMuted(!isMuted()); ui.setSoundIcon(isMuted()); if (!isMuted()) sfx('select'); },
     onOfferPeace: doOfferPeace,
     onDeclareWar: doDeclareWar,
+    onRespondPeace: doRespondPeace,
     onChooseReward: doChooseReward,
     onClosePanel: () => { app.sel = null; refresh(); },
-    onOpenOverview: () => { if (app.state) ui.showOverview(app.state, { ...ctx(), hasReport: !!app.lastReport }); },
+    onOpenOverview: () => { if (app.state) ui.showOverview(app.state, overviewCtx()); },
     onShowReport: () => { ui.hideOverview(); if (app.lastReport) ui.showNews(app.lastReport); },
     onCloseOverview: () => ui.hideOverview(),
     onFocusUnit: id => {
@@ -2122,6 +2141,11 @@ function boot() {
       const st = app.state;
       ui.hideWinner();
       if (!st) return showMenu();
+      // Dieselbe Mission, Herausforderung oder Lektion noch einmal statt einer freien Partie.
+      if (st.mission) return startMission(st.mission);
+      if (st.daily) return startDaily();
+      if (st.weekly) return startWeekly();
+      if (st.tutorial && st.tutorial.lesson) return startLesson(st.tutorial.lesson);
       const levels = ['easy', 'normal', 'hard'];
       let aiLevel = st.aiLevel || 'normal', count = st.players.length;
       if (easier === 'harder') {

@@ -70,7 +70,7 @@ export const MISSIONS = [
     story: 'Zwei kriegerische Stämme haben es auf dich abgesehen. Halte durch.',
     goal: 'Überlebe 20 Runden.',
     setup: { mapSize: 'small', mapType: 'pangaea', count: 3, aiLevel: 'normal', tribe: 'quetzali', rule: 'nograce' },
-    progress: st => [Math.min(st.round - 1, 20), 20], par: null, stars: st => 1 + (mine(st).length >= 3 ? 1 : 0) + (mine(st).length >= 5 ? 1 : 0)
+    progress: st => [Math.min(st.round - 1, 20), 20], par: null, survive: true, stars: st => 1 + (mine(st).length >= 3 ? 1 : 0) + (mine(st).length >= 5 ? 1 : 0)
   },
   {
     id: 'm10', title: 'Großreich',
@@ -110,7 +110,7 @@ export const MISSIONS = [
     goal: 'Überlebe 15 Runden.',
     setup: { mapSize: 'small', mapType: 'pangaea', count: 3, aiLevel: 'normal', tribe: 'quetzali', rule: 'nograce' },
     prepare: st => { st.stars[ME] += 5; },
-    progress: st => [Math.min(st.round - 1, 15), 15], par: null,
+    progress: st => [Math.min(st.round - 1, 15), 15], par: null, survive: true,
     stars: st => 1 + (((st.lostBy && st.lostBy[ME]) || 0) === 0 ? 1 : 0) +
       (Object.entries(st.improvements || {}).filter(([k, t]) => { const [q, r] = k.split(',').map(Number); return t === 'watchtower' && R.ownLand(st, ME, q, r); }).length >= 2 ? 1 : 0),
     starHint: 'Sterne: keine Stadt verlieren, mindestens 2 Wachtürme'

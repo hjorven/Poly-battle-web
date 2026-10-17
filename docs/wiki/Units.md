@@ -60,7 +60,7 @@ Stats: cost in stars, health, attack, defence, movement, range. Veterans (after 
 | **Convert** | Takes over an adjacent enemy unit. |
 | **Land** | Can stand on land. |
 | **Water** | Can only move on shallow water and ocean. |
-| **Settle** | Founds a new city on a free tile (at least 2 tiles away from other cities). |
+| **Settle** | Founds a new city on a free tile (at least 2 tiles away from other cities, not inside another tribe's territory). |
 | **Scout** | Does not attack, enters mountains without Climbing and sees 1 tile further from mountains. |
 | **Fly** | Flies over water, mountains and forest (1 movement each) and ignores zones of control. Melee units cannot reach it. Does not capture cities, heals only in own territory. |
 | **Fragile** | A single hit from a ranged unit (archer, catapult, ship, airship) destroys it instantly. |
@@ -68,7 +68,7 @@ Stats: cost in stars, health, attack, defence, movement, range. Veterans (after 
 | **Transport** | Picks up an adjacent friendly land unit and drops it off elsewhere. |
 | **Siege** | Triple damage against units in cities and on castles; no counterattack there. |
 | **Trade** | In or next to another city: one-time stars, more the farther it is from its home city. Does not capture cities. |
-| **Pike Wall** | 1.5× damage against riders, knights and paladins, also when striking back. |
+| **Pike Wall** | 1.5× damage against riders, horse archers, knights and paladins, also when striking back. |
 | **Pathfinder** | Forest, hills and swamp cost only 1 movement and do not stop it; +1 attack from the forest. |
 | **Banner** | Friendly units right next to it get +0.5 attack (several banners do not stack). |
 | **Incendiary** | Sinks when attacking, but also hits every enemy next to the target for half damage. No counterattack. |

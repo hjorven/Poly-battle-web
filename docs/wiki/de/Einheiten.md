@@ -60,7 +60,7 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 | **Bekehren** | Übernimmt eine benachbarte feindliche Einheit. |
 | **Land** | Kann auf Land stehen. |
 | **Wasser** | Kann sich ausschließlich auf Wasser und Ozean bewegen. |
-| **Siedeln** | Gründet auf einem freien Feld eine neue Stadt (mind. 2 Felder von anderen Städten entfernt). |
+| **Siedeln** | Gründet auf einem freien Feld eine neue Stadt (mind. 2 Felder von anderen Städten entfernt, nicht im Gebiet eines anderen Stamms). |
 | **Spähen** | Greift nicht an, betritt Berge ohne Klettern und sieht von Bergen 1 Feld weiter. |
 | **Fliegen** | Fliegt über Wasser, Berge und Wald (je 1 Bewegung) und ignoriert Kontrollzonen. Nahkämpfer erreichen sie nicht. Erobert keine Städte, heilt nur im eigenen Gebiet. |
 | **Zerbrechlich** | Ein Treffer eines Fernkämpfers (Bogenschütze, Katapult, Schiff, Luftschiff) zerstört sie sofort. |
@@ -68,7 +68,7 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 | **Transport** | Nimmt eine benachbarte eigene Landeinheit auf und setzt sie anderswo ab. |
 | **Belagerung** | Dreifacher Schaden gegen Einheiten in Städten und auf Burgen; dort ohne Gegenschlag. |
 | **Handel** | In oder neben einer anderen Stadt: einmalig Sterne, mehr je weiter von der Heimatstadt entfernt. Erobert keine Städte. |
-| **Pikenwall** | Anderthalbfacher Schaden gegen Reiter, Ritter und Paladine – auch beim Gegenschlag. |
+| **Pikenwall** | Anderthalbfacher Schaden gegen Reiter, Bogenreiter, Ritter und Paladine – auch beim Gegenschlag. |
 | **Pfadfinder** | Wald, Hügel und Sumpf kosten nur 1 Bewegung und halten nicht auf; aus dem Wald +1 Angriff. |
 | **Banner** | Eigene Einheiten direkt daneben haben +0,5 Angriff (mehrere Banner zählen nicht doppelt). |
 | **Brandsatz** | Geht beim Angriff unter, trifft aber auch alle Feinde neben dem Ziel mit halbem Schaden. Kein Gegenschlag. |
