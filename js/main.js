@@ -1,4 +1,5 @@
 import * as R from './rules.js';
+import { hexDistance } from './hex.js';
 import * as render from './render.js';
 import * as ui from './ui.js';
 import * as net from './net.js';
@@ -114,6 +115,7 @@ function refresh() {
   render.drawMinimap(app.state, viewer());
   updateSelection();
   tutorTick();
+  tipTick();
   checkWinnerUI();
   AP.update();
 }
@@ -1194,14 +1196,17 @@ function tutorCtx() {
     st: app.state, sel: app.sel, pending: app.pending, open: ui.openOverlay(),
     phone: document.documentElement.classList.contains('phone'),
     touch: !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches),
-    has: sel => ui.tutorVisible(sel)
+    has: sel => ui.tutorVisible(sel),
+    cam: render.cameraState()
   };
 }
 
 function stopTutor() {
   tutor.last = null;
-  if (tutor.timer) { clearInterval(tutor.timer); tutor.timer = null; }
   tutor.focusKey = '';
+  // Ohne laufende Lektion gehört die Karte den Spielhinweisen.
+  if (!tutor.timer) return;
+  clearInterval(tutor.timer); tutor.timer = null;
   ui.hideTutor();
   render.setTutorMarker(null);
 }
@@ -1228,7 +1233,7 @@ function tutorTick() {
     tutor.last = { lesson: lesson.id, finished: true };
     const idx = T.LESSONS.indexOf(lesson), nx = T.LESSONS[idx + 1];
     ui.showTutor({
-      head: `Tutorial · ${lesson.title}`, progress: 1,
+      head: lesson.title, progress: 1,
       text: `Lektion „${lesson.title}“ geschafft!${nx ? ` Als Nächstes: „${nx.title}“.` : ' Du kennst jetzt alle Lektionen.'}`,
       buttons: [['free', 'Frei weiterspielen'], ['lessons', 'Alle Lektionen'], ...(nx ? [['nextLesson', 'Nächste Lektion', true]] : [])],
       inline: c.open || null
@@ -1237,7 +1242,7 @@ function tutorTick() {
   }
   let step = lesson.steps[t.step];
   if (myTurn() && !app.busy) {
-    while (step && step.done && step.done(st, t.base || {}, c)) {
+    while (step && ((step.skip && step.skip(c)) || (step.done && step.done(st, t.base || {}, c)))) {
       tutorAdvance(t, lesson);
       step = lesson.steps[t.step];
       sfx('select');
@@ -1253,7 +1258,7 @@ function tutorTick() {
   let v = step, needIdx = -1;
   (step.need || []).some((n, i) => { if (n.when(c)) { v = n; needIdx = i; return true; } return false; });
   let text = typeof v.text === 'function' ? v.text(c) : v.text;
-  let el = v.el || null;
+  let el = (typeof v.el === 'function' ? v.el(c) : v.el) || null;
   let tile = v.tile ? v.tile(st) : null;
   let manual = v === step && !!step.next;
   const closeOpen = () => { text = 'Schließe zuerst dieses Fenster.'; el = TUTOR_INLINE[c.open]; tile = null; manual = false; };
@@ -1278,7 +1283,7 @@ function tutorTick() {
   render.setTutorMarker(tile);
   tutor.last = { lesson: lesson.id, step: t.step, text, el, tile, manual };
   ui.showTutor({
-    head: `Tutorial · ${lesson.title} · Schritt ${t.step + 1} von ${lesson.steps.length}`,
+    head: `${lesson.title} · Schritt ${t.step + 1} von ${lesson.steps.length}`,
     progress: (t.step + 1) / lesson.steps.length,
     text, focus: el, tile, inline: c.open || null,
     buttons: [['skip', 'Tutorial beenden'], ...(manual ? [['next', step.next, true]] : [])]
@@ -1296,6 +1301,7 @@ function finishLesson() {
 
 function onTutor(action) {
   const st = app.state;
+  if (action.startsWith('tip')) { onTip(action); return; }
   if (!st || !st.tutorial) return;
   const t = st.tutorial;
   const lesson = T.lessonById(t.lesson);
@@ -1313,6 +1319,113 @@ function onTutor(action) {
   }
   persist();
   tutorTick();
+}
+
+// --- Spielhinweise ------------------------------------------------------------
+// In normalen Partien kurze Hinweise zur Lage, in derselben Karte wie das
+// Tutorial. Jeder Hinweis kommt höchstens einmal pro Partie und insgesamt
+// höchstens TIP_MAX-mal; abschaltbar im Menü (localStorage `pb_tips`).
+const TIP_MAX = 3;
+const tips = { gen: null, shown: new Set(), cur: null, techs0: {} };
+
+function tipsOn() {
+  try { return localStorage.getItem('pb_tips') !== '0'; } catch (e) { return true; }
+}
+function tipCounts() {
+  try { const v = JSON.parse(localStorage.getItem('pb_tips_seen') || '{}'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; }
+}
+function countTip(id) {
+  try { const c = tipCounts(); c[id] = (c[id] || 0) + 1; localStorage.setItem('pb_tips_seen', JSON.stringify(c)); } catch (e) { /* ignore */ }
+}
+
+const near = (st, p, q, r, d) => st.units.some(u => u.owner === p && hexDistance(u.q, u.r, q, r) <= d);
+// Jeder Hinweis: check(st, p) => { text, tile?, el? } oder nichts. Wichtiges zuerst.
+const TIPS = [
+  { id: 'threat', check: (st, p) => {
+    const c = R.threatenedCities(st, p).find(x => !R.unitAt(st, x.q, x.r));
+    return c && { text: 'Deine Stadt ist bedroht (roter Ring). Stell eine Einheit hinein, dann verteidigt sie die Stadt.', tile: [c.q, c.r] };
+  } },
+  { id: 'level', check: (st, p) => {
+    const c = R.citiesFor(st, p).find(x => R.pendingLevel(x));
+    return c && { text: 'Eine Stadt ist gewachsen. Tippe sie an und such dir eine Belohnung aus.', tile: [c.q, c.r] };
+  } },
+  { id: 'hurt', check: (st, p) => {
+    const u = st.units.find(x => x.owner === p && x.hp <= R.hpCap(x) * 0.4);
+    return u && { text: 'Diese Einheit ist schwer verletzt. Zieh sie aus der Reichweite der Gegner und greif nicht an, dann heilt sie zu Rundenbeginn.', tile: [u.q, u.r] };
+  } },
+  { id: 'village', check: (st, p) => {
+    const c = st.cities.find(x => !x.owner && R.isVisible(st, p, x.q, x.r) && near(st, p, x.q, x.r, 4));
+    return c && { text: 'Freies Dorf in der Nähe: Zieh mit einer Einheit hinein, dann gehört es dir.', tile: [c.q, c.r] };
+  } },
+  { id: 'ruin', check: (st, p) => {
+    const k = Object.keys(st.ruins || {}).find(key => { const [q, r] = key.split(',').map(Number); return R.isVisible(st, p, q, r) && near(st, p, q, r, 4); });
+    return k && { text: 'Eine Ruine: Zieh mit einer Einheit hinein, darin liegt eine Belohnung.', tile: k.split(',').map(Number) };
+  } },
+  { id: 'enemyCity', check: (st, p) => {
+    const c = st.cities.find(x => x.owner && x.owner !== p && R.hostile(st, p, x.owner) && R.isVisible(st, p, x.q, x.r));
+    return c && { text: 'Gegnerische Stadt entdeckt. Besiege die Einheit darin und zieh hinein, dann gehört sie dir.', tile: [c.q, c.r] };
+  } },
+  { id: 'idle', check: (st, p) => {
+    if (st.round < 2 || !st.units.some(u => u.owner === p && (u.hasMoved || u.acted))) return null;
+    return R.idleUnits(st, p).length && { text: 'Einige Einheiten können noch ziehen. Der Knopf mit dem gelben Punkt springt zu ihnen.', el: '#idleBtn' };
+  } },
+  { id: 'tech', check: (st, p) => {
+    const n = (st.techs[p] || []).length;
+    if (tips.techs0[p] == null) tips.techs0[p] = n;
+    return st.round >= 3 && n === tips.techs0[p] && st.stars[p] >= 6 && { text: 'Unter „Forschung“ schaltest du neue Einheiten und Gebäude frei.', el: '#techBtn' };
+  } },
+  { id: 'stars', check: (st, p) => st.round >= 4 && st.stars[p] >= 20 && { text: 'Du hast viele Sterne gespart. Gib sie aus: Einheiten, Forschung oder „Bevölkerung +1“ in einer Stadt.', el: '#treasury' } }
+];
+
+function tipView(tip, st, p) {
+  const v = tip.check(st, p);
+  if (!v) return null;
+  if (v.tile && !R.isExplored(st, p, v.tile[0], v.tile[1])) return null;
+  if (v.el && !ui.tutorVisible(v.el)) return null;
+  return v;
+}
+
+function hideTip() {
+  if (!tips.cur) return;
+  tips.cur = null;
+  ui.hideTutor();
+  render.setTutorMarker(null);
+}
+
+function tipTick() {
+  const st = app.state;
+  if (!st || st.tutorial) { tips.cur = null; return; }
+  if (tips.gen !== app.gen) { tips.gen = app.gen; tips.shown = new Set(); tips.cur = null; tips.techs0 = {}; }
+  if (!tipsOn() || !myTurn() || app.reviewing || app.replay || ui.openOverlay()) { hideTip(); return; }
+  const p = actAs();
+  let tip = tips.cur && TIPS.find(t => t.id === tips.cur.id);
+  let v = tip && tipView(tip, st, p);
+  if (!v) {
+    hideTip();
+    const counts = tipCounts();
+    for (const t of TIPS) {
+      if (tips.shown.has(t.id) || (counts[t.id] || 0) >= TIP_MAX) continue;
+      v = tipView(t, st, p);
+      if (v) { tip = t; tips.shown.add(t.id); countTip(t.id); sfx('select'); break; }
+    }
+    if (!v) return;
+  }
+  tips.cur = { id: tip.id, tile: v.tile || null };
+  render.setTutorMarker(v.tile || null);
+  ui.showTutor({
+    head: 'Hinweis', progress: 0, text: v.text, focus: v.el || null, tile: v.tile || null,
+    buttons: [['tipOff', 'Hinweise aus'], ...(v.tile ? [['tipShow', 'Zeigen']] : []), ['tipOk', 'OK', true]]
+  });
+}
+
+function onTip(action) {
+  if (action === 'tipShow' && tips.cur && tips.cur.tile) { render.cameraTo(tips.cur.tile[0], tips.cur.tile[1]); return; }
+  if (action === 'tipOff') {
+    try { localStorage.setItem('pb_tips', '0'); } catch (e) { /* ignore */ }
+    ui.markTips();
+    ui.toast('Spielhinweise aus. Im Menü unter „Spielen“ kannst du sie wieder anschalten.');
+  }
+  hideTip();
 }
 
 // Lektion auf ihrer eigenen kleinen Übungskarte starten (immer dieselbe Karte).

@@ -776,7 +776,10 @@ button:focus-visible {
 .tu-inline .btn { background: #26372a; color: #f3f6f1; border-color: #3c5240; }
 .tu-inline .btn.primary { background: #facc15; color: #172015; border-color: #facc15; }
 /* Handy quer: Karte schmal links, Leiste im Fenster einzeilig */
-html.phone #tutor.tu-side { left: max(8px, env(safe-area-inset-left, 0px)); transform: none; width: min(300px, 40vw); padding: 8px 10px; font-size: 12px; line-height: 1.35; overflow-y: auto; }
+/* Seitenleiste links neben der Karte (alles außer Handy hochkant) */
+#tutor.tu-side { left: max(12px, env(safe-area-inset-left, 0px)); transform: none; width: min(280px, 30vw); overflow-y: auto; }
+#tutor.tu-side .tu-btns { flex-wrap: wrap; }
+html.phone #tutor.tu-side { left: max(8px, env(safe-area-inset-left, 0px)); width: min(260px, 38vw); padding: 8px 10px; font-size: 12px; line-height: 1.35; }
 html.phone #tutor.tu-side .tu-head { font-size: 11px; margin-bottom: 2px; }
 html.phone #tutor.tu-side .tu-bar { margin-bottom: 6px; }
 html.phone #tutor.tu-side .tu-text { margin-bottom: 6px; }
