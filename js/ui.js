@@ -419,11 +419,14 @@ export function tutorVisible(sel) {
 }
 
 let tutorSig = '';
+// Feld, auf das die Tutorial-Karte gerade zeigt (das Schild am Objekt weicht ihm aus).
+let tutorTile = null;
 let tutorScrolled = '';
 // Tutorial-Karte: Kopf mit Fortschritt, Text, Knöpfe. `focus` hebt Knöpfe
 // hervor; `inline` (Id eines Fensters) zeigt die Karte als Leiste oben in diesem
 // Fenster statt über der Karte. Die Karte meidet Ziel, Tipp und Meldungen.
 export function showTutor({ head, progress, text, buttons = [], focus = null, tile = null, inline = null }) {
+  tutorTile = tile;
   const sig = JSON.stringify([head, text, buttons, inline]);
   const card = inline ? $(inline).querySelector('.card') : null;
   let box = inline ? card.querySelector('.tu-inline') : $('tutor');
@@ -507,6 +510,7 @@ function placeTutor(box, targets, tile) {
 }
 
 export function hideTutor() {
+  tutorTile = null;
   $('tutor').classList.add('hidden');
   setViewInset(0);
   document.querySelectorAll('.tu-inline').forEach(b => b.remove());
@@ -807,6 +811,16 @@ function setAnchor(kind, q, r, html) {
         tag.style.left = p.x + 'px';
         tag.style.top = p.y + 'px';
         tag.style.visibility = p.x < 0 || p.y < 0 || p.x > innerWidth || p.y > innerHeight ? 'hidden' : '';
+        // Das Schild darf das Feld nicht verdecken, auf das Tutorial oder
+        // Hinweis gerade zeigen (z. B. das Dorf direkt hinter der Einheit):
+        // dann klappt es unter das Objekt.
+        const t = tutorTile && project(tutorTile[0], tutorTile[1]);
+        let below = false;
+        if (t && (tutorTile[0] !== anchor.q || tutorTile[1] !== anchor.r)) {
+          const h = tag.offsetHeight, w = tag.offsetWidth;
+          below = Math.abs(t.x - p.x) < w / 2 + 30 && t.y < p.y - 10 && t.y > p.y - 34 - h - 30;
+        }
+        tag.classList.toggle('at-below', below);
       }
       anchor.raf = requestAnimationFrame(step);
     };

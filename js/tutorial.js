@@ -5,7 +5,7 @@
 // Schritt stattdessen deren Text, z. B. „Tippe zuerst deinen Krieger an“.
 //
 // Schritt-Felder:
-//   text  Text oder c => Text (c: { st, phone, touch, sel, pending, open, has, cam })
+//   text  Text oder c => Text (c: { st, phone, touch, sel, pending, open, has, exists, cam })
 //   el    CSS-Auswahl des Knopfs, auf den der Schritt zeigt (oder c => Auswahl)
 //   tile  st => [q, r]: Feld, zu dem die Kamera fährt und das einen Ring bekommt
 //   need  Liste von { when: c => true, wenn die Voraussetzung fehlt; text, el, tile }
@@ -101,6 +101,9 @@ function addUnit(st, owner, type, [q, r]) {
   return u;
 }
 
+// Leben des Gegners in der Lektion „Kampf“.
+const FOE_HP = 7;
+
 // --- Lektionen -------------------------------------------------------------------
 
 export const LESSONS = [
@@ -187,7 +190,7 @@ export const LESSONS = [
         need: [{ when: c => !cityIsSel(c, home(c.st)), text: c => R.unitAt(c.st, home(c.st).q, home(c.st).r) ? 'Tippe die Hauptstadt so oft an, bis unten das Stadtmenü kommt.' : 'Tippe deine Hauptstadt an.', tile: st => posOf(home(st)) }],
         init: st => ({ pop: home(st).pop }),
         done: (st, base) => home(st).pop > base.pop },
-      { text: 'Neue Stufe! Tippe auf den gelben Knopf und such dir eine Belohnung aus.',
+      { text: c => `Neue Stufe! Tippe auf den grünen Knopf „Stufe ${R.pendingLevel(home(c.st)) || ''}“ und such dir eine Belohnung aus.`,
         el: '[data-reward-open]',
         skip: c => !R.pendingLevel(home(c.st)),
         need: [{ when: c => !cityIsSel(c, home(c.st)), text: 'Tippe deine Hauptstadt an.', tile: st => posOf(home(st)) }],
@@ -238,7 +241,7 @@ export const LESSONS = [
         el: '.bopt[data-opt]:not([disabled])',
         need: [
           { when: c => c.open !== 'build-overlay', text: 'Tippe deine Hauptstadt an und dann „Ausbauen“.', tile: st => posOf(home(st)) },
-          { when: c => !c.has('.bopt[data-opt]:not([disabled])'), text: 'Tippe ein orange umrandetes Feld an.', el: '.b3-tag.can, .bhex.can' }
+          { when: c => !c.exists('.bopt[data-opt]:not([disabled])'), text: 'Tippe ein orange umrandetes Feld an.', el: '.b3-tag.can, .bhex.can' }
         ],
         init: st => ({ imps: Object.keys(st.improvements).length }),
         done: (st, base) => Object.keys(st.improvements).length > base.imps },
@@ -254,6 +257,9 @@ export const LESSONS = [
       const { A, warrior } = baseSetup(st);
       moveTo(warrior, A(1));
       const foe = addUnit(st, 'player_2', 'warrior', A(2));
+      // Schon angeschlagen: So trifft der eigene Angriff sichtbar härter als
+      // der Gegenschlag, und der Krieger überlebt den Gegenzug.
+      foe.hp = FOE_HP;
       st.stars[ME] = 6;
       return { warrior: warrior.id, foe: foe.id };
     },
@@ -266,14 +272,14 @@ export const LESSONS = [
       { text: 'Tippe den Gegner an. Die Vorschau zeigt den Schaden für beide.',
         tile: st => posOf(tutUnit('foe')(st)),
         need: [{ when: c => !isSel(c, spot(c.st, 'warrior')), text: 'Tippe deinen Krieger an.', tile: st => posOf(tutUnit('warrior')(st)) }],
-        done: (st, b, c) => { const f = tutUnit('foe')(st); return !f || f.hp < 10 || pendingOn(c, 'attack', f.q, f.r); } },
+        done: (st, b, c) => { const f = tutUnit('foe')(st); return !f || f.hp < FOE_HP || pendingOn(c, 'attack', f.q, f.r); } },
       { text: 'Nochmal tippen: Angriff!',
         tile: st => posOf(tutUnit('foe')(st)),
         need: [
           { when: c => !isSel(c, spot(c.st, 'warrior')), text: 'Tippe deinen Krieger an.', tile: st => posOf(tutUnit('warrior')(st)) },
           { when: c => { const f = tutUnit('foe')(c.st); return !!f && !pendingOn(c, 'attack', f.q, f.r); }, text: 'Tippe den Gegner an.', tile: st => posOf(tutUnit('foe')(st)) }
         ],
-        done: st => { const f = tutUnit('foe')(st); return !f || f.hp < 10; } },
+        done: st => { const f = tutUnit('foe')(st); return !f || f.hp < FOE_HP; } },
       { text: 'Treffer! Wer angreift, trifft meist härter, als er zurückbekommt.',
         tile: st => posOf(tutUnit('foe')(st) || tutUnit('warrior')(st)), next: 'Weiter' },
       { text: 'Stell einen Verteidiger in die Stadt: Tippe auf „Krieger“.',
@@ -305,6 +311,8 @@ export const LESSONS = [
         done: st => !st.ruins[hk(...spot(st, 'ruin'))] },
       { text: c => `Der Knopf mit dem gelben Punkt springt zur nächsten Einheit, die noch ziehen kann. Tippe ihn an${space(c)}.`,
         el: '#idleBtn',
+        // Hat der zweite Krieger schon gezogen, gibt es nichts mehr anzuspringen.
+        skip: c => { const u = tutUnit('second')(c.st); return !u || u.hasMoved || u.acted; },
         done: (st, b, c) => isSel(c, spot(st, 'second')) },
       { text: '„Übersicht“ zeigt alle Städte, Einheiten und Gegner. Tippe darauf.',
         el: '#overviewBtn',
@@ -315,7 +323,7 @@ export const LESSONS = [
       { text: '„Tipp“ zeigt, was die KI jetzt tun würde. Probier es aus.',
         el: '#coachBtn',
         done: (st, b, c) => c.has('#coach') },
-      { text: 'Alle Regeln stehen im „Menü“ unter „Anleitung“. Dort schaltest du auch die Spielhinweise an oder aus. Viel Erfolg!',
+      { text: 'Alle Regeln stehen im „Menü“ unter „Anleitung“. Unter „Spielen“ schaltest du dort die Spielhinweise an oder aus. Viel Erfolg!',
         el: '#menuBtn', next: 'Fertig' }
     ]
   }
