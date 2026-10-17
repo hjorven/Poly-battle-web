@@ -4,6 +4,7 @@
 //         npm run test:browser -- stadt  (nur Tests, deren Name „stadt“ enthält)
 
 import { chromium } from 'playwright';
+import { chromiumPath } from '../scripts/chromium-path.mjs';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -35,8 +36,8 @@ const DEVICES = {
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' }
 };
 
-// PB_CHROMIUM: eigener Chromium-Pfad, falls Playwrights eigener fehlt.
-const browser = await chromium.launch({ executablePath: process.env.PB_CHROMIUM || undefined, args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+// PB_CHROMIUM (oder CHROMIUM): eigener Chromium-Pfad, siehe scripts/chromium-path.mjs.
+const browser = await chromium.launch({ executablePath: chromiumPath(), args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 const only = process.argv[2] ? process.argv[2].toLowerCase() : null;
 let passed = 0, failed = 0;
 
