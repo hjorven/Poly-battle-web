@@ -1978,13 +1978,22 @@ test('Frieden zwischen Menschen: Angebot muss angenommen werden', () => {
   assert.ok(R.atPeace(st, 'player_1', 'player_2'));
 });
 
-test('KI bricht Frieden, wenn sie sonst keine Ziele hat', () => {
+test('KI bricht Frieden, wenn sie sonst keine Ziele hat – erst nach der Wartezeit', () => {
   const st = dipState();
   R.offerPeace(st, 'player_1', 'player_2');
   st.turn = 'player_2';
+  // Direkt nach dem Friedensschluss noch kein Krieg.
+  assert.notStrictEqual((botStep(st, 'player_2') || {}).kind, 'war');
+  st.round = 9;
+  // Gegen einen klar Stärkeren bricht sie ihn nicht: erst gleich stark machen.
+  assert.notStrictEqual((botStep(st, 'player_2') || {}).kind, 'war');
+  st.techs.player_2.push('diplomacy');
   const step = botStep(st, 'player_2');
   assert.strictEqual(step.kind, 'war');
   assert.strictEqual(step.target, 'player_1');
+  // Händler brechen den Frieden ohne Ziele nie.
+  st.persona = { player_2: 'merchant' };
+  assert.notStrictEqual((botStep(st, 'player_2') || {}).kind, 'war');
 });
 
 console.log('\n-- Stämme, Karten, KI --');
@@ -2849,7 +2858,7 @@ test('KI im Nebel: Besitzerwechsel einer Stadt außer Sicht bleibt verborgen', (
   st.cities = [{ q: 3, r: 3, owner: 'player_1', pop: 1, isCapital: true, trained: true }, { q: 20, r: 12, owner: 'player_2', pop: 1 }];
   // Zuletzt gesehen gehörte die Stadt dem Friedenspartner player_3.
   st.cityMemory = { player_1: { '20,12': { owner: 'player_3', pop: 1 } } };
-  st.peace = { 'player_1|player_3': 9 };
+  st.peace = { 'player_1|player_3': 1 };
   st.units = [unit('w', 'player_1', 'warrior', 3, 4)];
   // Keine (bekannten) Ziele: Frieden brechen. Mit dem echten Besitzer hätte sie ein Ziel.
   const step = botStep(st, 'player_1');
@@ -2894,6 +2903,97 @@ test('KI baut einen Brander, wenn feindliche Schiffe nahe sind', () => {
   st.units = [unit('boat', 'player_2', 'boat', 6, 8)];
   const step = botStep(st, 'player_1');
   assert.deepStrictEqual([step.kind, step.type], ['train', 'fireship']);
+});
+
+test('Tipp für Menschen: im Frieden keine Kriegserklärung, sondern ein Zug', () => {
+  const st = dipState();
+  R.offerPeace(st, 'player_1', 'player_2');
+  st.round = 20;
+  st.units = [unit('w', 'player_1', 'warrior', 3, 3)];
+  const step = botStep(st, 'player_1');
+  assert.ok(step && step.kind !== 'war', 'Schritt: ' + (step && step.kind));
+});
+
+test('KI bietet einem klar Stärkeren Frieden an, aber nicht ständig', () => {
+  const st = dipState();
+  st.techs.player_2.push('diplomacy');
+  for (const [q, r] of [[4, 2], [6, 2], [2, 6]]) st.cities.push({ q, r, owner: 'player_1', pop: 3 });
+  st.turn = 'player_2';
+  assert.deepStrictEqual(botStep(st, 'player_2'), { kind: 'peace', target: 'player_1' });
+  // Mensch: Angebot wartet auf Antwort, kein zweites solange.
+  assert.ok(applyStep(st, { kind: 'peace', target: 'player_1' }, 'player_2').pending);
+  assert.notStrictEqual((botStep(st, 'player_2') || {}).kind, 'peace');
+  R.respondPeace(st, 'player_1', 'player_2', false);
+  st.round = 5;
+  assert.ok(R.canOfferPeace(st, 'player_2', 'player_1').ok);
+  assert.notStrictEqual((botStep(st, 'player_2') || {}).kind, 'peace', 'erst 8 Runden nach dem letzten Angebot');
+  st.round = 9;
+  const again = botStep(st, 'player_2');
+  assert.strictEqual(again.kind, 'peace');
+  assert.ok(applyStep(st, again, 'player_2').pending);
+  // Nach der eigenen Kriegserklärung lange kein Angebot.
+  assert.ok(R.respondPeace(st, 'player_1', 'player_2', true).ok);
+  st.round = 30;
+  assert.ok(applyStep(st, { kind: 'war', target: 'player_1' }, 'player_2').ok);
+  st.round = 35;
+  assert.ok(R.canOfferPeace(st, 'player_2', 'player_1').ok);
+  assert.notStrictEqual((botStep(st, 'player_2') || {}).kind, 'peace');
+  st.round = 42;
+  assert.strictEqual(botStep(st, 'player_2').kind, 'peace');
+});
+
+test('Leichte KI greift eine verteidigte Stadt an, wenn sie angeschlagen ist oder zwei Einheiten danebenstehen', () => {
+  const st = makeState();
+  st.ai = ['player_1', 'player_2']; // ohne Schonfrist
+  st.aiLevel = 'easy';
+  st.stars.player_1 = 0;
+  st.cities = [{ q: 6, r: 5, owner: 'player_2', pop: 1 }];
+  const d = unit('d', 'player_2', 'warrior', 6, 5);
+  st.units = [unit('w1', 'player_1', 'warrior', 5, 5, { mp: 0 }), d];
+  assert.notStrictEqual((botStep(st, 'player_1') || {}).kind, 'attack', 'allein und unterlegen: kein Angriff');
+  d.hp = 4;
+  assert.strictEqual(botStep(st, 'player_1').kind, 'attack', 'Ziel unter halben Leben');
+  d.hp = 10;
+  st.units.push(unit('w2', 'player_1', 'warrior', 7, 5, { mp: 0 }));
+  const step = botStep(st, 'player_1');
+  assert.deepStrictEqual([step.kind, step.defender], ['attack', d]);
+});
+
+test('KI: Luftschiffe nur mit Ballonplatz, belegter Wunsch blockiert die Landtruppen nicht', () => {
+  const st = makeState();
+  st.ai = ['player_1', 'player_2'];
+  st.techs.player_1 = ['basic', 'airships'];
+  st.stars.player_1 = 30;
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 2 }];
+  const s1 = botStep(st, 'player_1');
+  assert.ok(s1.kind === 'train' && s1.type !== 'airship', 'ohne Ballonplatz: ' + s1.kind + ' ' + s1.type);
+  st.improvements = { '6,5': 'airfield' };
+  assert.deepStrictEqual([botStep(st, 'player_1').kind, botStep(st, 'player_1').type], ['train', 'airship']);
+});
+
+test('KI: Flotte bleibt begrenzt (ein Schiff je angefangene 3 Hafenstädte)', () => {
+  const st = makeState();
+  st.ai = ['player_1', 'player_2'];
+  st.techs.player_1 = ['basic', 'fishing', 'sailing'];
+  for (let q = 0; q < MAP_W; q++) for (let r = 6; r < MAP_H; r++) st.terrain[r * MAP_W + q] = 'water';
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 2, trained: true }];
+  st.improvements = { '5,6': 'port' };
+  const s1 = botStep(st, 'player_1');
+  assert.ok(s1.kind === 'train' && UNITS[s1.type].abilities.includes('water'), 'erstes Schiff');
+  st.units = [unit('b', 'player_1', 'boat', 9, 10, { mp: 0, acted: true })];
+  const s2 = botStep(st, 'player_1');
+  assert.ok(!s2 || s2.kind !== 'train', 'kein zweites Schiff: ' + (s2 && s2.type));
+});
+
+test('KI wählt die Mauer nur bei Feinden, nicht bei Einheiten von Friedenspartnern', () => {
+  const { st, city } = cityState();
+  R.growCity(st, city, 2);
+  R.chooseReward(st, city, 'workshop', 'player_1');
+  st.units = [unit('e', 'player_2', 'warrior', 11, 8)];
+  st.peace = { 'player_1|player_2': 1 };
+  assert.strictEqual(botStep(st, 'player_1').choice, 'resources');
+  st.peace = {};
+  assert.strictEqual(botStep(st, 'player_1').choice, 'wall');
 });
 
 console.log('\n-- Code-Prüfung Runde 3: Regeln --');
