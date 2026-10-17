@@ -11,7 +11,7 @@ Testpartie falscher Schlüssel: Testpartien nur mit Admin-Schlüssel
 unplausibel: Spielstand abgelehnt: Unmöglich viele Sterne
 unplausibel mit Schlüssel: {"rev": 2}
 Admin-Anlegen ohne Schlüssel: Testpartien nur mit Admin-Schlüssel
-Klingeln: 3 letzte=match-<id>
+Klingeln: 3 letzte=match-<id>, öffentlich für alte Clients: 3
 freien Platz mit KI füllen: ["player_2"]
 Partie 2 ist A allein: abandoned=nein
 B tritt bei: player_2
@@ -33,3 +33,49 @@ A gibt im eigenen Zug auf: ai=["player_1"]
 B übernimmt sofort: {"rev": 2}
 Namen erlaubt: alle ok
 Namen verboten: alle gesperrt
+Start mit HTML-Sternen: Spielstand abgelehnt: Sterne müssen ganze Zahlen sein
+Start mit fremdem Einheitentyp: Spielstand abgelehnt: Ungültige Einheiten
+Start in Runde 5: Spielstand abgelehnt: Neue Partien beginnen in Runde 1 ohne Sieger
+Start mit Sieger: Spielstand abgelehnt: Neue Partien beginnen in Runde 1 ohne Sieger
+Start mit 9999 Sternen: Spielstand abgelehnt: Unmögliche Startsterne
+E tritt bei: player_2
+D zieht (Zug bleibt): {"rev": 1}
+D beendet den Zug: {"rev": 2}
+E beendet den Zug, Runde 2: {"rev": 3}
+Sofortsieg mit eigenem Rundenlimit: Spielstand abgelehnt: Rundenlimit darf sich nicht ändern
+Sofortsieg nach Punkten: Spielstand abgelehnt: Sieg nach Punkten erst am Rundenlimit
+Sieg als Mission: Spielstand abgelehnt: Unmögliches Spielende
+Gegnerstadt löschen: Spielstand abgelehnt: Städte dürfen nicht verschwinden
+Gegnerstadt neutral machen: Spielstand abgelehnt: Fremde Städte dürfen nur durch Eroberung den Besitzer wechseln
+Einheit für den Gegner erfinden: Spielstand abgelehnt: Fremde Einheiten dürfen nicht entstehen
+Gegner-Sterne auf 0: Spielstand abgelehnt: Fremde Sterne dürfen nicht sinken
+Gegner-Technologien ändern: Spielstand abgelehnt: Fremde Technologien dürfen sich nicht ändern
+turn = nobody: Spielstand abgelehnt: Ungültiger Spieler am Zug
+Zweimal hintereinander ziehen: Spielstand abgelehnt: Falsche Reihenfolge: ein Mitspieler wurde übersprungen
+Runde springen: Spielstand abgelehnt: Unmögliche Runde
+Rundenlimit ändern: Spielstand abgelehnt: Rundenlimit darf sich nicht ändern
+Stamm tauschen: Spielstand abgelehnt: Stämme dürfen sich nicht ändern
+Sterne als Text speichern: Spielstand abgelehnt: Sterne müssen ganze Zahlen sein
+D erobert die letzte Stadt und gewinnt: {"rev": 4}
+Partien vom selben Netz: 20 angelegt
+die 21. vom selben Spieler: Du hast schon 20 laufende Online-Partien. Beende oder gib erst eine davon auf
+die 21. vom selben Netz: Von deinem Netz wurden gerade sehr viele Partien angelegt. Versuch es in einer Stunde noch einmal
+anderes Netz (cf-connecting-ip zählt): true
+IPv6 nach /64: gleiches Netz true, anderes Netz false, gesalzen true
+Salz für Clients lesbar: permission denied for table pb_secret
+Name mit IP trotz voller Minute: Hilde
+Name ohne IP bei voller Minute: Gerade melden sich sehr viele an. Versuch es gleich noch einmal
+H reicht ein: {"pending": true}
+H reicht dasselbe nochmal ein: {"pending": true, "duplicate": true}
+I reicht Hs Protokoll ein: Dieses Spiel wurde schon von einem anderen Profil eingereicht
+I mit umgeschriebenem Protokoll: Dieses Spiel wurde schon von einem anderen Profil eingereicht
+gleiches Protokoll in der Woche: {"pending": true}
+H zweites Ergebnis: {"pending": true}
+H drittes Ergebnis: {"pending": true}
+H viertes offenes Ergebnis: Drei deiner Ergebnisse warten noch auf die Prüfung. Versuch es in ein paar Minuten noch einmal
+Protokoll über 96 KB: Zugprotokoll zu groß
+Bestenliste ohne Stufe: {"name": "Hilde", "rank": 1, "round": 30, "score": 100, "tribe": "aimo"}
+aufgeräumt: Einreichungen 2, alte Bestenliste 0, altes Profil 0
+Klingel fälschen: new row violates row-level security policy for table "messages"
+Klingel auf match-x lesen: 1
+Kanal chat-x lesen: 0
