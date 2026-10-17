@@ -170,16 +170,18 @@ export async function saveMatch(gameId, state, adminKey = null) {
   const sb = getClient();
   if (!sb) return { error: 'Offline' };
   try {
-    const { error } = await callRpc(sb, 'save_match', { p_id: gameId, p_token: getToken(), p_state: state, ...adminArg(adminKey) }, SAVE_TIMEOUT);
+    const { data, error } = await callRpc(sb, 'save_match', { p_id: gameId, p_token: getToken(), p_state: state, ...adminArg(adminKey) }, SAVE_TIMEOUT);
     // supabase-js meldet eine abgebrochene Verbindung als Fehler, nicht als Ausnahme.
     if (isNetErr(error)) {
       return { error: 'Zug nicht gespeichert: keine Verbindung zum Server.' };
     }
     if (error) return { error: 'Zug nicht gespeichert: ' + error.message, rejected: true };
+    // Ein Mitspieler hat während des Zuges aufgegeben: der Server hat den Zug
+    // angenommen und die KI-Liste ergänzt.
+    return { merged: !!(data && data.merged) };
   } catch (e) {
     return { error: 'Zug nicht gespeichert: keine Verbindung zum Server.' };
   }
-  return {};
 }
 
 // Stamm an die KI geben: eigener (Aufgeben), ein nie besetzter Platz oder ein
@@ -206,15 +208,15 @@ export async function myMatches() {
 
 async function rpc(fn, args) {
   const sb = getClient();
-  if (!sb) return { error: OFFLINE };
+  if (!sb) return { error: OFFLINE, offline: true };
   try {
     const { data, error } = await callRpc(sb, fn, args);
     // Abgebrochene Verbindung meldet supabase-js als Fehlermeldung, nicht als Ausnahme.
-    if (isNetErr(error)) return { error: OFFLINE };
+    if (isNetErr(error)) return { error: OFFLINE, offline: true };
     if (error) return { error: error.message || 'Serverfehler' };
     return { data };
   } catch (e) {
-    return { error: 'Keine Verbindung zum Server.' };
+    return { error: OFFLINE, offline: true };
   }
 }
 

@@ -31,6 +31,13 @@ B übernimmt nach 3 min: {"rev": 2}
 B tritt bei: player_2
 A gibt im eigenen Zug auf: ai=["player_1"]
 B übernimmt sofort: {"rev": 2}
+A speichert eine Aktion: {"rev": 1}
+C gibt auf, während A zieht: ai=["player_3"]
+A beendet den Zug mit altem Stand: {"rev": 3, "merged": true}
+danach: turn=player_2 ai=["player_3"] handed={"player_3": "resign"} rev=3
+B schickt einen Stand ohne KI-Liste: {"rev": 9, "merged": true}
+C bleibt KI: ai=["player_3"]
+B tauscht C gegen A in der KI-Liste: Spielerliste darf sich nicht ändern
 Namen erlaubt: alle ok
 Namen verboten: alle gesperrt
 Start mit HTML-Sternen: Spielstand abgelehnt: Sterne müssen ganze Zahlen sein
@@ -66,16 +73,18 @@ Salz für Clients lesbar: permission denied for table pb_secret
 Name mit IP trotz voller Minute: Hilde
 Name ohne IP bei voller Minute: Gerade melden sich sehr viele an. Versuch es gleich noch einmal
 H reicht ein: {"pending": true}
-H reicht dasselbe nochmal ein: {"pending": true, "duplicate": true}
+H reicht dasselbe nochmal ein: {"score": 100, "reason": null, "status": "pending", "pending": true, "duplicate": true}
 I reicht Hs Protokoll ein: Dieses Spiel wurde schon von einem anderen Profil eingereicht
 I mit umgeschriebenem Protokoll: Dieses Spiel wurde schon von einem anderen Profil eingereicht
 gleiches Protokoll in der Woche: {"pending": true}
 H zweites Ergebnis: {"pending": true}
 H drittes Ergebnis: {"pending": true}
+I mit gleichem kurzen Protokoll wie H: {"pending": true}
 H viertes offenes Ergebnis: Drei deiner Ergebnisse warten noch auf die Prüfung. Versuch es in ein paar Minuten noch einmal
 Protokoll über 96 KB: Zugprotokoll zu groß
+H reicht gewertetes Ergebnis nochmal ein: {"score": 100, "reason": null, "status": "ok", "pending": false, "duplicate": true}
 Bestenliste ohne Stufe: {"name": "Hilde", "rank": 1, "round": 30, "score": 100, "tribe": "aimo"}
-aufgeräumt: Einreichungen 2, alte Bestenliste 0, altes Profil 0
+aufgeräumt: Einreichungen 3, alte Bestenliste 0, altes Profil 0
 Klingel fälschen: new row violates row-level security policy for table "messages"
 Klingel auf match-x lesen: 1
 Kanal chat-x lesen: 0

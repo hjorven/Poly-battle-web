@@ -420,12 +420,50 @@ async function syncOnline(profile, st, me, score) {
     if (!Array.isArray(st.actions)) {
       ui.toast('Diese Partie wurde vor dem letzten Update begonnen und zählt nicht für die Bestenliste.', 'warn');
     } else {
-      const res = await net.submitScore(kind, st.daily || st.weekly, score, st.tribes ? st.tribes[me] : null, st.round, st.actions);
-      if (res.data) ui.toast('Ergebnis eingereicht. Es erscheint in der Bestenliste, sobald es geprüft ist (meist nach wenigen Minuten).', 'good');
-      else if (res.error) ui.toast('Bestenliste: ' + res.error, 'warn');
+      await submitScore({ kind, period: st.daily || st.weekly, score, tribe: st.tribes ? st.tribes[me] : null, round: st.round, actions: st.actions });
     }
   }
   await net.saveRemoteProfile(profile, P.levelOf(profile.xp));
+}
+
+// Bestenlisten-Ergebnisse, die ohne Verbindung nicht ankamen. Der Server nimmt
+// sie noch bis zum Ende des nächsten Tages an; dann wird erneut gesendet.
+const SCORE_OUTBOX = 'pb_score_outbox';
+
+function scoreOutbox() {
+  try {
+    const list = JSON.parse(localStorage.getItem(SCORE_OUTBOX) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (e) { return []; }
+}
+
+function setScoreOutbox(list) {
+  try {
+    if (list.length) localStorage.setItem(SCORE_OUTBOX, JSON.stringify(list.slice(-3)));
+    else localStorage.removeItem(SCORE_OUTBOX);
+  } catch (e) { /* Speicher voll: dann eben nicht merken */ }
+}
+
+async function submitScore(claim, retry = false) {
+  const res = await net.submitScore(claim.kind, claim.period, claim.score, claim.tribe, claim.round, claim.actions);
+  const same = c => c.kind === claim.kind && c.period === claim.period && c.score === claim.score && c.actions.length === claim.actions.length;
+  if (res.offline) {
+    if (!retry) {
+      setScoreOutbox([...scoreOutbox().filter(c => !same(c)), claim]);
+      ui.toast('Bestenliste: keine Verbindung. Das Ergebnis wird gesendet, sobald das Spiel wieder online ist.', 'warn');
+    }
+    return;
+  }
+  setScoreOutbox(scoreOutbox().filter(c => !same(c)));
+  const d = res.data;
+  if (d && d.duplicate && d.status === 'ok') ui.toast('Dieses Ergebnis ist schon in der Bestenliste gewertet.', 'good');
+  else if (d && d.duplicate && d.status === 'rejected') ui.toast('Dieses Ergebnis wurde bei der Prüfung abgelehnt' + (d.reason ? ': ' + d.reason : '.'), 'warn');
+  else if (d) ui.toast((retry ? 'Nachgereicht: ' : '') + 'Ergebnis eingereicht. Es erscheint in der Bestenliste, sobald es geprüft ist (meist nach wenigen Minuten).', 'good');
+  else if (res.error) ui.toast('Bestenliste: ' + res.error, 'warn');
+}
+
+async function retryScores() {
+  for (const claim of scoreOutbox()) await submitScore(claim, true);
 }
 
 function chooseName() {
@@ -492,9 +530,11 @@ function renewProfileCode() {
 
 async function showBoard(kind) {
   const period = kind === 'daily' ? P.dateKey() : P.weekKey();
+  // Schnell zwischen Tag und Woche gewechselt: nur die letzte Antwort zeigen.
+  const ask = app.boardAsk = (app.boardAsk || 0) + 1;
   ui.renderBoard(null, kind);
   const res = await net.leaderboard(kind, period);
-  ui.renderBoard(res, kind, P.loadProfile().name);
+  if (ask === app.boardAsk) ui.renderBoard(res, kind, P.loadProfile().name);
 }
 
 // Lokale Partien nach jeder Aktion sichern (Neuladen / Tab schließen).
@@ -525,8 +565,21 @@ async function saveOnline() {
   app.state.rev = (app.state.rev || 0) + 1;
   clearTimeout(app.saveRetry);
   const gen = app.gen;
-  const { error, rejected } = await net.saveMatch(app.gameId, app.state, app.state.admin ? AP.adminKey() : null);
-  if (!error) { app.lastMoveAt = new Date().toISOString(); return; }
+  const { error, rejected, merged } = await net.saveMatch(app.gameId, app.state, app.state.admin ? AP.adminKey() : null);
+  if (!error) {
+    app.lastMoveAt = new Date().toISOString();
+    // Jemand hat während des Zuges aufgegeben: den ergänzten Stand holen.
+    if (merged) {
+      const { match } = await net.fetchMatch(app.gameId);
+      if (app.gen === gen && match && validState(match.game_state) && (match.game_state.rev || 0) > (app.state.rev || 0)) {
+        announceHanded(app.state, match.game_state);
+        adopt(match.game_state);
+        render.syncBoard(app.state, viewer());
+        refresh();
+      }
+    }
+    return;
+  }
   ui.toast(error, 'warn');
   // Keine Verbindung: gleich noch einmal versuchen, sonst ginge ein beendeter
   // Zug verloren und alle warteten.
@@ -535,7 +588,14 @@ async function saveOnline() {
     return;
   }
   // Server hat den Zug abgelehnt: auf den gültigen Stand der Datenbank zurück.
+  // Rechnete dieses Gerät gerade KIs, hat das inzwischen ein Mitspieler
+  // übernommen: aufhören, sonst rechnen zwei Geräte dieselben Züge.
   if (rejected) {
+    if (app.botDriver) {
+      app.botRun = (app.botRun || 0) + 1;
+      app.botDriver = false;
+      app.busy = false;
+    }
     const { match } = await net.fetchMatch(app.gameId);
     if (match && validState(match.game_state)) {
       app.lastMoveAt = match.last_move_at || app.lastMoveAt;
@@ -1035,7 +1095,8 @@ function botsToRun() {
 async function maybeBot() {
   if (app.busy || !botsToRun()) return;
   const gen = app.gen;
-  const stale = () => gen !== app.gen;
+  const run = app.botRun = (app.botRun || 0) + 1;
+  const stale = () => gen !== app.gen || run !== app.botRun;
   app.busy = true;
   app.sel = null;
   refresh();
@@ -2207,6 +2268,10 @@ function boot() {
     history.replaceState(null, '', location.pathname + location.search);
     AP.open();
   });
+
+  // Ohne Verbindung beendete Bestenlisten-Partien nachreichen.
+  if (scoreOutbox().length) retryScores();
+  window.addEventListener('online', () => { if (scoreOutbox().length) retryScores(); });
 
   window.__pb = { app, notifyTurn, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera, tutor: () => tutor.last };
 }
