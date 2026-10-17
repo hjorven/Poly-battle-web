@@ -217,15 +217,14 @@ test('Stufe 4: Boni wirken (Kosten, Angriff, Bewegung, Einkommen, Heilung)', () 
   const city = { q: 5, r: 5, owner: 'player_1', pop: 3 };
   st.cities = [city];
   const base = R.incomeFor(st, 'player_1');
-  st.techs.player_1.push('banking', 'scholarship');
-  assert.strictEqual(R.incomeFor(st, 'player_1'), base + 2, 'Bankwesen + Gelehrsamkeit');
-  assert.strictEqual(R.popCost(city, st), 5);
-  st.techs.player_1.push('planning');
-  assert.strictEqual(R.popCost(city, st), 3, 'Stadtplanung');
+  st.techs.player_1.push('scholarship');
+  assert.strictEqual(R.incomeFor(st, 'player_1'), base + 1, 'Gelehrsamkeit');
+  // Ausgemusterte Technologien aus alten Spielständen wirken nicht mehr.
+  st.techs.player_1.push('banking', 'planning', 'engineering', 'espionage');
+  assert.strictEqual(R.incomeFor(st, 'player_1'), base + 1, 'Bankwesen ohne Wirkung');
+  assert.strictEqual(R.popCost(city, st), 5, 'Stadtplanung ohne Wirkung');
   assert.strictEqual(R.unitCost(st, 'player_1', 'catapult'), UNITS.catapult.cost);
-  st.techs.player_1.push('engineering', 'espionage');
-  assert.strictEqual(R.unitCost(st, 'player_1', 'catapult'), UNITS.catapult.cost - 3);
-  assert.strictEqual(R.unitCost(st, 'player_1', 'spy'), UNITS.spy.cost - 2);
+  assert.ok(!R.canResearch(st, 'printing', 'player_1').ok, 'nicht erforschbar');
   const w = unit('w', 'player_1', 'warrior', 5, 5), e = unit('e', 'player_2', 'warrior', 6, 5);
   const before = R.battleResults(st, w, e).damage;
   st.techs.player_1.push('steel');
@@ -240,7 +239,8 @@ test('Stufe 4: Boni wirken (Kosten, Angriff, Bewegung, Einkommen, Heilung)', () 
   st.units = [hurt];
   R.startTurn(st);
   assert.strictEqual(hurt.hp, 2 + 2 + 2, 'Heilkunst: +2');
-  for (const [id, t] of Object.entries(TECHS)) if (t.tier === 4) assert.strictEqual(TECHS[t.req].tier, 3, id);
+  for (const [id, t] of Object.entries(TECHS)) if (t.tier >= 3) assert.strictEqual(TECHS[t.req].tier, t.tier - 1, id);
+  assert.ok(Object.values(TECHS).every(t => t.tier <= 5), 'höchstens Stufe 5');
 });
 
 test('Monumente: Erfolg schaltet frei, einmal bauen, +3 Bevölkerung, Punkte', () => {
@@ -507,9 +507,9 @@ test('Neue Gebäude: Windmühle, Schmelzhütte, Markt, Burg, Kloster; Zünfte, D
   st.cities[0].rewards = { 4: 'borders' };
   for (const k of ['5,3', '5,4', '6,2', '7,2']) delete st.improvements[k];
   assert.ok(R.cityIncome(st, city) > base, 'Mine zählt');
-  st.techs.player_1.push('farming', 'construction', 'mills', 'planning', 'rotation');
+  st.techs.player_1.push('farming', 'construction', 'mills', 'rotation');
   assert.strictEqual(R.improvementIncome(st, 'player_1', 'farm', 6, 5), 2, 'Fruchtfolge');
-  st.techs.player_1.push('roads', 'trade', 'markets', 'banking', 'guilds');
+  st.techs.player_1.push('roads', 'trade', 'markets', 'guilds');
   assert.strictEqual(R.improvementCost(st, 'player_1', 'market'), IMPROVEMENTS.market.cost - 2, 'Zünfte');
   // Burg: 3-fache Verteidigung
   st.improvements['4,5'] = 'fort';
@@ -529,7 +529,7 @@ test('Neue Gebäude: Windmühle, Schmelzhütte, Markt, Burg, Kloster; Zünfte, D
   assert.strictEqual(hurt.hp, 2 + 2 + 2, 'normal 2 + Kloster 2');
 });
 
-test('Neue Einheiten: Pikenier gegen Reiterei, Armbrust, Paladin; Plattenrüstung, Buchdruck, Kartografie', () => {
+test('Neue Einheiten: Pikenier gegen Reiterei, Armbrust, Paladin; Stahl, Kartografie', () => {
   const st = makeState();
   const pike = unit('p', 'player_1', 'pikeman', 5, 5), sword = unit('s', 'player_1', 'swordsman', 5, 5);
   const knight = unit('k', 'player_2', 'knight', 6, 5);
@@ -538,18 +538,18 @@ test('Neue Einheiten: Pikenier gegen Reiterei, Armbrust, Paladin; Plattenrüstun
   assert.ok(R.battleResults(st, pike, knight).damage > R.battleResults(st, unit('w2', 'player_1', 'warrior', 5, 5), knight).damage);
   assert.strictEqual(UNITS.crossbow.range, 2);
   st.techs.player_1.push('climbing', 'mining', 'smithery', 'smelting', 'steel', 'plate');
-  assert.strictEqual(R.defenseOf(st, sword), UNITS.swordsman.def + 1, 'Plattenrüstung');
-  // Paladin als Aufrüstung des Ritters
-  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }];
-  const kn = unit('kn', 'player_1', 'knight', 5, 5);
+  assert.strictEqual(R.defenseOf(st, sword), UNITS.swordsman.def, 'Plattenrüstung ausgemustert');
+  assert.strictEqual(R.attackOf(st, sword), UNITS.swordsman.atk + 1, 'Stahl');
+  // Paladin wird ausgebildet, nicht mehr aus dem Ritter aufgerüstet
+  const city = { q: 5, r: 5, owner: 'player_1', pop: 1 };
+  st.cities = [city];
+  const kn = unit('kn', 'player_1', 'knight', 6, 6);
   st.units = [kn];
-  st.techs.player_1.push('riding', 'freespirit', 'chivalry', 'horseshoes', 'tournaments', 'paladins');
+  st.techs.player_1.push('riding', 'freespirit', 'chivalry', 'horseshoes', 'paladins');
   st.stars.player_1 = 30;
-  assert.ok(R.upgradeUnit(st, kn, 'player_1').ok && kn.type === 'paladin');
-  // Buchdruck verbilligt Forschung, Kartografie erweitert die Sicht
-  const c0 = R.techCost(st, 'ballooning', 'player_1');
-  st.techs.player_1.push('meditation', 'philosophy', 'scholarship', 'printing');
-  assert.ok(R.techCost(st, 'ballooning', 'player_1') < c0 + 8, 'günstiger trotz 4 weiteren Techs');
+  assert.ok(!R.upgradeOption(st, kn));
+  assert.ok(R.trainUnit(st, city, 'paladin', 'player_1').ok);
+  // Kartografie erweitert die Sicht
   const sight = R.unitSight(st, kn);
   st.techs.player_1.push('fishing', 'sailing', 'navigation', 'cartography');
   assert.strictEqual(R.unitSight(st, kn), sight + 2, 'Segeln +1 und Kartografie +1');
@@ -1006,7 +1006,7 @@ test('Forschung: Voraussetzungen, Kostenskalierung, Philosophie-Rabatt', () => {
   assert.strictEqual(R.techCost(st, 'hunting', 'player_1'), 3 + 2 * 2, 'Tier1 * (1 + 2 Städte) + 2 je bekannter Technik');
   assert.strictEqual(R.techCost(st, 'smithery', 'player_1'), 4 * 3 + 2 * 2, 'Stufe 3: Faktor 4');
   assert.strictEqual(R.techCost(st, 'markets', 'player_1'), 6 * 3 + 2 * 2, 'Stufe 4: Faktor 6');
-  assert.strictEqual(R.techCost(st, 'banking', 'player_1'), 7 * 3 + 2 * 2, 'Stufe 5: Faktor 7');
+  assert.strictEqual(R.techCost(st, 'guilds', 'player_1'), 7 * 3 + 2 * 2, 'Stufe 5: Faktor 7');
 
   const before = R.techCost(st, 'philosophy', 'player_1');
   st.techs.player_1.push('philosophy');
@@ -2661,7 +2661,7 @@ test('Zugprotokoll: gefälschte oder unvollständige Protokolle fallen auf', () 
   assert.ok(!L.replayChallenge('weekly', '2026-W42', log).error, 'echtes Protokoll gilt');
   assert.match(L.replayChallenge('weekly', '2026-W42', log.slice(0, log.length - 3)).error, /nicht zu Ende/);
   const i = log.findIndex(e => e.k === 'train');
-  const fake = log.slice(); fake.splice(i, 0, { k: 'research', t: Object.keys(TECHS).find(t => TECHS[t].tier === 6) });
+  const fake = log.slice(); fake.splice(i, 0, { k: 'research', t: Object.keys(TECHS).find(t => TECHS[t].tier === 5) });
   assert.match(L.replayChallenge('weekly', '2026-W42', fake).error, /nicht möglich/);
   assert.match(L.replayChallenge('daily', '2026-W42', log).error || 'falsche Karte', /./, 'andere Herausforderung passt nicht');
   assert.ok(L.replayChallenge('weekly', '2026-W42', 'kaputt').error);

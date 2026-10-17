@@ -3,7 +3,7 @@
 
 import {
   TERRAIN, UNITS, TECHS, TRIBES, IMPROVEMENTS, RESOURCES, CITY_REWARDS, PERSONAS,
-  MAP_SIZES, MAP_TYPES, AI_LEVELS, MAX_POP, MONUMENTS, own
+  MAP_SIZES, MAP_TYPES, AI_LEVELS, MAX_POP, MONUMENTS, RETIRED_TECHS, own
 } from './config.js';
 
 const KEY = 'pb_save_v1';
@@ -66,7 +66,7 @@ function checkState(st) {
   if (!optional(st.ai, a => listOf(a, isPlayer))) return false;
   // Sterne und Technologien: jeder Spieler hat eine Zahl und eine Liste bekannter Technologien.
   if (!isObj(st.stars) || !isObj(st.techs)) return false;
-  if (!st.players.every(p => isNum(st.stars[p]) && listOf(st.techs[p], t => t === 'basic' || !!own(TECHS, t)))) return false;
+  if (!st.players.every(p => isNum(st.stars[p]) && listOf(st.techs[p], t => t === 'basic' || !!own(TECHS, t) || RETIRED_TECHS.includes(t)))) return false;
   if (!dictOf(st.stars, (v, k) => P.has(k) && isNum(v)) || !dictOf(st.techs, (v, k) => P.has(k))) return false;
   if (!optional(st.tribes, t => dictOf(t, (v, k) => P.has(k) && !!own(TRIBES, v)))) return false;
   if (!optional(st.persona, t => dictOf(t, (v, k) => P.has(k) && !!own(PERSONAS, v)))) return false;

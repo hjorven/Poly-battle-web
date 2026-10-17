@@ -256,80 +256,66 @@ export const TECHS = {
   roads: { name: 'Wege', tier: 2, req: 'riding', desc: 'Wege (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1' },
   freespirit: { name: 'Freier Geist', tier: 2, req: 'riding', desc: 'Bannerträger; Zweig: Ritterlichkeit' },
 
-  // Je Ast: Stufe 2 → 3 → 4 → 5 → 6. Neue Inhalte stehen auch früh (Stufe 3/4),
-  // einige reine Boni sind dafür nach hinten gerückt.
+  // Je Ast: Stufe 2 → 3 → 4 → 5 (seit Oktober 2026 ohne Stufe 6, siehe RETIRED_TECHS).
   construction: { name: 'Baukunst', tier: 3, req: 'farming', desc: '+1 Stern pro Stadt' },
   mills: { name: 'Mühlenbau', tier: 4, req: 'construction', desc: 'Windmühle: +1 Stern je angrenzender Farm' },
-  planning: { name: 'Stadtplanung', tier: 5, req: 'mills', desc: 'Bevölkerung kaufen kostet 2 Sterne weniger' },
-  rotation: { name: 'Fruchtfolge', tier: 6, req: 'planning', desc: 'Jede Farm bringt +1 Stern zusätzlich' },
+  rotation: { name: 'Fruchtfolge', tier: 5, req: 'mills', desc: 'Jede Farm bringt +1 Stern zusätzlich' },
 
   pikes: { name: 'Pikeniere', tier: 3, req: 'shields', desc: 'Pikenier: stark gegen Reiter, Ritter und Paladine' },
   diplomacy: { name: 'Diplomatie', tier: 4, req: 'pikes', desc: 'Frieden mit anderen Stämmen anbieten' },
-  espionage: { name: 'Spionage', tier: 5, req: 'diplomacy', desc: 'Spione kosten 2 Sterne weniger und sehen 1 Feld weiter' },
-  castles: { name: 'Burgbau', tier: 6, req: 'espionage', desc: 'Burg: Einheiten darauf haben 3-fache Verteidigung' },
+  castles: { name: 'Burgbau', tier: 5, req: 'diplomacy', desc: 'Burg: Einheiten darauf haben 3-fache Verteidigung' },
 
   smithery: { name: 'Schmiedekunst', tier: 3, req: 'mining', desc: 'Schwertkämpfer ausbilden' },
   smelting: { name: 'Verhüttung', tier: 4, req: 'smithery', desc: 'Schmelzhütte: +2 Sterne je angrenzender Mine' },
   steel: { name: 'Stahl', tier: 5, req: 'smelting', desc: 'Krieger, Verteidiger, Pikeniere und Schwertkämpfer +1 Angriff' },
-  plate: { name: 'Plattenrüstung', tier: 6, req: 'steel', desc: 'Nahkämpfer zu Fuß und zu Pferd +1 Verteidigung' },
 
   philosophy: { name: 'Philosophie', tier: 3, req: 'meditation', desc: 'Gedankenbeuger; Forschung -20 %' },
   scholarship: { name: 'Gelehrsamkeit', tier: 4, req: 'philosophy', desc: '+1 Stern pro Stadt ab Stufe 3' },
-  printing: { name: 'Buchdruck', tier: 5, req: 'scholarship', desc: 'Forschung noch einmal -15 %' },
-  monastic: { name: 'Klosterwesen', tier: 6, req: 'printing', desc: 'Kloster: +2 Sterne, Einheiten im Stadtgebiet heilen 2 mehr' },
+  monastic: { name: 'Klosterwesen', tier: 5, req: 'scholarship', desc: 'Kloster: +2 Sterne, Einheiten im Stadtgebiet heilen 2 mehr' },
 
   navigation: { name: 'Navigation', tier: 3, req: 'sailing', desc: 'Kriegsschiffe ausbilden' },
   cartography: { name: 'Kartografie', tier: 4, req: 'navigation', desc: 'Alle Einheiten sehen 1 Feld weiter' },
   seapower: { name: 'Seemacht', tier: 5, req: 'cartography', desc: 'Boote, Schiffe und Kriegsschiffe +1 Bewegung' },
-  naval: { name: 'Seeherrschaft', tier: 6, req: 'seapower', desc: 'Boote, Schiffe und Kriegsschiffe +1 Angriff' },
 
   aquatism: { name: 'Aquatismus', tier: 3, req: 'ramming', desc: 'Verteidigungsbonus auf Wasser; Brander' },
   fishfarming: { name: 'Fischzucht', tier: 4, req: 'aquatism', desc: 'Fischgründe bringen +1 Stern zusätzlich' },
   harbors: { name: 'Hafenwirtschaft', tier: 5, req: 'fishfarming', desc: 'Jeder Hafen bringt +1 Stern zusätzlich' },
-  shipyards: { name: 'Werften', tier: 6, req: 'harbors', desc: 'Boote, Schiffe und Kriegsschiffe kosten 2 Sterne weniger' },
 
   crossbows: { name: 'Armbrust', tier: 3, req: 'archery', desc: 'Armbrustschütze: Reichweite 2, Angriff 3' },
-  spiritualism: { name: 'Spiritualismus', tier: 4, req: 'crossbows', desc: '+1 Heilung pro Runde' },
-  medicine: { name: 'Heilkunst', tier: 5, req: 'spiritualism', desc: 'Einheiten heilen jede Runde 2 Leben mehr' },
-  marksmen: { name: 'Meisterschützen', tier: 6, req: 'medicine', desc: 'Bogen- und Armbrustschützen +1 Angriff' },
+  medicine: { name: 'Heilkunst', tier: 4, req: 'crossbows', desc: 'Einheiten heilen jede Runde 2 Leben mehr' },
+  marksmen: { name: 'Meisterschützen', tier: 5, req: 'medicine', desc: 'Bogen- und Armbrustschützen +1 Angriff' },
 
   mathematics: { name: 'Mathematik', tier: 3, req: 'forestry', desc: 'Katapult ausbilden' },
-  engineering: { name: 'Ingenieurwesen', tier: 4, req: 'mathematics', desc: 'Katapulte kosten 3 Sterne weniger' },
-  ballooning: { name: 'Ballonfahrt', tier: 5, req: 'engineering', desc: 'Ballonplatz und Heißluftballon (Späher)' },
-  airships: { name: 'Luftschiffbau', tier: 6, req: 'ballooning', desc: 'Kriegsluftschiff' },
+  ballooning: { name: 'Ballonfahrt', tier: 4, req: 'mathematics', desc: 'Ballonplatz und Heißluftballon (Späher)' },
+  airships: { name: 'Luftschiffbau', tier: 5, req: 'ballooning', desc: 'Kriegsluftschiff' },
 
   trade: { name: 'Handel', tier: 3, req: 'roads', desc: '+1 Stern pro Stadt' },
   markets: { name: 'Märkte', tier: 4, req: 'trade', desc: 'Markt: +1 Stern je angrenzendem Gebäude (bis 4)' },
-  banking: { name: 'Bankwesen', tier: 5, req: 'markets', desc: '+1 Stern pro Stadt' },
-  guilds: { name: 'Zünfte', tier: 6, req: 'banking', desc: 'Alle Gebäude kosten 2 Sterne weniger' },
+  guilds: { name: 'Zünfte', tier: 5, req: 'markets', desc: 'Alle Gebäude kosten 2 Sterne weniger' },
 
   chivalry: { name: 'Ritterlichkeit', tier: 3, req: 'freespirit', desc: 'Ritter ausbilden' },
   horseshoes: { name: 'Hufeisen', tier: 4, req: 'chivalry', desc: 'Reiter +1 Bewegung' },
-  tournaments: { name: 'Turniere', tier: 5, req: 'horseshoes', desc: 'Ritter und Paladine +1 Angriff' },
-  paladins: { name: 'Ritterorden', tier: 6, req: 'tournaments', desc: 'Paladin: schwerer Ritter' }
+  paladins: { name: 'Ritterorden', tier: 5, req: 'horseshoes', desc: 'Paladin: schwerer Ritter' }
 };
 
 // Stufe-4-Boni: Technologie → Wirkung (in rules.js ausgewertet).
+// Ausgemusterte Technologien: nicht mehr erforschbar und ohne Wirkung. Alte
+// Spielstände dürfen sie noch enthalten (siehe save.js).
+export const RETIRED_TECHS = ['planning', 'espionage', 'plate', 'printing', 'naval', 'shipyards', 'spiritualism', 'engineering', 'banking', 'tournaments'];
+
 export const TECH_BONUS = {
-  planning: { popDiscount: 2 },
-  espionage: { unitDiscount: { spy: 2 }, sight: { spy: 1 } },
   steel: { atk: { warrior: 1, defender: 1, pikeman: 1, swordsman: 1 } },
-  plate: { def: { warrior: 1, defender: 1, pikeman: 1, swordsman: 1, rider: 1, knight: 1, paladin: 1 } },
   seapower: { move: { boat: 1, ship: 1, battleship: 1 } },
-  naval: { atk: { boat: 1, ship: 1, battleship: 1 } },
-  shipyards: { unitDiscount: { boat: 2, ship: 2, battleship: 2 } },
   medicine: { heal: 2 },
   marksmen: { atk: { archer: 1, crossbow: 1 } },
-  engineering: { unitDiscount: { catapult: 3 } },
   horseshoes: { move: { rider: 1 } },
-  tournaments: { atk: { knight: 1, paladin: 1 } },
   cartography: { sightAll: 1 },
   rotation: { farmBonus: 1 },
   fishfarming: { fishBonus: 1 },
   guilds: { buildDiscount: 2 }
 };
 
-export const TECH_TIERS = [1, 2, 3, 4, 5, 6].map(t => Object.keys(TECHS).filter(k => TECHS[k].tier === t));
+export const TECH_TIERS = [1, 2, 3, 4, 5].map(t => Object.keys(TECHS).filter(k => TECHS[k].tier === t));
 
 // Echte Stämme (reguläre Auswahl) mit Farbe, Start-Technologie und Starteinheit.
 export const TRIBES = {
@@ -424,7 +410,7 @@ export const ROAD = { tech: 'roads', cost: 3 };
 export const DISBAND_REFUND = 0.5;
 // Aufrüsten: Einheit → nächste Stufe derselben Gattung (Kosten = Preisunterschied).
 export const UPGRADES = {
-  warrior: 'swordsman', archer: 'crossbow', rider: 'knight', knight: 'paladin',
+  warrior: 'swordsman', archer: 'crossbow', rider: 'knight',
   boat: 'ship', ship: 'battleship',
   balloon: 'airship'
 };
