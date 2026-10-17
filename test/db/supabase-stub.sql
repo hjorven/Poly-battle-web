@@ -1,6 +1,7 @@
 -- Nachbau der Supabase-Umgebung, so weit die Migrationen sie brauchen (Rollen,
 -- realtime.send, Publikation, Tabelle matches im Zustand vor allen Migrationen).
 do $$ begin create role anon; exception when others then null; end $$; do $$ begin create role authenticated; exception when others then null; end $$;
+do $$ begin create role service_role; exception when others then null; end $$;
 create schema realtime;
 create table realtime.sent(payload jsonb, event text, topic text, private boolean);
 create function realtime.send(payload jsonb, event text, topic text, private boolean default true) returns void language sql as $$ insert into realtime.sent values (payload, event, topic, private) $$;
