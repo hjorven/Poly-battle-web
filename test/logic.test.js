@@ -13,6 +13,7 @@ import * as A from '../js/admin.js';
 import * as L from '../js/actionlog.js';
 import * as N from '../js/names.js';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 let passed = 0;
 let failed = 0;
@@ -2713,6 +2714,20 @@ test('Auflösen: Riese aus der Stadtbelohnung bringt keine Sterne', () => {
   assert.ok(res.ok);
   assert.strictEqual(st.stars.player_1, 20);
   assert.strictEqual(R.disbandRefund(unit('w', 'player_1', 'swordsman', 1, 1)), Math.floor(UNITS.swordsman.cost / 2));
+});
+
+test('Content-Security-Policy: jedes Inline-Skript in index.html ist per Hash erlaubt', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/);
+  assert.ok(csp, 'CSP-Meta fehlt');
+  const scripts = [...html.matchAll(/<script(?:\s+type="importmap")?>([\s\S]*?)<\/script>/g)];
+  assert.ok(scripts.length >= 2);
+  for (const m of scripts) {
+    const h = createHash('sha256').update(m[1], 'utf8').digest('base64');
+    assert.ok(csp[1].includes(`'sha256-${h}'`), 'Hash fehlt für Inline-Skript (Skript geändert? CSP-Hash in index.html anpassen): ' + m[1].trim().slice(0, 60));
+  }
+  assert.ok(!/unsafe-eval/.test(csp[1]) && !/script-src[^;]*unsafe-inline/.test(csp[1]), 'keine unsicheren Skript-Ausnahmen');
+  assert.ok(!/\son[a-z]+="/i.test(html.replace(/<meta[^>]+>/g, '')), 'keine Inline-Event-Handler');
 });
 
 test('Namen: Wortliste greift, harmlose Namen bleiben erlaubt', () => {
