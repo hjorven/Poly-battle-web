@@ -18,7 +18,7 @@ The tech tree has 55 technologies in six tiers. Costs rise with the tier, the nu
 | 6 | **Crop Rotation** | Urban Planning | Every farm gives +1 extra star |
 | 2 | **Shields** | Organization | Train defenders |
 | 3 | **Pikemen** | Shields | Pikeman: strong against riders, knights and paladins |
-| 4 | **Diplomacy** | Pikemen | Embassies and alliances |
+| 4 | **Diplomacy** | Pikemen | Offer peace to other tribes |
 | 5 | **Espionage** | Diplomacy | Spies cost 2 stars less and see 1 tile further |
 | 6 | **Castle Building** | Espionage | Castle: units on it get 3× defence |
 
@@ -67,8 +67,8 @@ The tech tree has 55 technologies in six tiers. Costs rise with the tier, the nu
 | 2 | **Forestry** | Hunting | Build sawmills (+1 income); ranger |
 | 3 | **Mathematics** | Forestry | Train catapults |
 | 4 | **Engineering** | Mathematics | Catapults cost 3 stars less |
-| 5 | **Ballooning** | Engineering | Balloon field, hot air balloon (scout) and cargo balloon |
-| 6 | **Airship Building** | Ballooning | Fire balloon and war airship |
+| 5 | **Ballooning** | Engineering | Balloon field and hot-air balloon (scout) |
+| 6 | **Airship Building** | Ballooning | War Airship |
 
 ## Riding
 

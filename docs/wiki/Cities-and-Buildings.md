@@ -13,7 +13,7 @@ When a city grows to a new level, you pick one of two rewards:
 | 2 | **Workshop**: +1 star per turn | **Explorer**: Reveals the surroundings within 4 tiles |
 | 3 | **City Wall**: Defenders in this city get 4× defence | **Resources**: +5 stars immediately |
 | 4 | **Population Growth**: +1 population (towards next level) | **Border Growth**: City area grows to a radius of 2 tiles |
-| 5 | **Park**: +1 star per turn | **Giant**: A giant (40 health) appears at the city |
+| 5 | **Park**: +2 stars per turn | **Giant**: A giant (40 HP) appears next to the city, costs 25 stars |
 
 ## Buildings
 
@@ -73,7 +73,7 @@ Depending on map size there are 2 (small), 3 (normal), 4 (large) camps. One of y
 | --- | --- |
 | Swordsman | 7 |
 | Crossbowman | 8 |
-| Knight | 11 |
+| Knight | 13 |
 | Pikeman | 6 |
 | Horse Archer | 8 |
 | Catapult | 10 |

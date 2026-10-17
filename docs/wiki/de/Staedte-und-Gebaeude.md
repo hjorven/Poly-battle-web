@@ -13,7 +13,7 @@ Wächst eine Stadt auf eine neue Stufe, wählst du eine von zwei Belohnungen:
 | 2 | **Werkstatt**: +1 Stern pro Runde | **Erkunder**: Deckt die Umgebung im Umkreis von 4 Feldern auf |
 | 3 | **Stadtmauer**: Verteidiger in dieser Stadt erhalten 4-fache Verteidigung | **Vorräte**: +5 Sterne sofort |
 | 4 | **Wachstum**: +1 Bevölkerung (nächste Stufe) | **Grenzerweiterung**: Stadtgebiet wächst auf 2 Felder Umkreis |
-| 5 | **Park**: +1 Stern pro Runde | **Riese**: Ein Riese (40 Leben) erscheint bei der Stadt |
+| 5 | **Park**: +2 Sterne pro Runde | **Riese**: Ein Riese (40 Leben) erscheint bei der Stadt, kostet 25 Sterne |
 
 ## Gebäude
 
@@ -73,7 +73,7 @@ Je nach Kartengröße gibt es 2 (klein), 3 (normal), 4 (groß) Lager. Eine eigen
 | --- | --- |
 | Schwertkämpfer | 7 |
 | Armbrustschütze | 8 |
-| Ritter | 11 |
+| Ritter | 13 |
 | Pikenier | 6 |
 | Bogenreiter | 8 |
 | Katapult | 10 |
