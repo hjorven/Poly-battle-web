@@ -64,6 +64,8 @@ export async function fetchMatch(gameId) {
 
 // Die Datenbank klingelt nach jeder Änderung auf dem Kanal der Partie (nur
 // „es gibt Neues“, kein Spielstand); dann wird der Stand geprüft abgeholt.
+// Gehört wird auf dem privaten Kanal, auf dem nur die Datenbank senden darf;
+// lehnt der Server ihn ab (ältere Datenbank), auf dem öffentlichen.
 // Nach einem Verbindungsabbruch und alle 45 Sekunden wird zur Sicherheit
 // ebenfalls nachgefragt, damit kein Zug verloren geht.
 export function subscribe(gameId, onUpdate) {
@@ -80,9 +82,17 @@ export function subscribe(gameId, onUpdate) {
       busy = false;
     }
   };
-  const channel = sb.channel('match-' + gameId)
+  const listen = priv => sb.channel('match-' + gameId, priv ? { config: { private: true } } : undefined)
     .on('broadcast', { event: 'moved' }, () => pull())
-    .subscribe(status => { if (status === 'SUBSCRIBED') pull(); });
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED') pull();
+      else if (priv && status === 'CHANNEL_ERROR' && !channel.pbAlt) {
+        // Gleiches Thema zweimal stört sich: den privaten Kanal erst schließen.
+        sb.removeChannel(channel);
+        channel.pbAlt = listen(false);
+      }
+    });
+  const channel = listen(true);
   channel.pbPoll = setInterval(() => { if (!document.hidden) pull(); }, 45000);
   return channel;
 }
@@ -92,6 +102,7 @@ export function unsubscribe(channel) {
   if (!channel) return;
   clearInterval(channel.pbPoll);
   if (sb) sb.removeChannel(channel);
+  if (sb && channel.pbAlt) sb.removeChannel(channel.pbAlt);
 }
 
 export async function saveMatch(gameId, state, adminKey = null) {
