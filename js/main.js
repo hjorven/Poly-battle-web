@@ -369,7 +369,9 @@ function checkWinnerUI() {
   if (app.state.winner) { clearSave(); ui.showWinner(app.state, ctx()); recordProfile(); }
   else if (humanDefeated()) {
     clearSave();
-    const easier = app.state.aiLevel !== 'easy' || app.state.players.length > 2;
+    // Mission, Herausforderung und Lektion starten beim Wiederholen sich selbst neu, nicht leichter.
+    const fixed = app.state.mission || app.state.daily || app.state.weekly || app.state.tutorial;
+    const easier = !fixed && (app.state.aiLevel !== 'easy' || app.state.players.length > 2);
     ui.showDefeat(app.state, ctx(), { easier, retry: true });
     recordProfile();
   }
@@ -418,12 +420,50 @@ async function syncOnline(profile, st, me, score) {
     if (!Array.isArray(st.actions)) {
       ui.toast('Diese Partie wurde vor dem letzten Update begonnen und zählt nicht für die Bestenliste.', 'warn');
     } else {
-      const res = await net.submitScore(kind, st.daily || st.weekly, score, st.tribes ? st.tribes[me] : null, st.round, st.actions);
-      if (res.data) ui.toast('Ergebnis eingereicht. Es erscheint in der Bestenliste, sobald es geprüft ist (meist nach wenigen Minuten).', 'good');
-      else if (res.error) ui.toast('Bestenliste: ' + res.error, 'warn');
+      await submitScore({ kind, period: st.daily || st.weekly, score, tribe: st.tribes ? st.tribes[me] : null, round: st.round, actions: st.actions });
     }
   }
   await net.saveRemoteProfile(profile, P.levelOf(profile.xp));
+}
+
+// Bestenlisten-Ergebnisse, die ohne Verbindung nicht ankamen. Der Server nimmt
+// sie noch bis zum Ende des nächsten Tages an; dann wird erneut gesendet.
+const SCORE_OUTBOX = 'pb_score_outbox';
+
+function scoreOutbox() {
+  try {
+    const list = JSON.parse(localStorage.getItem(SCORE_OUTBOX) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (e) { return []; }
+}
+
+function setScoreOutbox(list) {
+  try {
+    if (list.length) localStorage.setItem(SCORE_OUTBOX, JSON.stringify(list.slice(-3)));
+    else localStorage.removeItem(SCORE_OUTBOX);
+  } catch (e) { /* Speicher voll: dann eben nicht merken */ }
+}
+
+async function submitScore(claim, retry = false) {
+  const res = await net.submitScore(claim.kind, claim.period, claim.score, claim.tribe, claim.round, claim.actions);
+  const same = c => c.kind === claim.kind && c.period === claim.period && c.score === claim.score && c.actions.length === claim.actions.length;
+  if (res.offline) {
+    if (!retry) {
+      setScoreOutbox([...scoreOutbox().filter(c => !same(c)), claim]);
+      ui.toast('Bestenliste: keine Verbindung. Das Ergebnis wird gesendet, sobald das Spiel wieder online ist.', 'warn');
+    }
+    return;
+  }
+  setScoreOutbox(scoreOutbox().filter(c => !same(c)));
+  const d = res.data;
+  if (d && d.duplicate && d.status === 'ok') ui.toast('Dieses Ergebnis ist schon in der Bestenliste gewertet.', 'good');
+  else if (d && d.duplicate && d.status === 'rejected') ui.toast('Dieses Ergebnis wurde bei der Prüfung abgelehnt' + (d.reason ? ': ' + d.reason : '.'), 'warn');
+  else if (d) ui.toast((retry ? 'Nachgereicht: ' : '') + 'Ergebnis eingereicht. Es erscheint in der Bestenliste, sobald es geprüft ist (meist nach wenigen Minuten).', 'good');
+  else if (res.error) ui.toast('Bestenliste: ' + res.error, 'warn');
+}
+
+async function retryScores() {
+  for (const claim of scoreOutbox()) await submitScore(claim, true);
 }
 
 function chooseName() {
@@ -445,12 +485,13 @@ function profileCodeDialog() {
   ui.askName(net.profileCode(), async code => {
     code = String(code || '').trim();
     if (code === net.profileCode()) return null;
-    if (!net.useProfileCode(code)) return 'Das ist kein gültiger Profil-Code.';
-    const res = await net.myRemoteProfile();
-    if (res.error || !res.data) return 'Zu diesem Code gibt es kein Profil (oder keine Verbindung).';
-    const loaded = P.sanitizeProfile({ ...(res.data.data || {}), name: res.data.name });
-    P.saveProfile(loaded);
-    ui.toast(`Profil von ${res.data.name} geladen`, 'good');
+    const res = await net.adoptProfileCode(code);
+    if (res.error) return res.error;
+    const { profile, matches } = res.data;
+    if (profile) {
+      P.saveProfile(P.sanitizeProfile({ ...(profile.data || {}), name: profile.name }));
+      ui.toast(`Profil von ${profile.name} geladen`, 'good');
+    } else ui.toast(`Code übernommen: ${matches} Online-${matches === 1 ? 'Partie' : 'Partien'}`, 'good');
     showMenu();
     return null;
   }, {
@@ -481,16 +522,19 @@ function renewProfileCode() {
   ui.showConfirm('Neuen Profil-Code erzeugen? Der alte Code funktioniert danach nirgends mehr, auch nicht auf deinen anderen Geräten. Dort musst du den neuen Code eingeben.', async () => {
     const res = await net.renewProfileCode();
     if (res.error) { ui.toast(res.error, 'warn'); return; }
-    ui.toast('Neuer Profil-Code aktiv. Speichere ihn am besten gleich als Datei.', 'good');
+    ui.toast(res.data && res.data.recovered ? 'Der neue Code vom letzten Versuch ist aktiv. Speichere ihn am besten gleich als Datei.'
+      : 'Neuer Profil-Code aktiv. Speichere ihn am besten gleich als Datei.', 'good');
     profileCodeDialog();
   }, { yes: 'Neuen Code erzeugen' });
 }
 
 async function showBoard(kind) {
   const period = kind === 'daily' ? P.dateKey() : P.weekKey();
+  // Schnell zwischen Tag und Woche gewechselt: nur die letzte Antwort zeigen.
+  const ask = app.boardAsk = (app.boardAsk || 0) + 1;
   ui.renderBoard(null, kind);
   const res = await net.leaderboard(kind, period);
-  ui.renderBoard(res, kind, P.loadProfile().name);
+  if (ask === app.boardAsk) ui.renderBoard(res, kind, P.loadProfile().name);
 }
 
 // Lokale Partien nach jeder Aktion sichern (Neuladen / Tab schließen).
@@ -521,8 +565,21 @@ async function saveOnline() {
   app.state.rev = (app.state.rev || 0) + 1;
   clearTimeout(app.saveRetry);
   const gen = app.gen;
-  const { error, rejected } = await net.saveMatch(app.gameId, app.state, app.state.admin ? AP.adminKey() : null);
-  if (!error) { app.lastMoveAt = new Date().toISOString(); return; }
+  const { error, rejected, merged } = await net.saveMatch(app.gameId, app.state, app.state.admin ? AP.adminKey() : null);
+  if (!error) {
+    app.lastMoveAt = new Date().toISOString();
+    // Jemand hat während des Zuges aufgegeben: den ergänzten Stand holen.
+    if (merged) {
+      const { match } = await net.fetchMatch(app.gameId);
+      if (app.gen === gen && match && validState(match.game_state) && (match.game_state.rev || 0) > (app.state.rev || 0)) {
+        announceHanded(app.state, match.game_state);
+        adopt(match.game_state);
+        render.syncBoard(app.state, viewer());
+        refresh();
+      }
+    }
+    return;
+  }
   ui.toast(error, 'warn');
   // Keine Verbindung: gleich noch einmal versuchen, sonst ginge ein beendeter
   // Zug verloren und alle warteten.
@@ -531,7 +588,14 @@ async function saveOnline() {
     return;
   }
   // Server hat den Zug abgelehnt: auf den gültigen Stand der Datenbank zurück.
+  // Rechnete dieses Gerät gerade KIs, hat das inzwischen ein Mitspieler
+  // übernommen: aufhören, sonst rechnen zwei Geräte dieselben Züge.
   if (rejected) {
+    if (app.botDriver) {
+      app.botRun = (app.botRun || 0) + 1;
+      app.botDriver = false;
+      app.busy = false;
+    }
     const { match } = await net.fetchMatch(app.gameId);
     if (match && validState(match.game_state)) {
       app.lastMoveAt = match.last_move_at || app.lastMoveAt;
@@ -612,7 +676,7 @@ function doOfferPeace(to) {
   if (res.accepted) { ui.toast(`Frieden mit ${name} geschlossen`, 'good'); quote(to, 'peaceYes'); sfx('peace'); }
   else if (res.pending) ui.toast(`Friedensangebot an ${name} gesendet`, 'good');
   else { ui.toast(`${name} lehnt ab (neuer Versuch in 3 Runden)`, 'warn'); quote(to, 'peaceNo'); sfx('error'); }
-  ui.showOverview(app.state, ctx());
+  ui.showOverview(app.state, overviewCtx());
   afterAction();
 }
 
@@ -629,26 +693,36 @@ function doDeclareWar(to) {
   }, { yes: 'Krieg erklären' });
 }
 
+// Friedensangebot beantworten (Dialog oder Übersicht).
+function doRespondPeace(from, accept) {
+  if (!myTurn()) return;
+  const res = R.respondPeace(app.state, actAs(), from, accept);
+  if (!res.ok) return;
+  L.logAction(app.state, L.entry.respond(from, accept));
+  if (accept) { ui.toast(`Frieden mit ${needName(app.state, from)} geschlossen`, 'good'); sfx('peace'); }
+  else ui.toast('Angebot abgelehnt');
+  if (ui.isOverviewOpen()) ui.showOverview(app.state, overviewCtx());
+  afterAction();
+}
+
 // Eingehendes Friedensangebot dem Spieler am Zug vorlegen.
 function offerDiplomacy() {
   if (!myTurn() || ui.isRewardOpen() || ui.isConfirmOpen()) return;
   const me = actAs();
   const offer = (app.state.peaceOffers || []).find(o => o.to === me);
   if (!offer) return;
-  const answer = accept => {
-    const res = R.respondPeace(app.state, me, offer.from, accept);
-    if (!res.ok) return;
-    L.logAction(app.state, L.entry.respond(offer.from, accept));
-    if (accept) { ui.toast(`Frieden mit ${needName(app.state, offer.from)} geschlossen`, 'good'); sfx('peace'); }
-    else ui.toast('Angebot abgelehnt');
-    afterAction();
-  };
+  const answer = accept => doRespondPeace(offer.from, accept);
   ui.showConfirm(`${needName(app.state, offer.from)} bietet dir Frieden an. Solange er gilt, könnt ihr euch nicht angreifen und nicht die Städte des anderen betreten.`,
     () => answer(true), { onNo: () => answer(false), yes: 'Frieden schließen', no: 'Ablehnen' });
 }
 
 function actAs() {
   return ctx().actAs;
+}
+
+// Übersicht immer mit dem Knopf für den letzten Rundenbericht, wenn es einen gibt.
+function overviewCtx() {
+  return { ...ctx(), hasReport: !!app.lastReport };
 }
 
 // Panels und Dialoge halten Objekte aus dem Stand, mit dem sie gezeichnet
@@ -1021,7 +1095,8 @@ function botsToRun() {
 async function maybeBot() {
   if (app.busy || !botsToRun()) return;
   const gen = app.gen;
-  const stale = () => gen !== app.gen;
+  const run = app.botRun = (app.botRun || 0) + 1;
+  const stale = () => gen !== app.gen || run !== app.botRun;
   app.busy = true;
   app.sel = null;
   refresh();
@@ -1483,8 +1558,11 @@ function missionTick() {
   const m = s.mission;
   const par = m.par ? ` · 2 Sterne bis Runde ${m.par[0]}, 3 bis Runde ${m.par[1]}` : ' · ' + (m.starHint || 'Sterne für 3 bzw. 5 Städte am Ende');
   ui.showMission(`<b>${esc2(m.title)}</b>: ${esc2(m.goal)} (${Math.min(s.have, s.need)}/${s.need})${par}`, s.have / s.need);
-  if (s.done && !st.winner) {
-    st.missionStars = s.stars;
+  // Die letzte Eroberung beendet die Partie schon in den Regeln (checkWinner):
+  // Dann zählt die Mission trotzdem, Überlebensmissionen gelten als geschafft.
+  const conquered = st.winner === 'player_1' && st.endReason === 'conquest' && st.missionStars == null;
+  if ((!st.winner || conquered) && (s.done || (conquered && m.survive))) {
+    st.missionStars = s.done ? s.stars : m.stars(st);
     st.winner = 'player_1';
     st.endReason = 'mission';
     R.recordHistory(st, true);
@@ -1639,7 +1717,7 @@ function startLocal(mode, override = null) {
         tribe, stars: settings.stars, turnLimit: settings.turnLimit, aiLevel: settings.aiLevel,
         ai: Array.from({ length: count - 1 }, (_, k) => 'player_' + (k + 2)), ...map
       }
-    : { turnLimit: settings.turnLimit, ...map };
+    : { stars: settings.stars, turnLimit: settings.turnLimit, ...map };
   app.state = R.createGame(override && override.seed != null ? override.seed : Math.floor(Math.random() * 2 ** 31), count, opts);
   // Eigenes Aussehen (Kosmetik) für den Menschen gegen die KI.
   if (mode === 'bot') app.state.looks = { player_1: P.lookOf(P.loadProfile()) };
@@ -1744,6 +1822,9 @@ async function startOnline() {
     focusHome();
     refresh();
     if (!app.myRole) ui.toast('Partie beendet – du siehst sie dir an.');
+    // Offene Belohnung oder Friedensangebot gleich beim Öffnen zeigen.
+    offerReward();
+    offerDiplomacy();
   } else {
     const settings = ui.getSettings();
     const humans = settings.humans;
@@ -1789,7 +1870,7 @@ async function startOnline() {
       app.busy = false;
       app.botDriver = false;
       render.syncBoard(app.state, viewer());
-      if (!wasMine && myTurn()) notifyTurn();
+      if (!wasMine && myTurn()) { notifyTurn(); offerReward(); offerDiplomacy(); }
       checkWinnerUI();
     }
     refresh();
@@ -2021,7 +2102,7 @@ function boot() {
       if (key === 'next') nextIdle();
       else if (key === 'end') { if (myTurn()) doEndTurn(); }
       else if (key === 'tech') ui.openTech(app.state, ctx());
-      else if (key === 'overview') ui.showOverview(app.state, ctx());
+      else if (key === 'overview') ui.showOverview(app.state, overviewCtx());
       else if (key === 'details') { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = !app.panelOpen; refresh(); } }
       else if (key === 'home') focusHome();
       else if (key === 'report') { if (app.lastReport) ui.showNews(app.lastReport); else ui.toast('Noch kein Rundenbericht in diesem Spiel'); }
@@ -2037,9 +2118,10 @@ function boot() {
     onToggleSound: () => { setMuted(!isMuted()); ui.setSoundIcon(isMuted()); if (!isMuted()) sfx('select'); },
     onOfferPeace: doOfferPeace,
     onDeclareWar: doDeclareWar,
+    onRespondPeace: doRespondPeace,
     onChooseReward: doChooseReward,
     onClosePanel: () => { app.sel = null; refresh(); },
-    onOpenOverview: () => { if (app.state) ui.showOverview(app.state, { ...ctx(), hasReport: !!app.lastReport }); },
+    onOpenOverview: () => { if (app.state) ui.showOverview(app.state, overviewCtx()); },
     onShowReport: () => { ui.hideOverview(); if (app.lastReport) ui.showNews(app.lastReport); },
     onCloseOverview: () => ui.hideOverview(),
     onFocusUnit: id => {
@@ -2123,6 +2205,11 @@ function boot() {
       const st = app.state;
       ui.hideWinner();
       if (!st) return showMenu();
+      // Dieselbe Mission, Herausforderung oder Lektion noch einmal statt einer freien Partie.
+      if (st.mission) return startMission(st.mission);
+      if (st.daily) return startDaily();
+      if (st.weekly) return startWeekly();
+      if (st.tutorial && st.tutorial.lesson) return startLesson(st.tutorial.lesson);
       const levels = ['easy', 'normal', 'hard'];
       let aiLevel = st.aiLevel || 'normal', count = st.players.length;
       if (easier === 'harder') {
@@ -2182,6 +2269,10 @@ function boot() {
     history.replaceState(null, '', location.pathname + location.search);
     AP.open();
   });
+
+  // Ohne Verbindung beendete Bestenlisten-Partien nachreichen.
+  if (scoreOutbox().length) retryScores();
+  window.addEventListener('online', () => { if (scoreOutbox().length) retryScores(); });
 
   window.__pb = { app, notifyTurn, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera, tutor: () => tutor.last };
 }

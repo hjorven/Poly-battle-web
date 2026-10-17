@@ -170,16 +170,18 @@ export async function saveMatch(gameId, state, adminKey = null) {
   const sb = getClient();
   if (!sb) return { error: 'Offline' };
   try {
-    const { error } = await callRpc(sb, 'save_match', { p_id: gameId, p_token: getToken(), p_state: state, ...adminArg(adminKey) }, SAVE_TIMEOUT);
+    const { data, error } = await callRpc(sb, 'save_match', { p_id: gameId, p_token: getToken(), p_state: state, ...adminArg(adminKey) }, SAVE_TIMEOUT);
     // supabase-js meldet eine abgebrochene Verbindung als Fehler, nicht als Ausnahme.
     if (isNetErr(error)) {
       return { error: 'Zug nicht gespeichert: keine Verbindung zum Server.' };
     }
     if (error) return { error: 'Zug nicht gespeichert: ' + error.message, rejected: true };
+    // Ein Mitspieler hat während des Zuges aufgegeben: der Server hat den Zug
+    // angenommen und die KI-Liste ergänzt.
+    return { merged: !!(data && data.merged) };
   } catch (e) {
     return { error: 'Zug nicht gespeichert: keine Verbindung zum Server.' };
   }
-  return {};
 }
 
 // Stamm an die KI geben: eigener (Aufgeben), ein nie besetzter Platz oder ein
@@ -206,15 +208,15 @@ export async function myMatches() {
 
 async function rpc(fn, args) {
   const sb = getClient();
-  if (!sb) return { error: OFFLINE };
+  if (!sb) return { error: OFFLINE, offline: true };
   try {
     const { data, error } = await callRpc(sb, fn, args);
     // Abgebrochene Verbindung meldet supabase-js als Fehlermeldung, nicht als Ausnahme.
-    if (isNetErr(error)) return { error: OFFLINE };
+    if (isNetErr(error)) return { error: OFFLINE, offline: true };
     if (error) return { error: error.message || 'Serverfehler' };
     return { data };
   } catch (e) {
-    return { error: 'Keine Verbindung zum Server.' };
+    return { error: OFFLINE, offline: true };
   }
 }
 
@@ -233,28 +235,66 @@ export function profileCode() {
   return getToken();
 }
 
+// Was hängt auf dem Server an einem Code? { profile, matches } oder
+// { error } bei fehlender Verbindung (dann weiß man es nicht).
+async function codeData(code) {
+  const [p, m] = await Promise.all([
+    rpc('pb_my_profile', { p_token: code }),
+    rpc('pb_my_matches', { p_token: code })
+  ]);
+  if (p.error || m.error) return { error: p.error || m.error };
+  return { profile: p.data || null, matches: Array.isArray(m.data) ? m.data.length : 0 };
+}
+
+const PENDING_KEY = 'pb_token_pending';
+const readPending = () => { try { return localStorage.getItem(PENDING_KEY); } catch (e) { return null; } };
+const setPending = v => { try { if (v) localStorage.setItem(PENDING_KEY, v); else localStorage.removeItem(PENDING_KEY); } catch (e) { /* ohne Browserspeicher */ } };
+
 // Neuen Code erzeugen: Die Datenbank tauscht die Kennung im Profil und auf
 // allen Plätzen in Online-Partien aus, der alte Code gilt danach nirgends mehr.
+// Der neue Code wird vorher gemerkt: Geht die Antwort verloren, findet der
+// nächste Versuch Profil und Partien unter ihm wieder.
 export async function renewProfileCode() {
+  const pending = readPending();
+  if (pending) {
+    const was = await codeData(pending);
+    if (was.error) return { error: was.error };
+    if (was.profile || was.matches) {
+      try { localStorage.setItem('pb_token', pending); } catch (e) { return { error: 'Neuer Code konnte im Browser nicht gespeichert werden: ' + pending }; }
+      setPending(null);
+      return { data: { profile: !!was.profile, matches: was.matches, recovered: true } };
+    }
+    setPending(null);
+  }
   const old = getToken();
   const fresh = crypto.randomUUID();
+  setPending(fresh);
   let res = await rpc('pb_rotate_token', { p_old: old, p_new: fresh });
-  // Antwort verloren? Dann prüfen, ob der Tausch trotzdem geklappt hat,
-  // sonst wäre das Profil mit dem alten Code nicht mehr erreichbar.
-  if (res.error === 'Keine Verbindung zum Server.') {
-    const check = await rpc('pb_my_profile', { p_token: fresh });
-    if (check.error || !check.data) return res;
-    res = { data: { profile: true } };
+  // Antwort verloren? Dann prüfen, ob der Tausch trotzdem geklappt hat
+  // (Profil oder Partien unter dem neuen Code).
+  if (res.error === OFFLINE) {
+    const check = await codeData(fresh);
+    if (check.error || !(check.profile || check.matches)) return res;
+    res = { data: { profile: !!check.profile, matches: check.matches } };
   }
   // Noch nie online gewesen: Es gibt nichts umzustellen, nur den Code im Browser.
   if (res.error && /weder Profil noch Partien/.test(res.error)) res = { data: { profile: false, matches: 0 } };
-  if (res.error) return res;
+  if (res.error) { setPending(null); return res; }
   try { localStorage.setItem('pb_token', fresh); } catch (e) { return { error: 'Neuer Code konnte im Browser nicht gespeichert werden: ' + fresh }; }
+  setPending(null);
   return res;
 }
 
-export function useProfileCode(code) {
+// Code von einem anderen Gerät übernehmen. Erst beim Server nachsehen, ob es
+// dazu ein Profil oder Partien gibt; nur dann ersetzt er den Code dieses
+// Browsers (ein Tippfehler sperrte sonst aus Profil und Partien aus).
+export async function adoptProfileCode(code) {
   const c = String(code || '').trim();
-  if (c.length < 16 || c.length > 64 || !/^[A-Za-z0-9-]+$/.test(c)) return false;
-  try { localStorage.setItem('pb_token', c); localStorage.setItem(ONLINE_KEY, '1'); return true; } catch (e) { return false; }
+  if (c.length < 16 || c.length > 64 || !/^[A-Za-z0-9-]+$/.test(c)) return { error: 'Das ist kein gültiger Profil-Code.' };
+  const found = await codeData(c);
+  if (found.error) return { error: 'Keine Verbindung zum Server. Dein bisheriger Code bleibt.' };
+  if (!found.profile && !found.matches) return { error: 'Zu diesem Code gibt es weder Profil noch Partien. Dein bisheriger Code bleibt.' };
+  try { localStorage.setItem('pb_token', c); localStorage.setItem(ONLINE_KEY, '1'); } catch (e) { return { error: 'Der Code konnte im Browser nicht gespeichert werden.' }; }
+  setPending(null);
+  return { data: found };
 }

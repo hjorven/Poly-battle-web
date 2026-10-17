@@ -6,6 +6,7 @@
 // supabase-supabase-js-2.45.4/package (aus `npm pack`), jsDelivr wird dann lokal bedient.
 
 import { chromium } from 'playwright';
+import { chromiumPath } from '../scripts/chromium-path.mjs';
 import { createServer } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -63,7 +64,7 @@ for (const [name, a, b, kind] of SIZES) {
 }
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM || undefined,
+  executablePath: chromiumPath(),
   args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader']
 });
 

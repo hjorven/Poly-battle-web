@@ -69,6 +69,25 @@ select public.create_match(:'st'::jsonb, 'AAAAAAAAAAAAAAAAAAAA')->>'id' as m5 \g
 select 'B tritt bei: ' || (public.join_match(:'m5', 'BBBBBBBBBBBBBBBBBBBB')->>'role');
 select 'A gibt im eigenen Zug auf: ai=' || (public.pb_hand_to_ai(:'m5', 'AAAAAAAAAAAAAAAAAAAA', 'player_1')->'match'->'game_state'->>'ai');
 select 'B übernimmt sofort: ' || public.save_match(:'m5', 'BBBBBBBBBBBBBBBBBBBB', jsonb_set(jsonb_set(jsonb_set(:'st'::jsonb, '{rev}', '2'), '{turn}', '"player_2"'), '{ai}', '["player_1"]'))::text;
+-- Mitspieler gibt auf, während ein anderer am Zug ist (Code-Prüfung 3, Fund 14):
+-- der Zug zählt, KI-Liste und Aufgabe bleiben.
+reset role;
+select jsonb_set(jsonb_set(:'st3'::jsonb, '{players}', '["player_1","player_2","player_3"]'), '{ai}', '[]') as st7 \gset
+set role anon;
+select public.create_match(:'st7'::jsonb, 'AAAAAAAAAAAAAAAAAAAA')->>'id' as m7 \gset
+select public.join_match(:'m7', 'BBBBBBBBBBBBBBBBBBBB') is not null as h \gset
+select public.join_match(:'m7', 'CCCCCCCCCCCCCCCCCCCC') is not null as h \gset
+select 'A speichert eine Aktion: ' || public.save_match(:'m7', 'AAAAAAAAAAAAAAAAAAAA', jsonb_set(:'st7'::jsonb, '{rev}', '1'))::text;
+select 'C gibt auf, während A zieht: ai=' || (public.pb_hand_to_ai(:'m7', 'CCCCCCCCCCCCCCCCCCCC', 'player_3')->'match'->'game_state'->>'ai');
+select 'A beendet den Zug mit altem Stand: ' || public.save_match(:'m7', 'AAAAAAAAAAAAAAAAAAAA', jsonb_set(jsonb_set(:'st7'::jsonb, '{rev}', '2'), '{turn}', '"player_2"'))::text;
+reset role;
+select 'danach: turn=' || (game_state->>'turn') || ' ai=' || (game_state->>'ai') || ' handed=' || (game_state->>'handed') || ' rev=' || (game_state->>'rev') from public.matches where id = :'m7';
+set role anon;
+select 'B schickt einen Stand ohne KI-Liste: ' || public.save_match(:'m7', 'BBBBBBBBBBBBBBBBBBBB', jsonb_set(jsonb_set(:'st7'::jsonb, '{rev}', '9'), '{turn}', '"player_2"'))::text;
+reset role;
+select 'C bleibt KI: ai=' || (game_state->>'ai') from public.matches where id = :'m7';
+set role anon;
+select 'B tauscht C gegen A in der KI-Liste: ' || pg_temp.fails($$select public.save_match('$$ || :'m7' || $$', 'BBBBBBBBBBBBBBBBBBBB', jsonb_set(jsonb_set(jsonb_set('$$ || :'st7' || $$'::jsonb, '{rev}', '9'), '{turn}', '"player_2"'), '{ai}', '["player_1"]'))$$);
 -- Namensprüfung: dieselben Fälle wie im Spiel (test/names.json)
 reset role;
 select 'Namen erlaubt: ' || coalesce(string_agg(n, ', ') filter (where pg_temp.fails(format('select public.pb_check_name(%L)', n)) <> 'KEIN FEHLER'), 'alle ok')
@@ -142,8 +161,11 @@ reset role;
 select set_config('request.headers', '{"x-forwarded-for":"192.0.2.45"}', false) is not null as h \gset
 set role anon;
 select public.pb_claim_name('IIIIIIIIIIIIIIIIIIII', 'Ingo') is not null as h \gset
-\set log '[{"k":"move","u":[3,3],"to":[4,3]},{"k":"research","t":"riding"},{"k":"end"}]'
-\set log2 '[{"k":"move","u":[3.0,3],"to":[4,3,9],"x":1},{"k":"mon"},{"k":"research","t":"riding"},{"k":"end"}]'
+-- Nur Protokolle ab 60 Einträgen müssen eindeutig sein (Code-Prüfung 3, Fund 15).
+select (select jsonb_agg(jsonb_build_object('k', 'move', 'u', jsonb_build_array(3, i), 'to', jsonb_build_array(4, i))) from generate_series(1, 60) i)
+       || '[{"k":"research","t":"riding"},{"k":"end"}]'::jsonb as log \gset
+select '[{"k":"mon"}]'::jsonb || (select jsonb_agg(case when e->>'k' = 'move' then e || '{"x":1}' || jsonb_build_object('u', jsonb_build_array(3.0, (e->'u'->>1)::int))
+       else e end order by n) from jsonb_array_elements(:'log'::jsonb) with ordinality t(e, n)) as log2 \gset
 select 'H reicht ein: ' || public.pb_submit_score('HHHHHHHHHHHHHHHHHHHH', 'daily', current_date::text, 100, 'aimo', 30, :'log'::jsonb)::text;
 select 'H reicht dasselbe nochmal ein: ' || public.pb_submit_score('HHHHHHHHHHHHHHHHHHHH', 'daily', current_date::text, 100, 'aimo', 30, :'log'::jsonb)::text;
 select 'I reicht Hs Protokoll ein: ' || pg_temp.fails($$select public.pb_submit_score('IIIIIIIIIIIIIIIIIIII', 'daily', current_date::text, 100, 'aimo', 30, '$$ || :'log' || $$'::jsonb)$$);
@@ -151,11 +173,13 @@ select 'I mit umgeschriebenem Protokoll: ' || pg_temp.fails($$select public.pb_s
 select 'gleiches Protokoll in der Woche: ' || public.pb_submit_score('IIIIIIIIIIIIIIIIIIII', 'weekly', to_char(now(), 'IYYY-"W"IW'), 100, 'aimo', 30, :'log'::jsonb)::text;
 select 'H zweites Ergebnis: ' || public.pb_submit_score('HHHHHHHHHHHHHHHHHHHH', 'daily', current_date::text, 90, 'aimo', 30, '[{"k":"end"}]'::jsonb)::text;
 select 'H drittes Ergebnis: ' || public.pb_submit_score('HHHHHHHHHHHHHHHHHHHH', 'weekly', to_char(now(), 'IYYY-"W"IW'), 90, 'aimo', 30, '[{"k":"end"},{"k":"end"}]'::jsonb)::text;
+select 'I mit gleichem kurzen Protokoll wie H: ' || public.pb_submit_score('IIIIIIIIIIIIIIIIIIII', 'daily', current_date::text, 90, 'aimo', 30, '[{"k":"end"}]'::jsonb)::text;
 select 'H viertes offenes Ergebnis: ' || pg_temp.fails($$select public.pb_submit_score('HHHHHHHHHHHHHHHHHHHH', 'daily', current_date::text, 80, 'aimo', 30, '[{"k":"end"},{"k":"end"},{"k":"end"}]'::jsonb)$$);
 select 'Protokoll über 96 KB: ' || pg_temp.fails($$select public.pb_submit_score('IIIIIIIIIIIIIIIIIIII', 'daily', current_date::text, 80, 'aimo', 30, (select jsonb_agg('{"k":"move","u":[10,10],"to":[11,10]}'::jsonb) from generate_series(1, 3000)))$$);
 reset role;
 select public.pb_settle_claim(min(id), true, 100, 30, 'aimo') is not null as h from public.pb_score_claims \gset
 set role anon;
+select 'H reicht gewertetes Ergebnis nochmal ein: ' || public.pb_submit_score('HHHHHHHHHHHHHHHHHHHH', 'daily', current_date::text, 100, 'aimo', 30, :'log'::jsonb)::text;
 select 'Bestenliste ohne Stufe: ' || (public.pb_leaderboard('daily', current_date::text)->'top'->0)::text;
 -- Speicherfristen: Einreichungen 30 Tage, Bestenliste 90 Tage, Profile 365 Tage
 reset role;

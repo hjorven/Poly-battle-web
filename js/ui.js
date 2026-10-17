@@ -962,7 +962,7 @@ function quickActions(state, unit, ctx) {
   const up = upgradeOption(state, unit);
   if (up) out.push({ label: `Aufrüsten: ${UNITS[up.to].name}`, cost: up.cost, reason: up.ok ? '' : up.reason, run: () => handlers.onUpgrade(unit) });
   for (const o of bridgeOptions(state, unit)) { const chk = canBuildBridge(state, unit, o.dir, ctx.actAs); out.push({ label: `Brücke nach ${DIR_NAMES[o.dir]}`, cost: o.cost, reason: chk.ok ? '' : chk.reason, run: () => handlers.onBuildBridge(unit, o.dir) }); }
-  if (!unit.carry && !UNITS[unit.type].abilities.includes('water') && state.techs[ctx.actAs].includes(ROAD.tech) && !roadAt(state, unit.q, unit.r)) {
+  if (!unit.carry && !UNITS[unit.type].abilities.includes('water') && !UNITS[unit.type].abilities.includes('air') && state.techs[ctx.actAs].includes(ROAD.tech) && !roadAt(state, unit.q, unit.r)) {
     const chk = canBuildRoad(state, ctx.actAs, unit.q, unit.r, true);
     const spent = unit.mp <= 0 && unit.hasMoved;
     if (chk.reason !== 'Städte sind schon angebunden') out.push({ label: 'Weg bauen', cost: ROAD.cost, reason: spent ? 'Keine Bewegung mehr' : chk.ok ? '' : chk.reason, run: () => handlers.onBuildRoad(unit.q, unit.r, unit) });
@@ -977,172 +977,6 @@ function quickActions(state, unit, ctx) {
 export function hideUnitChip() {
   $('unit-chip').classList.add('hidden');
   if (anchor.kind === 'unit') clearAnchor();
-}
-
-export function showUnitPanel(state, unit, ctx) {
-  const def = UNITS[unit.type];
-  const cap = hpCap(unit);
-  const owner = tribeName(state, unit.owner) || NAMES[unit.owner];
-  const land = unit.carry ? UNITS[unit.carry] : null;
-  const mine = unit.owner === ctx.actAs;
-  const hpPct = Math.max(0, (unit.hp / cap) * 100);
-  const tile = TERRAIN[terrainAt(state, unit.q, unit.r)];
-  const tb = defenceBonus(state, unit);
-  let hint = '';
-  if (state.winner) hint = 'Spiel vorbei.';
-  else if (!mine || !ctx.myTurn) hint = 'Nicht am Zug – nur beobachten.';
-  else if (unit.acted && unit.mp <= 0) hint = 'Einheit hat gehandelt. Zug beenden, um sie nächste Runde zu aktivieren.';
-  else {
-    hint = unit.mp > 0 ? 'Helle Felder = Bewegung' : 'Bewegung aufgebraucht';
-    if (attackPreview(state, unit).length) hint += ' · Rote Felder = Angriffsziel';
-  }
-
-  let forecast = '';
-  if (mine && ctx.myTurn && canAttackNow(state, unit)) {
-    const preview = attackPreview(state, unit);
-    if (preview.length) {
-      forecast = `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Kampfprognose</div></div>
-        <div class="forecast-list">${preview.map(p => {
-          const t = UNITS[p.target.type];
-          const lethal = p.damage >= p.target.hp;
-          const back = p.retaliation > 0 ? `· Vergeltung −${p.retaliation}` : '· keine Vergeltung';
-          return `<div class="forecast"><span>${t.name} <span class="fc-hp">${p.target.hp} LP</span></span><b class="${lethal ? 'lethal' : ''}">${lethal ? 'Besiegt' : '−' + p.damage} ${back}</b></div>`;
-        }).join('')}</div>`;
-    }
-  }
-
-  let todo = '';
-  if (mine && ctx.myTurn) {
-    const opts = unitOptions(state, unit);
-    if (opts.length) todo = `<div class="hint todo">Kann noch: ${opts.join(', ')}</div>`;
-  }
-  if (unit.hp < cap) {
-    todo += `<div class="hint">${canRegenerate(state, unit) ? 'Heilt zu Beginn des nächsten Zuges' : 'Heilt nicht: hat angegriffen oder steht in Reichweite eines Gegners'}</div>`;
-  }
-
-  let extra = '';
-  if (mine && ctx.myTurn) {
-    const bridges = bridgeOptions(state, unit);
-    if (bridges.length) {
-      extra += `<div class="panel-head" style="margin-top:12px"><div class="panel-sub">Brücke bauen</div></div><div class="action-list">`;
-      for (const o of bridges) {
-        const chk = canBuildBridge(state, unit, o.dir, ctx.actAs);
-        extra += `<button class="btn action" data-bridge="${o.dir}" ${chk.ok ? '' : 'disabled'}>
-          <span>Brücke nach ${DIR_NAMES[o.dir]} (${o.tiles.length} ${o.tiles.length === 1 ? 'Feld' : 'Felder'})<span class="sub">${chk.ok ? 'Blau markiert · verbraucht den Zug der Einheit' : chk.reason}</span></span>
-          <span class="cost">${o.cost} Sterne</span></button>`;
-      }
-      extra += `</div>`;
-    }
-    // Straße auf dem eigenen Feld (auch außerhalb des Gebiets).
-    if (!unit.carry && !UNITS[unit.type].abilities.includes('water') && state.techs[ctx.actAs].includes(ROAD.tech) && !roadAt(state, unit.q, unit.r)) {
-      const chk = canBuildRoad(state, ctx.actAs, unit.q, unit.r, true);
-      const spent = unit.mp <= 0 && unit.hasMoved;
-      if (!(chk.reason === 'Städte sind schon angebunden')) {
-        extra += `<div class="action-list"><button class="btn action" data-road ${chk.ok && !spent ? '' : 'disabled'}>
-          <span>Weg bauen<span class="sub">${spent ? 'Keine Bewegung mehr' : chk.ok ? 'Auf diesem Feld · verbraucht die restliche Bewegung' : chk.reason}</span></span>
-          <span class="cost">${ROAD.cost} Sterne</span></button></div>`;
-      }
-    }
-    const hire = hireOption(state, unit);
-    if (hire) {
-      extra += `<div class="action-list"><button class="btn action" data-hire ${hire.ok ? '' : 'disabled'}>
-        <span>Söldner anwerben: ${esc(UNITS[hire.type].name)}<span class="sub">${hire.ok ? 'Ohne Technologie, einmal je Lager · verbraucht den Zug' : esc(hire.reason)}</span></span>
-        <span class="cost">${hire.cost} Sterne</span></button></div>`;
-    }
-    const up = upgradeOption(state, unit);
-    if (up) {
-      extra += `<div class="action-list"><button class="btn action" data-upgrade ${up.ok ? '' : 'disabled'}>
-        <span>Aufrüsten zu ${esc(UNITS[up.to].name)}<span class="sub">${up.ok ? 'Verletzungen bleiben anteilig · verbraucht den Zug' : esc(up.reason)}</span></span>
-        <span class="cost">${up.cost} Sterne</span></button></div>`;
-    }
-    // Lastenballon: Fracht aufnehmen oder absetzen.
-    const dirTo = (q, r) => DIRS.findIndex(([dq, dr]) => unit.q + dq === q && unit.r + dr === r);
-    if (unit.cargo) {
-      extra += `<div class="hint">Fracht: ${esc(UNITS[unit.cargo.type].name)}</div>`;
-      const spots = unloadOptions(state, unit);
-      if (spots.length) {
-        extra += `<div class="action-list">${spots.map(([q, r]) => `<button class="btn action" data-unload="${q},${r}">
-          <span>Absetzen nach ${DIR_NAMES[dirTo(q, r)]}<span class="sub">Fracht steigt aus · verbraucht den Zug</span></span></button>`).join('')}</div>`;
-      } else if (!unit.acted) extra += `<div class="hint">Zum Absetzen neben ein freies Landfeld fliegen.</div>`;
-    }
-    const loads = loadOptions(state, unit);
-    if (loads.length) {
-      extra += `<div class="action-list">${loads.map(u => `<button class="btn action" data-load="${esc(u.id)}">
-        <span>Aufnehmen: ${esc(UNITS[u.type].name)} (${DIR_NAMES[dirTo(u.q, u.r)]})<span class="sub">Die Einheit fliegt mit</span></span></button>`).join('')}</div>`;
-    }
-    const breakable = destroyableBridges(state, unit);
-    if (breakable.length) {
-      extra += `<div class="action-list">${breakable.map(([q, r]) =>
-        `<button class="btn action" data-unbridge="${q},${r}"><span>Brücke einreißen<span class="sub">${q === unit.q && r === unit.r ? 'Unter dem Schiff' : 'Auf dem Nachbarfeld'} · verbraucht den Zug</span></span></button>`).join('')}</div>`;
-    }
-    extra += `<div class="action-list"><button class="btn action ghost" data-disband>
-      <span>Einheit auflösen<span class="sub">Entfernt die Einheit dauerhaft</span></span>
-      <span class="cost">+${disbandRefund(unit)} Sterne</span></button></div>`;
-  }
-
-  let found = '';
-  if (mine && ctx.myTurn && unit.type === 'settler') {
-    const f = canFound(state, unit, ctx.actAs);
-    found = `<div class="action-list"><button class="btn action" data-found ${f.ok ? '' : 'disabled'}>
-      <span>Stadt gründen<span class="sub">${f.ok ? 'Gründet auf diesem Feld eine neue Stadt' : f.reason}</span></span>
-    </button></div>`;
-  }
-
-  panel(`
-    <div class="panel-head">
-      <div>
-        <div class="panel-title">${land ? `${land.name} (eingeschifft)` : def.name}${unit.vet ? ` <span class="vet-badge">${STAR_ICON} Veteran</span>` : ''}</div>
-        <div class="panel-sub owner-line"><span class="dot" style="background:${hex(playerColor(state, unit.owner))}"></span>${owner}${mine ? ' (deine Einheit)' : ''}</div>
-      </div>
-      <div class="panel-head-right">
-        <span class="panel-sub">${unit.acted && unit.mp <= 0 ? 'erledigt' : 'bereit'}</span>
-        <button class="btn icon-btn panel-close" data-close>Schließen</button>
-      </div>
-    </div>
-    <div class="hp-bar ${unit.hp / cap <= 0.35 ? 'low' : ''}"><div style="width:${hpPct}%"></div></div>
-    <div class="stat-row">
-      <div class="stat">Leben<b>${unit.hp}/${cap}</b></div>
-      <div class="stat">Angriff<b>${fmtMp(attackOf(state, unit))}</b></div>
-      <div class="stat">Verteidigung<b>${defenseOf(state, unit)}</b></div>
-      <div class="stat">Bewegung<b>${fmtMp(unit.mp)}/${maxMove(state, unit.owner, unit.type)}</b></div>
-      <div class="stat">Reichweite<b>${def.range}</b></div>
-    </div>
-    <div class="ability-row">${abilityChips(unit.type)}</div>
-    ${unit.vet ? '' : `<div class="hint">Siege: ${unit.kills || 0}/3 bis zur Beförderung (+5 Leben)</div>`}
-    ${land ? '<div class="hint">Fährt als Boot; an Land gehen beendet die Bewegung.</div>' : ''}
-    <div class="hint">Gelände: ${tile.name} · Verteidigungsfaktor ${fmtMp(tb)}-fach</div>
-    ${switchToCity(state, unit, ctx)}
-    ${todo}
-    ${found}
-    ${forecast}
-    ${extra}
-    <div class="hint">${hint}</div>
-  `);
-  wirePanel($('panel'));
-  const upBtn = $('panel').querySelector('[data-upgrade]');
-  if (upBtn) upBtn.addEventListener('click', () => handlers.onUpgrade(unit));
-  const hireBtn = $('panel').querySelector('[data-hire]');
-  if (hireBtn) hireBtn.addEventListener('click', () => handlers.onHire(unit));
-  $('panel').querySelectorAll('[data-load]').forEach(btn => btn.addEventListener('click', () => handlers.onLoadCargo(unit, btn.dataset.load)));
-  $('panel').querySelectorAll('[data-unload]').forEach(btn => btn.addEventListener('click', () => {
-    const [q, r] = btn.dataset.unload.split(',').map(Number);
-    handlers.onUnloadCargo(unit, q, r);
-  }));
-  const roadBtn = $('panel').querySelector('[data-road]');
-  if (roadBtn) roadBtn.addEventListener('click', () => handlers.onBuildRoad(unit.q, unit.r, unit));
-  const foundBtn = $('panel').querySelector('[data-found]');
-  if (foundBtn) foundBtn.addEventListener('click', () => handlers.onFound(unit));
-  $('panel').querySelectorAll('[data-bridge]').forEach(btn => {
-    btn.addEventListener('click', () => handlers.onBuildBridge(unit, Number(btn.dataset.bridge)));
-  });
-  $('panel').querySelectorAll('[data-unbridge]').forEach(btn => {
-    const [q, r] = btn.dataset.unbridge.split(',').map(Number);
-    btn.addEventListener('click', () => handlers.onDestroyBridge(unit, q, r));
-  });
-  const cityBtn = $('panel').querySelector('[data-open-city]');
-  if (cityBtn) cityBtn.addEventListener('click', () => handlers.onSelectCity(unit.q, unit.r));
-  const disbandBtn = $('panel').querySelector('[data-disband]');
-  if (disbandBtn) disbandBtn.addEventListener('click', () => handlers.onDisband(unit));
 }
 
 // Einheit und Stadt auf demselben Feld: Knopf zum Wechseln zwischen den Menüs.
@@ -2016,8 +1850,17 @@ export function showWinner(state, ctx) {
   $('winnerEasier').classList.add('hidden');
   $('winnerHarder').classList.add('hidden');
   $('winnerRetry').classList.toggle('hidden', ctx.mode !== 'bot');
+  $('winnerRetry').textContent = retryLabel(state);
   $('winner-stats').innerHTML = statsHtml(state, ctx);
   $('winner-overlay').classList.remove('hidden');
+}
+
+// Mission, Herausforderung und Lektion starten beim Wiederholen sich selbst neu.
+function retryLabel(state) {
+  if (state.mission) return 'Mission wiederholen';
+  if (state.daily || state.weekly) return 'Herausforderung neu starten';
+  if (state.tutorial && state.tutorial.lesson) return 'Lektion wiederholen';
+  return 'Revanche (neue Karte)';
 }
 
 // Nach drei Siegen in Folge auf einer Stufe: schwerere Stufe anbieten.
@@ -2091,6 +1934,7 @@ export function showDefeat(state, ctx, opts = {}) {
   $('winner-stats').innerHTML = statsHtml(state, ctx || {});
   $('winnerEasier').classList.toggle('hidden', !opts.easier);
   $('winnerRetry').classList.toggle('hidden', !opts.retry);
+  $('winnerRetry').textContent = retryLabel(state);
   $('winner-overlay').classList.remove('hidden');
 }
 
@@ -2342,7 +2186,11 @@ export function showOverview(state, ctx) {
       if (persona) status = `${persona.name}, ${status}`;
       if (pendingOffer(state, actAs, p)) status += ', Angebot gesendet';
       let action = '';
-      if (met && ctx.myTurn) {
+      if (met && ctx.myTurn && pendingOffer(state, p, actAs)) {
+        // Eingehendes Angebot direkt hier beantworten.
+        status += ', bietet dir Frieden an';
+        action = `<button class="btn small" data-accept="${esc(p)}">Annehmen</button> <button class="btn ghost small" data-decline="${esc(p)}">Ablehnen</button>`;
+      } else if (met && ctx.myTurn) {
         if (peace) action = `<button class="btn ghost small" data-war="${esc(p)}">Krieg erklären</button>`;
         else {
           const chk = canOfferPeace(state, actAs, p);
@@ -2382,9 +2230,15 @@ export function showOverview(state, ctx) {
   menu.querySelectorAll('[data-unit]').forEach(tr => go(tr, () => handlers.onFocusUnit(tr.dataset.unit)));
   menu.querySelectorAll('[data-peace]').forEach(b => b.addEventListener('click', () => handlers.onOfferPeace(b.dataset.peace)));
   menu.querySelectorAll('[data-war]').forEach(b => b.addEventListener('click', () => handlers.onDeclareWar(b.dataset.war)));
+  menu.querySelectorAll('[data-accept]').forEach(b => b.addEventListener('click', () => handlers.onRespondPeace(b.dataset.accept, true)));
+  menu.querySelectorAll('[data-decline]').forEach(b => b.addEventListener('click', () => handlers.onRespondPeace(b.dataset.decline, false)));
   $('overview-overlay').classList.remove('hidden');
 }
 
 export function hideOverview() {
   $('overview-overlay').classList.add('hidden');
+}
+
+export function isOverviewOpen() {
+  return !$('overview-overlay').classList.contains('hidden');
 }

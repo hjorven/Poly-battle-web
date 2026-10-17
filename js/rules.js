@@ -57,12 +57,11 @@ export function unitCost(state, player, type) {
   let cost = UNITS[type].cost;
   const perk = perkOf(state, player);
   if (perk && PERK_DISCOUNT[perk] === type) cost -= 1;
-  cost -= techBonus(state, player, 'unitDiscount', type);
   return Math.max(1, cost);
 }
 
 export function defenseOf(state, unit) {
-  let d = UNITS[unit.type].def + (unit.owner ? techBonus(state, unit.owner, 'def', unit.type) : 0);
+  let d = UNITS[unit.type].def;
   if (unit.owner && perkOf(state, unit.owner) === 'legion') {
     const c = cityAt(state, unit.q, unit.r);
     if (c && c.owner === unit.owner) d += 1;
@@ -526,7 +525,7 @@ export function canBuildRoad(state, player, q, r, byUnit = false) {
 export function buildRoad(state, player, q, r, unit = null) {
   if (unit) {
     if (unit.owner !== player || unit.q !== q || unit.r !== r) return { ok: false, reason: 'Einheit steht nicht hier' };
-    if (unit.carry || hasAbility(unit.type, 'water')) return { ok: false, reason: 'Nur Landeinheiten' };
+    if (unit.carry || hasAbility(unit.type, 'water') || isAir(unit.type)) return { ok: false, reason: 'Nur Landeinheiten' };
     if (unit.mp <= 0 && unit.hasMoved) return { ok: false, reason: 'Keine Bewegung mehr' };
   }
   const chk = canBuildRoad(state, player, q, r, !!unit);
@@ -544,7 +543,8 @@ export function defenceBonus(state, defender) {
   const t = TERRAIN[tile];
   let b = t.def;
   if (t.tech && !hasTech(state, defender.owner, t.tech)) b = DEF_BONUS.none;
-  if (improvementAt(state, defender.q, defender.r) === 'fort') b = Math.max(b, DEF_BONUS.fort);
+  // Burg wie Wachturm: schützt nur Einheiten im eigenen Gebiet, nicht den Gegner, der sie besetzt.
+  if (improvementAt(state, defender.q, defender.r) === 'fort' && ownLand(state, defender.owner, defender.q, defender.r)) b = Math.max(b, DEF_BONUS.fort);
   // Wachturm im eigenen Gebiet: darauf und daneben anderthalbfache Verteidigung.
   if ([[defender.q, defender.r], ...neighbors(defender.q, defender.r)].some(([q, r]) =>
     improvementAt(state, q, r) === 'watchtower' && ownLand(state, defender.owner, q, r))) b = Math.max(b, DEF_BONUS.standard);
@@ -603,7 +603,7 @@ export function unitSight(state, u) {
   } else if (!isAir(u.type) && TERRAIN[tile] && TERRAIN[tile].sight) radius += TERRAIN[tile].sight;
   if (hasTech(state, u.owner, 'sailing')) radius += 1;
   if ((u.type === 'rider' || u.type === 'knight') && perkOf(state, u.owner) === 'lookouts') radius += 1;
-  radius += techBonus(state, u.owner, 'sight', u.type) + techBonus(state, u.owner, 'sightAll');
+  radius += techBonus(state, u.owner, 'sightAll');
   return radius;
 }
 
@@ -927,8 +927,27 @@ export function attackTargets(state, unit) {
     // Luft-Einheiten erreichen nur Fernkämpfer (Reichweite ab 2).
     !(isAir(u.type) && range < 2) &&
     hexDistance(unit.q, unit.r, u.q, u.r) <= range &&
-    isVisible(state, unit.owner, u.q, u.r)
+    isVisible(state, unit.owner, u.q, u.r) &&
+    // Bekehren in einer fremden Stadt nur, wenn die Einheit danach hinaus kann.
+    !(hasAbility(unit.type, 'convert') && convertBlocked(state, u, unit.owner))
   );
+}
+
+// Eine bekehrte Einheit darf nicht in einer Stadt ihres alten Besitzers
+// stehen bleiben (sie würde die Stadt sperren, ohne sie zu erobern): Sie
+// zieht auf ein freies Nachbarfeld. Kein Platz = Bekehren nicht möglich.
+function convertSpot(state, unit, owner) {
+  const c = cityAt(state, unit.q, unit.r);
+  if (!c || c.owner === owner) return [unit.q, unit.r];
+  for (const [nq, nr] of neighbors(unit.q, unit.r)) {
+    if (unitAt(state, nq, nr) || cityAt(state, nq, nr)) continue;
+    if (canEnter(state, { ...unit, owner }, terrainAt(state, nq, nr), nq, nr)) return [nq, nr];
+  }
+  return null;
+}
+
+function convertBlocked(state, unit, owner) {
+  return !convertSpot(state, unit, owner);
 }
 
 function finishAction(attacker) {
@@ -1002,6 +1021,9 @@ export function attack(state, attacker, defender) {
   if (hasAbility(attacker.type, 'convert')) {
     if (dist === 1) {
       const prevOwner = defender.owner;
+      const [sq, sr] = convertSpot(state, defender, attacker.owner);
+      defender.q = sq;
+      defender.r = sr;
       defender.owner = attacker.owner;
       defender.acted = true;
       defender.mp = 0;
@@ -1023,16 +1045,8 @@ export function attack(state, attacker, defender) {
 
   let killed = false;
   if (defender.hp <= 0) {
-    state.units = state.units.filter(u => u !== defender);
+    defeat(state, defender, attacker, events);
     killed = true;
-    events.push({ kind: 'kill', unit: defender });
-    logEvent(state, { kind: 'unitLost', victim: defender.owner, unit: defender.type, q: defender.q, r: defender.r });
-    if (!state.killsBy) state.killsBy = {};
-    state.killsBy[attacker.owner] = (state.killsBy[attacker.owner] || 0) + 1;
-    state.stars[attacker.owner] += BOUNTY;
-    events.push({ kind: 'bounty', player: attacker.owner, stars: BOUNTY });
-    const promo = addKill(attacker);
-    if (promo) events.push(promo);
     if (UNITS[attacker.type].range === 1 && !isAir(attacker.type) && !hasAbility(attacker.type, 'fireship') && !switchesDomain(state, attacker, defender.q, defender.r)) {
       const tile = terrainAt(state, defender.q, defender.r);
       if (canEnter(state, attacker, tile, defender.q, defender.r) && !unitAt(state, defender.q, defender.r)) {
@@ -1069,14 +1083,8 @@ export function attack(state, attacker, defender) {
       if (vprov) events.push(vprov);
       v.hp -= splash;
       events.push({ kind: 'splash', from: attacker.id, to: v.id, dmg: splash });
-      if (v.hp <= 0) {
-        state.units = state.units.filter(x => x !== v);
-        events.push({ kind: 'kill', unit: v });
-        logEvent(state, { kind: 'unitLost', victim: v.owner, unit: v.type, q: v.q, r: v.r });
-        if (!state.killsBy) state.killsBy = {};
-        state.killsBy[attacker.owner] = (state.killsBy[attacker.owner] || 0) + 1;
-        state.stars[attacker.owner] += BOUNTY;
-      } else logEvent(state, { kind: 'hit', victim: v.owner, unit: v.type, dmg: splash, q: v.q, r: v.r });
+      if (v.hp <= 0) defeat(state, v, attacker, events);
+      else logEvent(state, { kind: 'hit', victim: v.owner, unit: v.type, dmg: splash, q: v.q, r: v.r });
     }
     state.units = state.units.filter(u => u !== attacker);
     events.push({ kind: 'kill', unit: attacker, sunk: true });
@@ -1088,17 +1096,26 @@ export function attack(state, attacker, defender) {
   if (!killed && !hasAbility(defender.type, 'stiff') && rangeOf(state, defender) >= dist && res.retaliation > 0) {
     attacker.hp -= res.retaliation;
     events.push({ kind: 'retaliate', from: defender.id, to: attacker.id, dmg: res.retaliation });
-    if (attacker.hp <= 0) {
-      state.units = state.units.filter(u => u !== attacker);
-      events.push({ kind: 'kill', unit: attacker });
-      const promo = addKill(defender);
-      if (promo) events.push(promo);
-    }
+    if (attacker.hp <= 0) defeat(state, attacker, defender, events);
   }
 
   finishAction(attacker);
   updateExplored(state, attacker.owner);
   return { events, killed };
+}
+
+// Einheit besiegt (Angriff, Flächentreffer oder Gegenschlag): entfernen,
+// melden, Beute und Zähler für den Sieger, Beförderung.
+function defeat(state, victim, winner, events) {
+  state.units = state.units.filter(u => u !== victim);
+  events.push({ kind: 'kill', unit: victim });
+  logEvent(state, { kind: 'unitLost', victim: victim.owner, unit: victim.type, q: victim.q, r: victim.r });
+  if (!state.killsBy) state.killsBy = {};
+  state.killsBy[winner.owner] = (state.killsBy[winner.owner] || 0) + 1;
+  state.stars[winner.owner] += BOUNTY;
+  events.push({ kind: 'bounty', player: winner.owner, stars: BOUNTY });
+  const promo = addKill(winner);
+  if (promo) events.push(promo);
 }
 
 // Sieg zählen; beim dritten Sieg wird die Einheit zum Veteranen befördert.
@@ -1273,9 +1290,8 @@ export function trade(state, unit, player) {
   return { ok: true, stars: o.stars, foreign: o.foreign, city: o.city };
 }
 
-export function popCost(city, state = null) {
-  const discount = state && city.owner ? techBonus(state, city.owner, 'popDiscount') : 0;
-  return Math.max(1, city.pop + 2 - discount);
+export function popCost(city) {
+  return city.pop + 2;
 }
 
 export function canBuyPop(state, city, player) {
@@ -1366,7 +1382,7 @@ function landAt(state, q, r) {
 // Mögliche Brücken für eine Landeinheit: in jeder Richtung 1 oder 2 Felder
 // Flachwasser, dahinter wieder Land.
 export function bridgeOptions(state, unit) {
-  if (!unit || hasAbility(unit.type, 'water') || UNITS[unit.type].reward) return [];
+  if (!unit || hasAbility(unit.type, 'water') || isAir(unit.type) || UNITS[unit.type].reward) return [];
   const out = [];
   DIRS.forEach(([dq, dr], dir) => {
     const tiles = [];
@@ -1559,6 +1575,9 @@ export function canFound(state, unit, player) {
   if (cityAt(state, unit.q, unit.r)) return { ok: false, reason: 'Stadt vorhanden' };
   const tooClose = state.cities.some(c => hexDistance(unit.q, unit.r, c.q, c.r) < 2);
   if (tooClose) return { ok: false, reason: 'Zu nah an einer Stadt' };
+  // Nicht im Gebiet eines anderen Stamms (sonst nähme die neue Stadt ihm Felder weg).
+  const holder = tileCity(state, unit.q, unit.r);
+  if (holder && holder.owner && holder.owner !== player) return { ok: false, reason: 'Fremdes Gebiet' };
   return { ok: true };
 }
 
