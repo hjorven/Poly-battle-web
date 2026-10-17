@@ -20,3 +20,9 @@ create policy "matches insert" on public.matches for insert with check (true);
 create policy "matches update" on public.matches for update using (true);
 grant all on public.matches to anon, authenticated;
 alter publication supabase_realtime add table public.matches;
+-- Realtime-Nachrichten (private Kanäle) wie bei Supabase: RLS an, Rechte für anon.
+create table realtime.messages(topic text, extension text, payload jsonb, event text, private boolean);
+create function realtime.topic() returns text language sql stable as $$ select nullif(current_setting('realtime.topic', true), '') $$;
+alter table realtime.messages enable row level security;
+grant usage on schema realtime to anon, authenticated;
+grant select, insert on realtime.messages to anon, authenticated;
