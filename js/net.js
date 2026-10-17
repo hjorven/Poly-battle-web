@@ -23,6 +23,62 @@ export function getToken() {
   }
 }
 
+// Schon einmal online gewesen? Erst dann fragt das Menü nach den eigenen
+// Partien. Wer nie online spielt, schickt beim Seitenaufruf nichts an den
+// Server (siehe datenschutz.html). Ältere Browser haben nur eine Kennung und
+// noch keine Markierung: dort entscheidet die erste Antwort von pb_my_matches.
+const ONLINE_KEY = 'pb_online';
+
+function existingToken() {
+  try { return localStorage.getItem('pb_token') || null; } catch (e) { return null; }
+}
+
+function markOnline(v = '1') {
+  try { localStorage.setItem(ONLINE_KEY, v); } catch (e) { /* ohne Browserspeicher */ }
+}
+
+export function playedOnline() {
+  try {
+    const f = localStorage.getItem(ONLINE_KEY);
+    if (f) return f === '1';
+    return !!existingToken();
+  } catch (e) {
+    return false;
+  }
+}
+
+// Zeitgrenze für Serveranfragen: Hängt die Verbindung, kommt nach dieser Zeit
+// „Keine Verbindung zum Server.“ statt endlosem Warten. Spielstände sind größer
+// und werden auf dem Server geprüft, dafür gibt es etwas mehr Zeit.
+export const RPC_TIMEOUT = 10000;
+const SAVE_TIMEOUT = 20000;
+const OFFLINE = 'Keine Verbindung zum Server.';
+
+// sb.rpc mit Zeitgrenze. Bei Zeitüberschreitung wird die Anfrage abgebrochen
+// und als Netzwerkfehler gemeldet ({ error: { message, timeout: true } }).
+async function callRpc(sb, fn, args, ms = RPC_TIMEOUT) {
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  let timer = null;
+  const timeout = new Promise(resolve => {
+    timer = setTimeout(() => {
+      try { ctrl && ctrl.abort(); } catch (e) { /* ignore */ }
+      resolve({ data: null, error: { message: 'NetworkError: timeout', timeout: true } });
+    }, ms);
+  });
+  try {
+    let q = sb.rpc(fn, args);
+    if (ctrl && q && typeof q.abortSignal === 'function') q = q.abortSignal(ctrl.signal);
+    const res = await Promise.race([Promise.resolve(q).catch(e => ({ data: null, error: { message: 'NetworkError: ' + (e && e.message) } })), timeout]);
+    // Abbruch durch die Zeitgrenze meldet supabase-js als AbortError.
+    if (res && res.error && /abort/i.test(res.error.message || '')) return { data: null, error: { message: 'NetworkError: timeout', timeout: true } };
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const isNetErr = error => !!error && /Failed to fetch|NetworkError|Load failed|network|abort/i.test(error.message || '');
+
 function parseState(match) {
   if (match && typeof match.game_state === 'string') match.game_state = JSON.parse(match.game_state);
   return match;
@@ -35,7 +91,9 @@ const adminArg = key => (key ? { p_admin_key: key } : {});
 export async function createMatch(state, adminKey = null) {
   const sb = getClient();
   if (!sb) return { error: 'Multiplayer-Bibliothek nicht geladen.' };
-  const { data, error } = await sb.rpc('create_match', { p_state: state, p_token: getToken(), ...adminArg(adminKey) });
+  const { data, error } = await callRpc(sb, 'create_match', { p_state: state, p_token: getToken(), ...adminArg(adminKey) }, SAVE_TIMEOUT);
+  if (isNetErr(error)) return { error: 'Spiel konnte nicht erstellt werden: ' + OFFLINE };
+  if (!error && data) markOnline();
   if (error || !data) return { error: 'Spiel konnte nicht erstellt werden: ' + (error ? error.message : 'keine Antwort') };
   return { match: parseState(data) };
 }
@@ -43,7 +101,9 @@ export async function createMatch(state, adminKey = null) {
 export async function joinMatch(gameId) {
   const sb = getClient();
   if (!sb) return { error: 'Multiplayer-Bibliothek nicht geladen.' };
-  const { data, error } = await sb.rpc('join_match', { p_id: gameId, p_token: getToken() });
+  const { data, error } = await callRpc(sb, 'join_match', { p_id: gameId, p_token: getToken() });
+  if (isNetErr(error)) return { error: OFFLINE };
+  if (!error && data && data.role) markOnline();
   if (error || !data || !data.match) return { error: 'Spiel nicht gefunden. Prüfe den Link.' };
   return { match: parseState(data.match), role: data.role || null };
 }
@@ -54,7 +114,8 @@ export async function fetchMatch(gameId) {
   const sb = getClient();
   if (!sb) return { error: 'Offline' };
   try {
-    const { data, error } = await sb.rpc('pb_get_match', { p_id: gameId, p_token: getToken() });
+    const { data, error } = await callRpc(sb, 'pb_get_match', { p_id: gameId, p_token: getToken() });
+    if (isNetErr(error)) return { error: OFFLINE };
     if (error || !data || !data.match) return { error: 'Spiel nicht gefunden.' };
     return { match: parseState(data.match), role: data.role || null };
   } catch (e) {
@@ -98,9 +159,9 @@ export async function saveMatch(gameId, state, adminKey = null) {
   const sb = getClient();
   if (!sb) return { error: 'Offline' };
   try {
-    const { error } = await sb.rpc('save_match', { p_id: gameId, p_token: getToken(), p_state: state, ...adminArg(adminKey) });
+    const { error } = await callRpc(sb, 'save_match', { p_id: gameId, p_token: getToken(), p_state: state, ...adminArg(adminKey) }, SAVE_TIMEOUT);
     // supabase-js meldet eine abgebrochene Verbindung als Fehler, nicht als Ausnahme.
-    if (error && /Failed to fetch|NetworkError|Load failed|network/i.test(error.message || '')) {
+    if (isNetErr(error)) {
       return { error: 'Zug nicht gespeichert: keine Verbindung zum Server.' };
     }
     if (error) return { error: 'Zug nicht gespeichert: ' + error.message, rejected: true };
@@ -119,17 +180,26 @@ export async function handToAi(gameId, role) {
 }
 
 // Eigene Online-Partien (über den Profil-Code auch auf anderen Geräten).
-export const myMatches = () => rpc('pb_my_matches', { p_token: getToken() });
+// Nur wer schon online war (sonst kein Aufruf, keine neue Kennung).
+export async function myMatches() {
+  if (!playedOnline()) return { data: [] };
+  const res = await rpc('pb_my_matches', { p_token: getToken() });
+  // Ältere Browser ohne Markierung: einmal nachsehen und merken.
+  try {
+    if (!res.error && Array.isArray(res.data) && !localStorage.getItem(ONLINE_KEY)) markOnline(res.data.length ? '1' : '0');
+  } catch (e) { /* ignore */ }
+  return res;
+}
 
 // --- Profile und Bestenliste (siehe supabase/migrations/…profiles_leaderboard) ---
 
 async function rpc(fn, args) {
   const sb = getClient();
-  if (!sb) return { error: 'Keine Verbindung zum Server.' };
+  if (!sb) return { error: OFFLINE };
   try {
-    const { data, error } = await sb.rpc(fn, args);
+    const { data, error } = await callRpc(sb, fn, args);
     // Abgebrochene Verbindung meldet supabase-js als Fehlermeldung, nicht als Ausnahme.
-    if (error && /Failed to fetch|NetworkError|Load failed|network/i.test(error.message || '')) return { error: 'Keine Verbindung zum Server.' };
+    if (isNetErr(error)) return { error: OFFLINE };
     if (error) return { error: error.message || 'Serverfehler' };
     return { data };
   } catch (e) {
@@ -143,7 +213,9 @@ export const saveRemoteProfile = (data, level) => rpc('pb_save_profile', { p_tok
 // Mit Zugprotokoll: der Server spielt die Partie nach, erst dann zählt sie.
 export const submitScore = (kind, period, score, tribe, round, actions) =>
   rpc('pb_submit_score', { p_token: getToken(), p_kind: kind, p_period: period, p_score: score, p_tribe: tribe, p_round: round, p_actions: actions });
-export const leaderboard = (kind, period) => rpc('pb_leaderboard', { p_kind: kind, p_period: period, p_token: getToken() });
+// Die Kennung nur mitschicken, wenn es schon eine gibt (markiert den eigenen
+// Eintrag); Anschauen legt keine neue an.
+export const leaderboard = (kind, period) => rpc('pb_leaderboard', { p_kind: kind, p_period: period, p_token: existingToken() });
 
 // Profil-Code: die geheime Kennung dieses Browsers (zum Übertragen auf ein anderes Gerät).
 export function profileCode() {
@@ -173,5 +245,5 @@ export async function renewProfileCode() {
 export function useProfileCode(code) {
   const c = String(code || '').trim();
   if (c.length < 16 || c.length > 64 || !/^[A-Za-z0-9-]+$/.test(c)) return false;
-  try { localStorage.setItem('pb_token', c); return true; } catch (e) { return false; }
+  try { localStorage.setItem('pb_token', c); localStorage.setItem(ONLINE_KEY, '1'); return true; } catch (e) { return false; }
 }

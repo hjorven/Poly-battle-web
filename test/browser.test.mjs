@@ -29,7 +29,10 @@ const DEVICES = {
   pc: { viewport: { width: 1400, height: 860 } },
   ipadQuer: { viewport: { width: 1080, height: 700 }, hasTouch: true, isMobile: true },
   ipadHoch: { viewport: { width: 810, height: 950 }, hasTouch: true, isMobile: true },
-  handy: { viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true }
+  handy: { viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true },
+  // iPhone SE quer: die kleinste übliche Handy-Fläche im Querformat.
+  handyQuer: { viewport: { width: 667, height: 375 }, screen: { width: 375, height: 667 }, hasTouch: true, isMobile: true,
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' }
 };
 
 // PB_CHROMIUM: eigener Chromium-Pfad, falls Playwrights eigener fehlt.
@@ -144,8 +147,8 @@ await test('Menü: Reiter wechseln, Einstellungen bleiben nach Neuladen', async 
   await page.context().close();
 });
 
-await test('Obere Leiste: alle Knöpfe sichtbar von 360 bis 1400 px', async () => {
-  for (const w of [360, 390, 560, 810, 1080, 1400]) {
+await test('Obere Leiste: alle Knöpfe sichtbar von 320 bis 1400 px', async () => {
+  for (const w of [320, 340, 360, 390, 560, 810, 1080, 1400]) {
     const ctx = await browser.newContext({ viewport: { width: w, height: 760 }, hasTouch: w < 1100, isMobile: w < 900 });
     const page = await ctx.newPage();
     await page.route(/supabase\.co/, r => r.fulfill({ status: 200, body: '[]' }));
@@ -565,6 +568,8 @@ await test('Online am Zug: Mitteilung und blinkender Titel im Hintergrund', asyn
   await page.context().grantPermissions(['notifications']);
   await page.click('[data-mtab="play"]');
   await page.click('[data-notify="1"]');
+  // Der Klick-Handler ist async (fragt ggf. um Erlaubnis), also auf das Ergebnis warten.
+  await page.waitForFunction(() => document.querySelector('[data-notify="1"]').classList.contains('active'), null, { timeout: 4000 }).catch(() => {});
   assert.ok(await page.$eval('[data-notify="1"]', e => e.classList.contains('active')), 'Einstellung an');
   await startGame(page);
   const shown = await page.evaluate(async () => {
@@ -626,6 +631,184 @@ await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async ()
   await page.context().close();
 });
 
+await test('Bedienhilfen: Fenster mit Rolle, Fokus bleibt im Fenster, Esc schließt Bestätigung und „Mehr“', async () => {
+  const page = await open('pc');
+  // Menü ist ein Dialog, der Fokus liegt darin, Tab verlässt es nicht.
+  assert.strictEqual(await page.$eval('#menu-overlay', o => o.getAttribute('role') + '/' + o.getAttribute('aria-modal')), 'dialog/true');
+  assert.ok(await page.evaluate(() => document.getElementById('menu-overlay').contains(document.activeElement)), 'Fokus im Menü');
+  for (let i = 0; i < 60; i++) await page.keyboard.press('Tab');
+  assert.ok(await page.evaluate(() => document.getElementById('menu-overlay').contains(document.activeElement)), 'Tab bleibt im Menü');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('Shift+Tab');
+  assert.ok(await page.evaluate(() => document.getElementById('menu-overlay').contains(document.activeElement)), 'Shift+Tab bleibt im Menü');
+  await startGame(page);
+  // Bestätigung: Fokus darin, Esc bricht ab (Nein-Zweig läuft).
+  await page.evaluate(() => import('./js/ui.js').then(ui => ui.showConfirm('Test?', () => { window.__yes = 1; }, { onNo: () => { window.__no = 1; } })));
+  await page.waitForTimeout(100);
+  assert.strictEqual(await page.$eval('#confirm-overlay', o => o.getAttribute('role')), 'alertdialog');
+  assert.ok(await page.evaluate(() => document.getElementById('confirm-overlay').contains(document.activeElement)), 'Fokus in der Bestätigung');
+  await page.keyboard.press('Escape');
+  assert.ok(await page.$eval('#confirm-overlay', o => o.classList.contains('hidden')), 'Esc schließt die Bestätigung');
+  assert.deepStrictEqual(await page.evaluate(() => [window.__yes, window.__no]), [undefined, 1]);
+  for (const id of ['tech-overlay', 'overview-overlay', 'reward-overlay', 'handover-overlay', 'name-overlay', 'winner-overlay', 'build-overlay', 'learn-overlay']) {
+    assert.match(await page.$eval('#' + id, o => o.getAttribute('role') + '/' + o.getAttribute('aria-modal')), /dialog\/true/, id);
+  }
+  // Zoomen nicht gesperrt, Notch-Ränder wirken.
+  const vp = await page.$eval('meta[name=viewport]', m => m.content);
+  assert.ok(!/user-scalable=no|maximum-scale/.test(vp) && /viewport-fit=cover/.test(vp), vp);
+  noErrors(page);
+  await page.context().close();
+
+  // Handy: Bereit-Knopf und Sterne haben einen lesbaren Namen, Esc klappt „Mehr“ zu.
+  const phone = await open('handy');
+  await startGame(phone);
+  assert.ok(await phone.isVisible('#idleBtn'), 'Bereit-Knopf sichtbar');
+  assert.match(await phone.locator('#idleBtn').ariaSnapshot(), /button "\d+ bereit"/);
+  assert.match(await phone.locator('#treasury').ariaSnapshot(), /Stern/);
+  await phone.click('#moreBtn');
+  assert.ok(await phone.$eval('#topbar', e => e.classList.contains('more-open')));
+  await phone.keyboard.press('Escape');
+  assert.ok(!(await phone.$eval('#topbar', e => e.classList.contains('more-open'))), 'Esc klappt „Mehr“ zu');
+  noErrors(phone);
+  await phone.context().close();
+});
+
+await test('Handy-Menü: Reiter zeigen, dass man wischen kann; ohne Browserspeicher ein Hinweis', async () => {
+  const page = await open('handy');
+  const cls = () => page.$eval('.menu-tabs', e => e.className);
+  const over = await page.$eval('.menu-tabs', e => e.scrollWidth > e.clientWidth + 1);
+  if (over) {
+    assert.match(await cls(), /fade-right/);
+    await page.$eval('.menu-tabs', e => { e.scrollLeft = e.scrollWidth; });
+    await page.waitForTimeout(150);
+    assert.match(await cls(), /fade-left/);
+    assert.doesNotMatch(await cls(), /fade-right/);
+  } else assert.doesNotMatch(await cls(), /fade-/);
+  assert.ok(!(await page.isVisible('#storage-warn')), 'mit Speicher kein Hinweis');
+  await page.context().close();
+
+  const ctx = await browser.newContext(DEVICES.pc);
+  const p2 = await ctx.newPage();
+  p2.errors = [];
+  p2.on('pageerror', e => p2.errors.push(e.message));
+  await p2.route(/supabase\.co/, r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await p2.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new DOMException('gesperrt', 'SecurityError'); } });
+  });
+  await p2.goto(URL_);
+  await p2.waitForTimeout(500);
+  assert.ok(await p2.isVisible('#storage-warn'), 'Hinweis ohne Speicher');
+  assert.match(await p2.$eval('#storage-warn', e => e.textContent), /Spielstand kann nicht gespeichert werden/);
+  await startGame(p2);
+  assert.ok(await p2.isVisible('#endTurnBtn'), 'Spiel läuft trotzdem');
+  assert.deepStrictEqual(p2.errors, []);
+  await ctx.close();
+});
+
+await test('Akku: Bau-Fenster nutzt einen Renderer, Handy-Auflösung höchstens 1,5', async () => {
+  const page = await open('pc');
+  await startGame(page);
+  await page.evaluate(() => {
+    const { app, sync } = window.__pb; const st = app.state;
+    const c = st.cities.find(x => x.owner === 'player_1');
+    st.units = st.units.filter(u => !(u.q === c.q && u.r === c.r));
+    app.sel = { kind: 'city', q: c.q, r: c.r }; sync();
+  });
+  await page.waitForTimeout(300);
+  const seen = [];
+  for (let i = 0; i < 4; i++) {
+    await page.click('#panel [data-build-open]');
+    await page.waitForTimeout(200);
+    assert.ok(await page.isVisible('.build-map.b3 canvas'), '3D-Ansicht im Bau-Fenster');
+    seen.push(await page.evaluate(() => { const c = document.querySelector('.b3-canvas'); c.pbId = c.pbId || Math.random(); return c.pbId; }));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+  }
+  assert.strictEqual(new Set(seen).size, 1, 'Leinwand (und WebGL-Kontext) wird wiederverwendet');
+  noErrors(page);
+  await page.context().close();
+  const ctx = await browser.newContext({ ...DEVICES.handy, deviceScaleFactor: 3 });
+  const phone = await ctx.newPage();
+  await phone.goto(URL_);
+  await phone.waitForTimeout(400);
+  const ratio = await phone.evaluate(() => { const c = document.getElementById('gameCanvas'); return c.width / c.clientWidth; });
+  assert.ok(ratio <= 1.51, 'Handy zeichnet mit Auflösung ' + ratio);
+  await ctx.close();
+});
+
+await test('Online langsam: „Verbinde …“, gesperrte Knöpfe, späte Antwort überschreibt kein neues Spiel', async () => {
+  const page = await open('pc');
+  await page.unroute(/supabase\.co/);
+  await page.route(/supabase\.co/, async route => {
+    if (/create_match/.test(route.request().url())) {
+      const body = JSON.parse(route.request().postData());
+      await new Promise(r => setTimeout(r, 2500));
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'abc123', game_state: body.p_state, last_move_at: null }) }).catch(() => {});
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.click('[data-mtab="play"]');
+  await page.click('[data-mode="online"]');
+  await page.waitForTimeout(300);
+  assert.ok(await page.$eval('[data-mode="bot"]', b => b.disabled), 'Knöpfe gesperrt');
+  assert.match(await page.$eval('[data-mode="online"] .sub', e => e.textContent), /Verbinde/);
+  // Anderer Startweg während des Wartens: Knopf freigeben und ein KI-Spiel starten.
+  await page.$eval('[data-mode="bot"]', b => { b.disabled = false; });
+  await page.click('[data-mode="bot"]');
+  const before = await page.evaluate(() => window.__pb.app.state.players.length);
+  await page.waitForTimeout(3000);
+  const after = await page.evaluate(() => ({ mode: window.__pb.app.mode, online: window.__pb.app.online, players: window.__pb.app.state.players.length, hash: location.hash }));
+  assert.deepStrictEqual(after, { mode: 'bot', online: false, players: before, hash: '' });
+  assert.ok(!(await page.$eval('[data-mode="bot"]', b => b.disabled)), 'Knöpfe wieder frei');
+  noErrors(page);
+  await page.context().close();
+});
+
+await test('Online: Server hängt, Bestenliste meldet nach der Zeitgrenze „Keine Verbindung“', async () => {
+  const page = await open('pc');
+  await page.unroute(/supabase\.co/);
+  await page.route(/supabase\.co/, () => { /* nie antworten */ });
+  await page.click('[data-mtab="board"]');
+  await page.waitForTimeout(500);
+  assert.match(await page.$eval('#mpane-board', e => e.innerText), /Lädt/);
+  await page.waitForTimeout(10500);
+  assert.match(await page.$eval('#mpane-board', e => e.innerText), /Keine Verbindung zum Server/);
+  noErrors(page);
+  await page.context().close();
+});
+
+await test('Datenschutz: „Meine Partien“ fragt nur, wer schon online gespielt hat', async () => {
+  const calls = async (setup) => {
+    const ctx = await browser.newContext(DEVICES.pc);
+    const page = await ctx.newPage();
+    const seen = [];
+    await page.route(/supabase\.co/, route => {
+      const url = route.request().url();
+      seen.push(url.replace(/^.*\/rpc\//, ''));
+      const body = /pb_my_matches/.test(url)
+        ? JSON.stringify([{ id: 'm1', role: 'player_1', round: 3, last_move_at: new Date().toISOString(), turn: 'player_1', humans: ['player_1', 'player_2'], joined: ['player_1', 'player_2'], ai: [] }])
+        : '[]';
+      route.fulfill({ status: 200, contentType: 'application/json', body });
+    });
+    if (setup) await page.addInitScript(setup);
+    await page.goto(URL_);
+    await page.waitForTimeout(800);
+    // Unter Last kann die Antwort etwas dauern.
+    const list = await page.waitForSelector('#my-matches .match-row', { state: 'visible', timeout: setup ? 4000 : 500 }).then(() => true, () => false);
+    const flag = await page.evaluate(() => localStorage.getItem('pb_online'));
+    const token = await page.evaluate(() => localStorage.getItem('pb_token'));
+    await ctx.close();
+    return { seen, list, flag, token };
+  };
+  const fresh = await calls(null);
+  assert.deepStrictEqual(fresh.seen, [], 'Neuer Besuch: keine Serveranfrage');
+  assert.strictEqual(fresh.token, null, 'Neuer Besuch: keine Kennung angelegt');
+  const online = await calls(() => { localStorage.setItem('pb_token', 'abcdefabcdefabcdef12'); localStorage.setItem('pb_online', '1'); });
+  assert.ok(online.seen.some(u => /pb_my_matches/.test(u)) && online.list, 'Online-Spieler sieht seine Partien');
+  // Ältere Browser (Kennung, aber keine Markierung): einmal fragen, Ergebnis merken.
+  const old = await calls(() => { if (!sessionStorage.getItem('x')) { sessionStorage.setItem('x', '1'); localStorage.setItem('pb_token', 'abcdefabcdefabcdef12'); } });
+  assert.ok(old.list && old.flag === '1', 'Alte Kennung mit Partien wird markiert');
+});
+
 await test('Zufallstest: 150 zufällige Klicks und Tasten ohne Fehler', async () => {
   for (const d of ['pc', 'handy']) {
     const page = await open(d);
@@ -672,7 +855,16 @@ async function playLesson(page, id, device) {
       const focus = [...document.querySelectorAll('.tu-focus')].map(e => e.getBoundingClientRect());
       let tile = null;
       if (t && t.tile) { const p = window.__pb.project(t.tile[0], t.tile[1]); tile = { x: p.x, y: p.y, on: p.x > 0 && p.y > 0 && p.x < innerWidth && p.y < innerHeight, under: inside({ left: p.x, right: p.x, top: p.y, bottom: p.y }) }; }
-      return { t, open: open && open.id, busy: app.busy || app.state.turn !== 'player_1', active: !!app.state.tutorial, focus: focus.length, covered: !document.querySelector('.tu-inline') && focus.some(inside), tile, pending: app.pending && app.pending.key, sel: app.sel };
+      // Gewählte Einheit und ihre Zielfelder: wie viele liegen unter der Karte?
+      let movesUnder = 0;
+      const R = window.__pb.R, su = app.sel && app.sel.kind === 'unit' && R.findUnit(app.state, app.sel.id);
+      if (su && !document.querySelector('.tu-inline')) {
+        for (const k of [su.q + ',' + su.r, ...R.reachableMap(app.state, su).keys()]) {
+          const [q, r] = k.split(',').map(Number), p = window.__pb.project(q, r);
+          if (p && inside({ left: p.x, right: p.x, top: p.y, bottom: p.y })) movesUnder++;
+        }
+      }
+      return { t, open: open && open.id, busy: app.busy || app.state.turn !== 'player_1', active: !!app.state.tutorial, focus: focus.length, covered: !document.querySelector('.tu-inline') && focus.some(inside), tile, movesUnder, pending: app.pending && app.pending.key, sel: app.sel };
     });
     if (!s.active) throw new Error(`${id}: Tutorial vorzeitig beendet`);
     if (s.open === 'confirm-overlay') { await page.click('#confirmYes'); continue; }
@@ -682,6 +874,7 @@ async function playLesson(page, id, device) {
     const where = `${device} ${id} Schritt ${s.t.step + 1}: ${s.t.text}`;
     if (s.t.el) { assert.ok(s.focus > 0, 'nicht hervorgehoben: ' + where); assert.ok(!s.covered, 'Karte verdeckt den Knopf: ' + where); }
     if (s.t.tile) { assert.ok(s.tile.on, 'Feld nicht im Bild: ' + where); assert.ok(!s.tile.under, 'Karte verdeckt das Feld: ' + where); }
+    if (device === 'handyQuer') assert.strictEqual(s.movesUnder, 0, 'Karte verdeckt Einheit oder Zielfelder: ' + where);
     if (s.t.manual) await page.click('[data-tu="next"]');
     else if (s.t.el) { const b = await (await page.$('.tu-focus')).boundingBox(); await tap(b.x + b.width / 2, b.y + b.height / 2); }
     else {
@@ -725,6 +918,14 @@ await test('Tutorial: Lern-Tabs, Grundlagen durchspielen, jede Lektion startet m
     noErrors(page);
     await page.context().close();
   }
+});
+
+await test('Tutorial Handy quer: Box verdeckt weder Einheit noch Zielfelder', async () => {
+  const page = await open('handyQuer');
+  assert.ok(await page.evaluate(() => document.documentElement.classList.contains('phone')), 'Handy-Ansicht');
+  await playLesson(page, 'basics', 'handyQuer');
+  noErrors(page);
+  await page.context().close();
 });
 
 await browser.close();
