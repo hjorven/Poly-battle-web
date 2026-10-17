@@ -80,7 +80,6 @@ A unit that starts its turn inside your own territory can be upgraded for the di
 - Warrior becomes Swordsman
 - Archer becomes Crossbowman
 - Rider becomes Knight
-- Knight becomes Paladin
 - Boat becomes Ship
 - Ship becomes Battleship
 - Hot Air Balloon becomes War Airship

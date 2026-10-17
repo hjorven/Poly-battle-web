@@ -14,7 +14,7 @@ Poly Battle is a turn-based strategy game in the browser, inspired by *The Battl
 - [Game Modes](Game-Modes) – against the AI, hotseat, online, daily and weekly challenge
 - [Units](Units) – all stats and abilities
 - [Tribes](Tribes) – starting technologies, special traits, AI personalities
-- [Technologies](Technologies) – the tech tree in six tiers
+- [Technologies](Technologies) – the tech tree in five tiers
 - [Cities and Buildings](Cities-and-Buildings) – city levels, buildings, monuments, terrain, mercenary camps
 - [Campaign and Challenges](Campaign-and-Challenges) – 13 missions and the weekly rules
 - [Profile and Leaderboard](Profile-and-Leaderboard) – levels, achievements, cosmetics, names and profile code

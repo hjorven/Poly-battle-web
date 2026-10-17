@@ -402,7 +402,6 @@ export function incomeFor(state, player) {
   const techs = state.techs[player] || [];
   if (techs.includes('construction')) s += cities;
   if (techs.includes('trade')) s += cities;
-  if (techs.includes('banking')) s += cities;
   if (techs.includes('scholarship')) s += citiesFor(state, player).filter(c => c.pop >= 3).length;
   if (techs.includes('harbors')) s += citiesFor(state, player).reduce((a, c) => a + cityPorts(state, c).length, 0);
   if (perkOf(state, player) === 'traders') s += Math.floor(cities / 2);
@@ -752,7 +751,7 @@ export function canRegenerate(state, u) {
 
 export function startTurn(state) {
   const p = state.turn;
-  const spirit = (hasTech(state, p, 'spiritualism') ? 1 : 0) + techBonus(state, p, 'heal');
+  const spirit = techBonus(state, p, 'heal');
 
   for (const u of state.units) {
     if (u.owner !== p || !canRegenerate(state, u)) continue;
@@ -1577,7 +1576,6 @@ export function techCost(state, techId, player) {
   const cities = citiesFor(state, player).length;
   const discount = state.techs[player].includes('philosophy');
   let cost = researchCost(t.tier, cities, discount, state.techs[player].filter(x => x !== 'basic').length);
-  if (state.techs[player].includes('printing')) cost = Math.ceil(cost * 0.85);
   return perkOf(state, player) === 'wisdom' ? Math.max(1, cost - 1) : cost;
 }
 
