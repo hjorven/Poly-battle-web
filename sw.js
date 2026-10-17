@@ -3,14 +3,15 @@
 // die neue Version läuft; nur wenn das Netz fehlt, die gemerkte Kopie nehmen.
 // Online-Partien und Bestenliste (Supabase) laufen nie über den Cache.
 
-const CACHE = 'pb-v1';
+const CACHE = 'pb-v3';
 const CORE = [
   './', 'index.html', 'css/style.css',
   'js/main.js', 'js/ui.js', 'js/render.js', 'js/rules.js', 'js/ai.js', 'js/config.js', 'js/hex.js',
-  'js/net.js', 'js/save.js', 'js/profile.js', 'js/campaign.js', 'js/share.js', 'js/sound.js',
-  'js/admin.js', 'js/admin-panel.js',
+  'js/net.js', 'js/save.js', 'js/profile.js', 'js/campaign.js', 'js/tutorial.js', 'js/share.js', 'js/sound.js',
+  'js/admin.js', 'js/admin-panel.js', 'js/actionlog.js', 'js/names.js',
   'vendor/three/three.module.min.js', 'vendor/three/addons/controls/OrbitControls.js',
-  'vendor/supabase/supabase.js'
+  'vendor/supabase/supabase.js',
+  'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'
 ];
 
 self.addEventListener('install', event => {

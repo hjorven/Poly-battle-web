@@ -353,7 +353,6 @@ button:focus-visible {
 .card h2 { font-size: 20px; letter-spacing: -0.02em; }
 .tagline { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
 .footnote { color: var(--muted); font-size: 12px; margin-top: 16px; text-align: center; }
-.footnote a { color: inherit; }
 
 .menu-buttons { display: flex; flex-direction: column; gap: 10px; }
 
@@ -767,6 +766,41 @@ button:focus-visible {
 #tutor .btn { background: #26372a; color: #f3f6f1; border-color: #3c5240; }
 #tutor .btn.primary { background: #facc15; color: #172015; border-color: #facc15; }
 @media (max-width: 760px) { #tutor { top: auto; bottom: 120px; } }
+/* Tutorial im Fenster (Forschung, Ausbauen, Übersicht): Leiste unter dem Kopf */
+.tu-inline { background: #1d2a1f; color: #f3f6f1; padding: 8px 12px; margin: 0 0 8px; font-size: 13px; line-height: 1.4; }
+.tu-inline .tu-head { font-size: 11px; color: #a1a1aa; margin-bottom: 3px; }
+.tu-inline .tu-bar { height: 3px; background: #34463a; overflow: hidden; margin-bottom: 6px; }
+.tu-inline .tu-bar div { height: 100%; background: #facc15; }
+.tu-inline .tu-text { margin: 0 0 6px; }
+.tu-inline .tu-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.tu-inline .btn { background: #26372a; color: #f3f6f1; border-color: #3c5240; }
+.tu-inline .btn.primary { background: #facc15; color: #172015; border-color: #facc15; }
+/* Handy quer: Karte schmal links, Leiste im Fenster einzeilig */
+html.phone #tutor.tu-side { left: max(8px, env(safe-area-inset-left, 0px)); transform: none; width: min(300px, 40vw); padding: 8px 10px; font-size: 12px; line-height: 1.35; overflow-y: auto; }
+html.phone #tutor.tu-side .tu-head { font-size: 11px; margin-bottom: 2px; }
+html.phone #tutor.tu-side .tu-bar { margin-bottom: 6px; }
+html.phone #tutor.tu-side .tu-text { margin-bottom: 6px; }
+html.phone #tutor.tu-side .btn { min-height: 34px; padding: 4px 10px; }
+@media (orientation: landscape) {
+  html.phone .tu-inline { display: flex; align-items: center; gap: 8px; padding: 4px 8px; margin-bottom: 4px; font-size: 12px; }
+  html.phone .tu-inline .tu-head, html.phone .tu-inline .tu-bar { display: none; }
+  html.phone .tu-inline .tu-text { margin: 0; flex: 1; }
+  html.phone .tu-inline .btn { min-height: 32px; padding: 2px 8px; white-space: nowrap; }
+}
+/* Hervorgehobener Knopf: gelber, pulsierender Rahmen */
+.tu-focus { outline: 3px solid #facc15 !important; outline-offset: 2px; animation: tu-pulse 1.1s ease-in-out infinite; }
+@keyframes tu-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7); } 50% { box-shadow: 0 0 0 7px rgba(250, 204, 21, 0); } }
+@media (prefers-reduced-motion: reduce) { .tu-focus { animation: none; } }
+/* Lern-Tabs */
+.learn-card { width: min(560px, 100%); }
+.learn-tabs { flex-wrap: wrap; }
+.learn-tabs .ov-tab { display: inline-flex; align-items: center; gap: 4px; }
+.learn-done { color: var(--ok); display: inline-flex; }
+.learn-pane h3 { margin: 2px 0 6px; font-size: 20px; }
+.learn-kicker { margin: 0; font-size: 12px; color: var(--muted); }
+.learn-sub { margin: 10px 0 4px; font-weight: 700; }
+.learn-list { margin: 0 0 10px; padding-left: 20px; }
+.learn-list li { margin: 2px 0; }
 
 /* Niederlage: was man geschafft hat */
 .achieve { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 8px 0; }
@@ -969,6 +1003,9 @@ body.adm-picking #gameCanvas { cursor: crosshair; }
   font-weight: 800; font-size: 42px !important; line-height: 0.95; letter-spacing: -0.035em !important; margin: 0 !important;
 }
 .menu-top .tagline { margin: 4px 0 0; font-size: 13px; }
+/* Datenschutz aus jedem Reiter erreichbar, darum im festen Kopf. */
+.menu-legal { margin: 2px 0 0; font-size: 12px; }
+.menu-legal a { color: var(--muted); }
 #menu-overlay #profile-card {
   flex: 0 1 470px; margin: 0; padding: 8px 12px; gap: 2px 12px;
   grid-template-columns: 40px minmax(0, 1fr) auto;

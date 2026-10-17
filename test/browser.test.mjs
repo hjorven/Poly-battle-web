@@ -345,6 +345,46 @@ await test('Kampfvorschau: erster Tipp zeigt beide Einheiten, zweiter greift an'
   }
 });
 
+await test('Ritter nach dem Angriff: zieht weiter, Krieger gilt als fertig', async () => {
+  const page = await open('pc');
+  await startGame(page);
+  const setup = await page.evaluate(() => {
+    const { app, R, sync } = window.__pb; const st = app.state;
+    const me = st.units.find(u => u.owner === 'player_1');
+    const dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+    const free = (q, r) => R.terrainAt(st, q, r) === 'field' && !R.unitAt(st, q, r) && !R.cityAt(st, q, r);
+    const spot = dirs.map(([dq, dr]) => [me.q + dq, me.r + dr]).find(([q, r]) => free(q, r));
+    if (!spot) return null;
+    // Krieger greift an: danach nichts mehr zu tun.
+    st.units.push({ id: 'feind', owner: 'player_2', type: 'warrior', q: spot[0], r: spot[1], hp: 10, mp: 1, hasMoved: false, acted: false });
+    me.acted = false; me.hasMoved = false; me.mp = 1;
+    R.attack(st, me, st.units.find(u => u.id === 'feind'));
+    const warriorIdle = R.idleUnits(st, 'player_1').some(u => u.id === me.id);
+    // Ritter (Durchhalten) an derselben Stelle: greift an und darf weiterziehen.
+    st.units.find(u => u.id === 'feind').hp = 10;
+    me.type = 'knight'; me.hp = 10; me.acted = false; me.hasMoved = false; me.mp = 3;
+    R.attack(st, me, st.units.find(u => u.id === 'feind'));
+    const knightIdle = R.idleUnits(st, 'player_1').some(u => u.id === me.id);
+    const goal = [...R.reachableMap(st, me).keys()][0];
+    app.sel = { kind: 'unit', id: me.id }; sync();
+    return { warriorIdle, knightIdle, goal, id: me.id };
+  });
+  assert.ok(setup && setup.goal, 'Testaufbau');
+  assert.strictEqual(setup.warriorIdle, false, 'Krieger nach dem Angriff nicht mehr bereit');
+  assert.strictEqual(setup.knightIdle, true, 'Ritter nach dem Angriff noch bereit');
+  await page.waitForTimeout(300);
+  const [q, r] = setup.goal.split(',').map(Number);
+  const pt = await page.evaluate(([q, r]) => window.__pb.project(q, r), [q, r]);
+  await page.mouse.click(pt.x, pt.y);
+  await page.waitForTimeout(300);
+  await page.mouse.click(pt.x, pt.y);
+  await page.waitForTimeout(1200);
+  const pos = await page.evaluate(id => { const u = window.__pb.app.state.units.find(x => x.id === id); return u.q + ',' + u.r; }, setup.id);
+  assert.strictEqual(pos, setup.goal, 'Ritter ist nach dem Angriff weitergezogen');
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Einheit: Details klappen die Werkzeugreihe auf und wieder zu', async () => {
   const page = await open('ipadQuer');
   await startGame(page);
@@ -554,6 +594,81 @@ await test('Zufallstest: 150 zufällige Klicks und Tasten ohne Fehler', async ()
     await page.waitForTimeout(1500);
     const busy = await page.evaluate(() => window.__pb.app.busy);
     assert.strictEqual(busy, false, 'Spiel hängt (busy)');
+    noErrors(page);
+    await page.context().close();
+  }
+});
+
+// Tutorial: der Hervorhebung folgen wie ein Mensch. Jeder Text muss sein Ziel
+// zeigen (Knopf hervorgehoben bzw. Feld im Bild), und die Karte darf es nicht verdecken.
+async function playLesson(page, id, device) {
+  const tap = async (x, y) => { if (device === 'pc') await page.mouse.click(x, y); else await page.touchscreen.tap(x, y); };
+  await page.click('[data-mtab="play"]').catch(() => {});
+  await page.click('[data-mode="tutorial"]');
+  await page.click(`[data-learn-tab="${id}"]`);
+  await page.click('[data-learn-start]');
+  await page.waitForTimeout(800);
+  for (let i = 0; i < 60; i++) {
+    await page.waitForTimeout(600);
+    const s = await page.evaluate(() => {
+      const t = window.__pb.tutor(), app = window.__pb.app;
+      const open = [...document.querySelectorAll('.overlay')].find(o => !o.classList.contains('hidden'));
+      const card = document.querySelector('.tu-inline') || document.getElementById('tutor');
+      const cr = card.getBoundingClientRect();
+      const inside = r => r.right > cr.left && r.left < cr.right && r.bottom > cr.top && r.top < cr.bottom;
+      const focus = [...document.querySelectorAll('.tu-focus')].map(e => e.getBoundingClientRect());
+      let tile = null;
+      if (t && t.tile) { const p = window.__pb.project(t.tile[0], t.tile[1]); tile = { x: p.x, y: p.y, on: p.x > 0 && p.y > 0 && p.x < innerWidth && p.y < innerHeight, under: inside({ left: p.x, right: p.x, top: p.y, bottom: p.y }) }; }
+      return { t, open: open && open.id, busy: app.busy || app.state.turn !== 'player_1', active: !!app.state.tutorial, focus: focus.length, covered: !document.querySelector('.tu-inline') && focus.some(inside), tile, pending: app.pending && app.pending.key, sel: app.sel };
+    });
+    if (!s.active) throw new Error(`${id}: Tutorial vorzeitig beendet`);
+    if (s.open === 'confirm-overlay') { await page.click('#confirmYes'); continue; }
+    if (s.open === 'reward-overlay') { await page.click('#reward-options button'); continue; }
+    if (s.busy || !s.t) continue;
+    if (s.t.finished) return;
+    const where = `${device} ${id} Schritt ${s.t.step + 1}: ${s.t.text}`;
+    if (s.t.el) { assert.ok(s.focus > 0, 'nicht hervorgehoben: ' + where); assert.ok(!s.covered, 'Karte verdeckt den Knopf: ' + where); }
+    if (s.t.tile) { assert.ok(s.tile.on, 'Feld nicht im Bild: ' + where); assert.ok(!s.tile.under, 'Karte verdeckt das Feld: ' + where); }
+    if (s.t.manual) await page.click('[data-tu="next"]');
+    else if (s.t.el) { const b = await (await page.$('.tu-focus')).boundingBox(); await tap(b.x + b.width / 2, b.y + b.height / 2); }
+    else {
+      const [q, r] = s.t.tile || await page.evaluate(() => {
+        const { app, R } = window.__pb, st = app.state;
+        if (app.pending) return app.pending.key.split(',').map(Number);
+        const u = R.findUnit(st, app.sel.id);
+        return [...R.reachableMap(st, u).keys()].map(k => k.split(',').map(Number)).find(([q, r]) => !R.cityAt(st, q, r));
+      });
+      const p = await page.evaluate(([q, r]) => window.__pb.project(q, r), [q, r]);
+      await tap(p.x, p.y);
+    }
+  }
+  throw new Error(`${device} ${id}: Lektion nicht abgeschlossen`);
+}
+
+await test('Tutorial: Lern-Tabs, Grundlagen durchspielen, jede Lektion startet mit sichtbarem Ziel', async () => {
+  for (const d of ['pc', 'handy']) {
+    const page = await open(d);
+    await page.click('[data-mtab="play"]').catch(() => {});
+    await page.click('[data-mode="tutorial"]');
+    assert.strictEqual(await page.$$eval('[data-learn-tab]', l => l.length), 5, 'fünf Lektionen');
+    await page.click('#learnClose');
+    await playLesson(page, 'basics', d);
+    assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem('pb_tutorial_v1')).includes('basics')), 'Grundlagen als geschafft gemerkt');
+    await page.click('[data-tu="lessons"]');
+    assert.ok(await page.isVisible('[data-learn-tab="basics"] .learn-done'), 'Haken am Tab');
+    await page.click('#learnClose');
+    // Erster Schritt jeder Lektion: Text sichtbar, Ziel zu sehen.
+    for (const id of ['cities', 'build', 'combat', 'explore']) {
+      await page.evaluate(() => document.getElementById('menuBtn').click());
+      await page.click('[data-mtab="play"]').catch(() => {});
+      await page.click('[data-mode="tutorial"]');
+      await page.click(`[data-learn-tab="${id}"]`);
+      await page.click('[data-learn-start]');
+      await page.waitForTimeout(900);
+      const t = await page.evaluate(() => window.__pb.tutor());
+      assert.ok(t && t.text, `${d} ${id}: erster Schritt sichtbar`);
+      if (t.el) assert.ok(await page.evaluate(() => !!document.querySelector('.tu-focus')), `${d} ${id}: Ziel hervorgehoben`);
+    }
     noErrors(page);
     await page.context().close();
   }

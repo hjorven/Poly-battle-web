@@ -6,7 +6,7 @@ Rundenbasierte Eroberung im Browser, angelehnt an *The Battle of Polytopia*: Gr�
 
 **[Jetzt spielen](https://hjorven.github.io/Poly-battle-web/)** · [Wiki](https://github.com/hjorven/Poly-battle-web/wiki/Startseite) · [Fehler melden](https://github.com/hjorven/Poly-battle-web/issues/new/choose)
 
-![Eine Partie in Runde 22: Hauptstadt mit Farmen, oben eine zweite Stadt, Söldnerlager, Leuchttürme an den Kartenecken, der Rest der Welt unter Nebel](docs/screenshot.png)
+![Eine Partie in Runde 21: zwei Städte mit Farmen und Wegen, Hügel, Sumpf, ein Söldnerlager, Schiffe vor der Küste und Leuchttürme an den Kartenecken](docs/screenshot.png)
 
 ## Was dich erwartet
 
@@ -18,11 +18,13 @@ Rundenbasierte Eroberung im Browser, angelehnt an *The Battle of Polytopia*: Gr�
 - **KI-Lehrling:** Der Knopf „Tipp“ zeigt und erklärt, was die KI an deiner Stelle tun würde.
 - **Wiederholung:** Nach Spielende jede Runde ansehen oder die ganze Partie im Zeitraffer ablaufen lassen.
 - **Ausbalanciert:** Stämme und Einheiten werden mit KI-Turnieren gemessen (240 Partien: jeder Stamm gewinnt 16–31 %).
-- **Spielmodi:** gegen die KI, Hotseat an einem Gerät, online per Link (mit Aufgeben, Zugzeit und einer Liste deiner Partien), Tutorial, 13 Kampagnen-Missionen, Tages- und Wochen-Herausforderung mit Bestenliste.
+- **Spielmodi:** gegen die KI, Hotseat an einem Gerät, online per Link (mit Aufgeben, Zugzeit und einer Liste deiner Partien), Tutorial in fünf Lektionen (Grundlagen, Städte, Forschung und Bauen, Kampf, Erkunden), 13 Kampagnen-Missionen, Tages- und Wochen-Herausforderung mit Bestenliste.
 - **Profil** mit Stufen, 20 Erfolgen, freischaltbarem Aussehen und Statistik; mit dem Profil-Code geht es auf jedem Gerät weiter.
 - **Freie Karte:** Die Bedienung liegt in schwebenden Kärtchen an den Rändern. Wählst du eine Stadt oder Einheit, steht ein Schild mit ihren Werten direkt daran, die Aktionen liegen als Werkzeugreihe unten – angelehnt an Mini Metro.
 - **Bedienung** mit Maus und Tastatur oder Touch; Ziehen und Angreifen brauchen zwei Tipps, damit nichts aus Versehen passiert. Kein Rückgängig – jeder Zug zählt.
 - **Hell oder dunkel:** folgt der Systemeinstellung oder ist fest wählbar.
+
+![Hauptmenü in der dunklen Darstellung: Spielmodi, Tages- und Wochen-Herausforderung, Stammwahl und Spieleinstellungen](docs/menu.png)
 
 ![Gewählte Hauptstadt: Schild mit Stufe und Einkommen an der Stadt, unten die Werkzeugreihe mit Ausbauen, Bevölkerung und Einheiten](docs/city.png)
 
@@ -76,7 +78,7 @@ Die Doku gibt es auf Englisch (Hauptsprache) und Deutsch. Das Spiel selbst ist a
 
 ## Online und Datenschutz
 
-Clients haben keinen direkten Zugriff auf die Tabellen. Gelesen und geschrieben wird nur über Datenbank-Funktionen, die prüfen, wer mitspielt, wer am Zug ist und ob Namen plausibel sind. Laufende Partien sieht nur, wer mitspielt; nach jedem Zug schickt die Datenbank über Realtime nur eine Klingel, den Stand holt sich der Client geprüft ab. Punkte der Herausforderungen zählen erst, wenn `scripts/verify-scores.mjs` (GitHub Actions, alle 10 Minuten, Secret `SUPABASE_SERVICE_ROLE_KEY`) die Partie aus dem mitgeschickten Zugprotokoll (`js/actionlog.js`) nachgespielt hat. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Gespeichert werden Spielstände, Name, Profildaten und Punkte – keine E-Mail-Adressen, kein Konto. Die Datenschutzerklärung für Spieler steht in [datenschutz.html](datenschutz.html) (im Spiel verlinkt unter „Anleitung“).
+Clients haben keinen direkten Zugriff auf die Tabellen. Gelesen und geschrieben wird nur über Datenbank-Funktionen, die prüfen, wer mitspielt, wer am Zug ist und ob Namen plausibel sind. Laufende Partien sieht nur, wer mitspielt; nach jedem Zug schickt die Datenbank über Realtime nur eine Klingel, den Stand holt sich der Client geprüft ab. Punkte der Herausforderungen zählen erst, wenn `scripts/verify-scores.mjs` (GitHub Actions, alle 10 Minuten, Secret `SUPABASE_SERVICE_ROLE_KEY`) die Partie aus dem mitgeschickten Zugprotokoll (`js/actionlog.js`) nachgespielt hat. Spieler-Kennungen liegen nur als SHA-256-Prüfsumme in der Datenbank. Gespeichert werden Spielstände, Name, Profildaten und Punkte – keine E-Mail-Adressen, kein Konto. Die Datenschutzerklärung für Spieler steht in [datenschutz.html](datenschutz.html) (im Spielmenü unter dem Titel verlinkt).
 
 ## Mitmachen
 

@@ -29,6 +29,15 @@
     try { window.pbView(localStorage.getItem('pb_view') || 'auto'); } catch (e) { window.pbView('auto'); }
   </script>
   <link rel="stylesheet" href="css/style.css">
+  <!-- Als App auf dem Home-Bildschirm: eigenes Symbol, ohne Browserleiste. -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Poly Battle">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#f6f7f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111813" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,6 89,28 89,72 50,94 11,72 11,28' fill='%2318181b'/></svg>">
   <script type="importmap">
     {
@@ -104,6 +113,7 @@
         <div class="menu-brand">
           <h1 class="wordmark">Poly Battle</h1>
           <p class="tagline">Rundenbasierte Eroberung im Stil von Battle of Polytopia</p>
+          <p class="menu-legal"><a href="datenschutz.html" target="_blank" rel="noopener">Datenschutz und Namen melden</a></p>
         </div>
         <div id="profile-card"></div>
       </div>
@@ -127,7 +137,7 @@
               <button class="btn big mode daily-btn" data-mode="weekly" id="weeklyBtn">Wochen-Herausforderung</button>
               <button class="btn big mode" data-mode="hotseat">Hotseat<span class="sub">Mehrere Spieler an einem Gerät</span></button>
               <button class="btn big mode" data-mode="online">Online<span class="sub">Link teilen und gegeneinander spielen</span></button>
-              <button class="btn big mode ghost" data-mode="tutorial">Tutorial<span class="sub">Das erste Spiel mit Anleitung</span></button>
+              <button class="btn big mode ghost" data-mode="tutorial">Tutorial<span class="sub">Lektionen von Grundlagen bis Kampf</span></button>
             </div>
             <div id="my-matches" class="my-matches hidden" aria-live="polite"></div>
           </div>
@@ -296,7 +306,6 @@
           <li><b>Sieg:</b> Im Modus Eroberung erbeutest du alle Städte der Gegner. Im Modus Perfektion gewinnt nach 30 Runden die höchste Punktzahl (Städte, Bevölkerung, Technologien, Einheiten, Erkundung, Gebäude, Ruinen, Leuchttürme, Monumente).</li>
         </ul>
         <p class="footnote">Karte verschieben: Ziehen · Zoomen: Rad/zwei Finger · Drehen/Neigen: rechte Maustaste, Zwei-Finger-Drehung, Knöpfe oder Q/E/R/F · Auswählen: Antippen · Tech-Baum: Doppeltipp setzt die Ansicht zurück</p>
-        <p class="footnote"><a href="datenschutz.html" target="_blank" rel="noopener">Datenschutz</a></p>
       </section>
     </div>
   </div>
@@ -328,6 +337,16 @@
         <button id="overviewClose" class="btn ghost small">Schließen</button>
       </div>
       <div id="overview-list"></div>
+    </div>
+  </div>
+
+  <div id="learn-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="learn-title">
+    <div class="card learn-card">
+      <div class="card-head">
+        <h2 id="learn-title">Tutorial</h2>
+        <button id="learnClose" class="btn ghost small">Schließen</button>
+      </div>
+      <div id="learn-body"></div>
     </div>
   </div>
 

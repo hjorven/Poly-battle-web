@@ -903,6 +903,12 @@ function stepMinimap(now) {
 // --- Markierungen für Einheiten, die noch handeln können --------------------
 
 let idleMarkers = [];
+// Abgedunkelt wird erst, wenn die Einheit fertig ist: Rückzug/Durchhalten
+// dürfen nach dem Angriff mit restlicher Bewegung noch weiterziehen.
+function spent(u) {
+  return !!u.acted && !(u.mp > 0 && (hasAbility(u.type, 'escape') || hasAbility(u.type, 'persist')));
+}
+
 export function setIdleMarkers(units) {
   if (!initialized) return;
   for (const m of idleMarkers) idleGroup.remove(m);
@@ -940,7 +946,30 @@ export function setThreatMarkers(cities) {
   }
 }
 
+// Tutorial: weißer, pulsierender Ring um das Feld, über das der Schritt spricht.
+let tutorRing = null;
+export function setTutorMarker(tile) {
+  if (!initialized) return;
+  const key = tile ? hk(tile[0], tile[1]) : null;
+  if (tutorRing && tutorRing.userData.key === key) return;
+  if (tutorRing) { idleGroup.remove(tutorRing); tutorRing.material.dispose(); tutorRing = null; }
+  if (!key || !tiles.get(key)) return;
+  const ringGeo = geo('tutorRing', () => new THREE.RingGeometry(0.78, 0.94, 6).rotateX(-Math.PI / 2).rotateY(Math.PI / 6));
+  const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }));
+  const p = toWorld(tile[0], tile[1]);
+  m.position.set(p.x, hexTop(key) + 0.06, p.z);
+  m.renderOrder = 14;
+  m.userData.key = key;
+  idleGroup.add(m);
+  tutorRing = m;
+}
+
 function stepIdleMarkers(now) {
+  if (tutorRing) {
+    tutorRing.material.opacity = 0.55 + Math.sin(now / 220) * 0.4;
+    const s = 1.02 + Math.sin(now / 220) * 0.06;
+    tutorRing.scale.set(s, 1, s);
+  }
   for (const m of threatRings) {
     m.material.opacity = 0.45 + Math.sin(now / 280) * 0.35;
     const s = 1 + Math.sin(now / 280) * 0.04;
@@ -2255,9 +2284,9 @@ function placeUnitNode(state, unit) {
   group.rotation.y = DEFAULT_FACING;
   scene.add(group);
   const bt = tiles.get(key);
-  const node = { plume: look && look.plume, underBridge: !!(bt && bt.bridgeNode && hasAbility(unit.type, 'water')), group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, passenger: passengerOf(unit), acted: unit.acted, owner: unit.owner, dying: false, baseColor: color };
+  const node = { plume: look && look.plume, underBridge: !!(bt && bt.bridgeNode && hasAbility(unit.type, 'water')), group, sprite, hp: unit.hp, vet: !!unit.vet, type: unit.type, passenger: passengerOf(unit), acted: spent(unit), owner: unit.owner, dying: false, baseColor: color };
   unitNodes.set(unit.id, node);
-  if (unit.acted) {
+  if (node.acted) {
     for (const m of node.group.userData.teamMats) m.color.multiplyScalar(0.55);
   }
   group.scale.set(0.01, 0.01, 0.01);
@@ -2421,9 +2450,9 @@ export function syncBoard(state, viewer = null) {
       node.vet = !!u.vet;
       drawHp(node.sprite, u.hp, node.vet, node.baseColor);
     }
-    if (node.acted !== u.acted) {
-      node.acted = u.acted;
-      const f = u.acted ? 0.55 : 1;
+    if (node.acted !== spent(u)) {
+      node.acted = spent(u);
+      const f = node.acted ? 0.55 : 1;
       for (const m of node.group.userData.teamMats) {
         m.color.setHex(node.baseColor).multiplyScalar(f);
       }

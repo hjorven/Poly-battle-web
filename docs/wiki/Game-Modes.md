@@ -9,7 +9,7 @@ All modes start from the menu under **Spielen** (Play). The browser remembers yo
 | **Gegen KI** (vs. AI) | you against 1–5 AI tribes | no | in the browser, **Weiterspielen** (Continue) in the menu |
 | **Hotseat** | 2–5 people on one device | no | in the browser |
 | **Online** | 2–5 people, optionally 0–3 AI | yes | on the server, reachable via the link |
-| **Tutorial** | you against an easy AI, with guidance | no | in the browser |
+| **Tutorial** | five short lessons (basics, cities, research and building, combat, exploring and help), each on its own small practice map; every step highlights the button or tile it talks about | no | in the browser |
 | **Daily challenge** | the same map for everyone, 30 turns | only for the leaderboard | in the browser |
 | **Weekly challenge** | fixed map with a special rule | only for the leaderboard | in the browser |
 | **Kampagne** (Campaign) | 13 missions | no | in the browser |
