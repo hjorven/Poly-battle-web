@@ -627,7 +627,7 @@ export function renderBoard(res, kind, myName) {
   const d = res.data || {};
   const top = d.top || [];
   const tribe = id => (TRIBES[id] ? TRIBES[id].name : '');
-  const rows = top.map(r => `<li class="${myName && r.name === myName ? 'me' : ''}"><span>${r.rank}.</span><span>${esc(r.name)} <span class="b-sub">Stufe ${r.level} · ${esc(tribe(r.tribe))} · Runde ${r.round}</span></span><b>${r.score}</b></li>`).join('');
+  const rows = top.map(r => `<li class="${myName && r.name === myName ? 'me' : ''}"><span>${r.rank}.</span><span>${esc(r.name)} <span class="b-sub">${r.level != null ? `Stufe ${r.level} · ` : ''}${esc(tribe(r.tribe))} · Runde ${r.round}</span></span><b>${r.score}</b></li>`).join('');
   const me = d.me && !top.some(r => r.name === d.me.name) ? `<li class="me"><span>${d.me.rank}.</span><span>${esc(d.me.name)}</span><b>${d.me.score}</b></li>` : '';
   box.innerHTML = top.length ? `<ol class="board-list">${rows}${me}</ol><div class="hint">${d.total} ${d.total === 1 ? 'Spieler' : 'Spieler'} ${kind === 'daily' ? 'heute' : 'diese Woche'}</div>`
     : `<div class="hint">Noch keine Einträge ${kind === 'daily' ? 'heute' : 'diese Woche'} – spiel die ${kind === 'daily' ? 'Tages' : 'Wochen'}-Herausforderung und sei die Nummer 1!</div>`;
