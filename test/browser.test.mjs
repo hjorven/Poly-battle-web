@@ -568,6 +568,8 @@ await test('Online am Zug: Mitteilung und blinkender Titel im Hintergrund', asyn
   await page.context().grantPermissions(['notifications']);
   await page.click('[data-mtab="play"]');
   await page.click('[data-notify="1"]');
+  // Der Klick-Handler ist async (fragt ggf. um Erlaubnis), also auf das Ergebnis warten.
+  await page.waitForFunction(() => document.querySelector('[data-notify="1"]').classList.contains('active'), null, { timeout: 4000 }).catch(() => {});
   assert.ok(await page.$eval('[data-notify="1"]', e => e.classList.contains('active')), 'Einstellung an');
   await startGame(page);
   const shown = await page.evaluate(async () => {
