@@ -2078,6 +2078,21 @@ export function renderOnlineActions(acts) {
   box.querySelectorAll('[data-online-act]').forEach(b => b.addEventListener('click', () => handlers.onOnlineAction?.(acts[+b.dataset.onlineAct])));
 }
 
+// Während eine Online-Partie verbunden wird: Knöpfe für andere Spiele sperren
+// und „Verbinde …“ zeigen (sonst überschreibt die späte Antwort ein neues Spiel).
+export function setConnecting(on) {
+  document.querySelectorAll('#menu-overlay [data-mode], #menu-overlay [data-mission], #continueBtn, #my-matches .match-row')
+    .forEach(b => { b.disabled = !!on; });
+  const btn = document.querySelector('#menu-overlay [data-mode="online"]');
+  const sub = btn && btn.querySelector('.sub');
+  if (sub) {
+    if (on) { if (!sub.dataset.text) sub.dataset.text = sub.textContent; sub.textContent = 'Verbinde …'; }
+    else if (sub.dataset.text) sub.textContent = sub.dataset.text;
+  }
+  if (btn) btn.setAttribute('aria-busy', on ? 'true' : 'false');
+  $('menu-overlay').classList.toggle('connecting', !!on);
+}
+
 // Eigene Online-Partien; null = wird geladen, [] = keine (Liste ausblenden).
 export function renderMyMatches(list) {
   const box = $('my-matches');
