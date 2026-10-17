@@ -18,7 +18,7 @@ Der Forschungsbaum hat 55 Technologien in sechs Stufen. Die Kosten steigen mit d
 | 6 | **Fruchtfolge** | Stadtplanung | Jede Farm bringt +1 Stern zusätzlich |
 | 2 | **Schildmacher** | Organisation | Verteidiger ausbilden |
 | 3 | **Pikeniere** | Schildmacher | Pikenier: stark gegen Reiter, Ritter und Paladine |
-| 4 | **Diplomatie** | Pikeniere | Botschaften und Bündnisse |
+| 4 | **Diplomatie** | Pikeniere | Frieden mit anderen Stämmen anbieten |
 | 5 | **Spionage** | Diplomatie | Spione kosten 2 Sterne weniger und sehen 1 Feld weiter |
 | 6 | **Burgbau** | Spionage | Burg: Einheiten darauf haben 3-fache Verteidigung |
 
@@ -67,8 +67,8 @@ Der Forschungsbaum hat 55 Technologien in sechs Stufen. Die Kosten steigen mit d
 | 2 | **Forstwirtschaft** | Jagd | Sägewerke bauen (+1 Einkommen); Waldläufer |
 | 3 | **Mathematik** | Forstwirtschaft | Katapult ausbilden |
 | 4 | **Ingenieurwesen** | Mathematik | Katapulte kosten 3 Sterne weniger |
-| 5 | **Ballonfahrt** | Ingenieurwesen | Ballonplatz, Heißluftballon (Späher) und Lastenballon |
-| 6 | **Luftschiffbau** | Ballonfahrt | Brandballon und Kriegsluftschiff |
+| 5 | **Ballonfahrt** | Ingenieurwesen | Ballonplatz und Heißluftballon (Späher) |
+| 6 | **Luftschiffbau** | Ballonfahrt | Kriegsluftschiff |
 
 ## Reiten
 

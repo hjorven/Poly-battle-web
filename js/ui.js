@@ -6,7 +6,7 @@ import {
 import {
   cityIncome, techCost, tribeName, playerColor, maxHp, maxMove, attackOf, popCost, monumentReady, canBuildRoad, roadAt,
   terrainAt, defenceBonus, attackPreview, canImprove, resourceAt, improvementAt, cityTiles, canBuyPop,
-  canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, score, scoreBreakdown, ranking,
+  canAttackNow, canFound, canTrain, pendingLevel, rewardOptions, canChooseReward, score, scoreBreakdown, ranking,
   bridgeOptions, canBuildBridge, destroyableBridges, disbandRefund, unitOptions, cityView, canRegenerate,
   hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, tradeOption, hireOption, incomeFor, tileYield, improvePreview, monumentProgress, threatenedCities, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
@@ -1244,6 +1244,8 @@ export function showReward(state, city, ctx) {
     const b = document.createElement('button');
     b.className = 'btn big reward-opt' + (i === 0 ? ' primary' : '');
     b.innerHTML = `<span>${def.name}</span><span class="sub">${def.desc}</span>`;
+    const chk = canChooseReward(state, city, id, city.owner);
+    if (!chk.ok) { b.disabled = true; b.title = chk.reason; b.querySelector('.sub').textContent += ` · ${chk.reason}`; }
     b.addEventListener('click', () => {
       $('reward-overlay').classList.add('hidden');
       handlers.onChooseReward(city, id);

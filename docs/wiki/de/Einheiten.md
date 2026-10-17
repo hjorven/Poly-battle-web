@@ -23,10 +23,10 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 | **Gedankenbeuger** | 5 | 10 | 0 | 1 | 1 | 1 | Philosophie | Heilen, Bekehren, Starr |
 | **Bannerträger** | 6 | 10 | 1 | 2 | 1 | 1 | Freier Geist | Verschanzen, Banner |
 | **Bogenreiter** | 6 | 10 | 2 | 1 | 2 | 2 | Hufeisen | Sturm, Rückzug |
-| **Ritter** | 9 | 10 | 3 | 1 | 3 | 1 | Ritterlichkeit | Sturm, Durchhalten, Verschanzen |
-| **Paladin** | 13 | 15 | 4 | 2 | 3 | 1 | Ritterorden | Sturm, Durchhalten, Verschanzen |
+| **Ritter** | 11 | 10 | 3 | 1 | 3 | 1 | Ritterlichkeit | Sturm, Durchhalten, Verschanzen |
+| **Paladin** | 15 | 15 | 4 | 2 | 3 | 1 | Ritterorden | Sturm, Durchhalten, Verschanzen |
 | **Händlerkarren** | 5 | 6 | 0 | 1 | 2 | 1 | Handel | Handel |
-| **Riese** (nur als Belohnung) | – | 40 | 5 | 4 | 1 | 1 | – | Statisch |
+| **Riese** (nur als Belohnung) | 25 | 40 | 5 | 4 | 1 | 1 | – | Statisch |
 | **Spion** | 4 | 6 | 0 | 1 | 2 | 1 | – | Spähen |
 | **Siedler** | 5 | 10 | 0 | 0 | 1 | 1 | – | Statisch, Siedeln |
 
@@ -44,8 +44,6 @@ Werte: Kosten in Sternen, Leben, Angriff, Verteidigung, Bewegung, Reichweite. Ve
 | Einheit | Kosten | Leben | Angriff | Verteidigung | Bewegung | Reichweite | Technologie | Fähigkeiten |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **Heißluftballon** | 4 | 4 | 0 | 1 | 3 | 1 | Ballonfahrt | Fliegen, Zerbrechlich |
-| **Lastenballon** | 6 | 6 | 0 | 1 | 3 | 1 | Ballonfahrt | Fliegen, Zerbrechlich, Transport |
-| **Brandballon** | 8 | 6 | 3 | 0 | 2 | 1 | Luftschiffbau | Fliegen, Zerbrechlich |
 | **Kriegsluftschiff** | 12 | 12 | 3 | 2 | 2 | 2 | Luftschiffbau | Fliegen, Große Hülle |
 
 ## Fähigkeiten
@@ -85,5 +83,4 @@ Steht eine Einheit zu Zugbeginn im eigenen Gebiet, kann sie gegen den Preisunter
 - Ritter wird zu Paladin
 - Boot wird zu Schiff
 - Schiff wird zu Kriegsschiff
-- Heißluftballon wird zu Brandballon
-- Brandballon wird zu Kriegsluftschiff
+- Heißluftballon wird zu Kriegsluftschiff
