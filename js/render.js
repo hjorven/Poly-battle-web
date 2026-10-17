@@ -3149,6 +3149,14 @@ export function snapshotMap(state, w = 1720, h = 1000) {
 }
 
 // Nur für Tests/Entwicklung: Kamera direkt setzen (Konsole: __pb.cam(...)).
+// Kamerastand fürs Tutorial: Blickpunkt, Abstand, Drehung; `moving` während
+// einer Kamerafahrt.
+export function cameraState() {
+  if (!initialized) return null;
+  const off = camera.position.clone().sub(controls.target);
+  return { x: controls.target.x, z: controls.target.z, dist: off.length(), az: Math.atan2(off.x, off.z), moving: tweens.length > 0 };
+}
+
 export function debugCamera(x = 15, y = 3.2, z = 17.5, tx = 15, tz = 12) {
   if (!initialized) return;
   controls.target.set(tx, 0.5, tz);

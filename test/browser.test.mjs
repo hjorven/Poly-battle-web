@@ -57,6 +57,8 @@ async function open(device = 'pc', { scheme = 'light', online = false } = {}) {
         localStorage.clear();
         sessionStorage.setItem('test-init', '1');
         localStorage.setItem('pb_tribe', 'imperius');
+        // Spielhinweise nur im eigenen Test (sonst liegt die Karte über Zielen anderer Tests).
+        localStorage.setItem('pb_tips', '0');
         localStorage.setItem('pb_settings_v1', JSON.stringify({ bots: 2, stars: 'normal', gamemode: 'conquest', ai: 'normal', mapsize: 'small', maptype: 'continents', onlinebots: '0', humans: '2' }));
       }
     } catch (e) { /* ignore */ }
@@ -874,7 +876,10 @@ async function playLesson(page, id, device) {
     const where = `${device} ${id} Schritt ${s.t.step + 1}: ${s.t.text}`;
     if (s.t.el) { assert.ok(s.focus > 0, 'nicht hervorgehoben: ' + where); assert.ok(!s.covered, 'Karte verdeckt den Knopf: ' + where); }
     if (s.t.tile) { assert.ok(s.tile.on, 'Feld nicht im Bild: ' + where); assert.ok(!s.tile.under, 'Karte verdeckt das Feld: ' + where); }
-    if (device === 'handyQuer') assert.strictEqual(s.movesUnder, 0, 'Karte verdeckt Einheit oder Zielfelder: ' + where);
+    if (device !== 'handy') assert.strictEqual(s.movesUnder, 0, 'Karte verdeckt Einheit oder Zielfelder: ' + where);
+    // Kamera-Übungen wie ein Mensch lösen (Tasten wirken wie Maus und Finger).
+    const camKey = /verschieben/.test(s.t.text) ? 'ArrowLeft' : /Zoome/.test(s.t.text) ? 'Equal' : /Drehe/.test(s.t.text) ? 'KeyQ' : null;
+    if (camKey) { for (let k = 0; k < 8; k++) { await page.keyboard.press(camKey); await page.waitForTimeout(100); } await page.waitForTimeout(600); continue; }
     if (s.t.manual) await page.click('[data-tu="next"]');
     else if (s.t.el) { const b = await (await page.$('.tu-focus')).boundingBox(); await tap(b.x + b.width / 2, b.y + b.height / 2); }
     else {
@@ -924,6 +929,41 @@ await test('Tutorial Handy quer: Box verdeckt weder Einheit noch Zielfelder', as
   const page = await open('handyQuer');
   assert.ok(await page.evaluate(() => document.documentElement.classList.contains('phone')), 'Handy-Ansicht');
   await playLesson(page, 'basics', 'handyQuer');
+  noErrors(page);
+  await page.context().close();
+});
+
+await test('Spielhinweise: reagieren auf die Lage, je einmal, abschaltbar', async () => {
+  const page = await open('pc');
+  await page.evaluate(() => localStorage.removeItem('pb_tips'));
+  await startGame(page);
+  const tip = () => page.evaluate(() => { const b = document.getElementById('tutor'); return b.classList.contains('hidden') ? null : b.querySelector('.tu-text').textContent; });
+  // Feindlicher Krieger vor der Hauptstadt: Hinweis auf die Bedrohung.
+  await page.evaluate(() => {
+    const { app, R, sync } = window.__pb, st = app.state;
+    const c = st.cities.find(x => x.owner === 'player_1' && x.isCapital);
+    st.units = st.units.filter(u => u.q !== c.q || u.r !== c.r);
+    const [q, r] = [[c.q + 2, c.r], [c.q - 2, c.r], [c.q, c.r + 2], [c.q, c.r - 2]].find(([q, r]) => R.terrainAt(st, q, r) && !R.unitAt(st, q, r) && !R.cityAt(st, q, r) && !/water|ocean/.test(R.terrainAt(st, q, r)));
+    st.units.push({ id: 'tipfoe', owner: 'player_2', type: 'warrior', q, r, hp: 10, mp: 1, hasMoved: false, acted: false });
+    R.updateExplored(st, 'player_1');
+    sync();
+  });
+  await page.waitForTimeout(300);
+  assert.match(await tip() || '', /bedroht/, 'Hinweis zur bedrohten Stadt');
+  assert.ok(await page.isVisible('[data-tu="tipShow"]'), 'Zeigen-Knopf');
+  await page.click('[data-tu="tipShow"]');
+  await page.click('[data-tu="tipOk"]');
+  await page.evaluate(() => window.__pb.sync());
+  await page.waitForTimeout(200);
+  assert.doesNotMatch(await tip() || '', /bedroht/, 'derselbe Hinweis nur einmal pro Partie');
+  // Schwer verletzte Einheit: nächster Hinweis, dann alle Hinweise aus.
+  await page.evaluate(() => { const { app, sync } = window.__pb; const st = app.state; const foe = st.units.find(x => x.id === 'tipfoe'); st.units.push({ id: 'tiphurt', owner: 'player_1', type: 'warrior', q: foe.q, r: foe.r, hp: 2, mp: 1, hasMoved: false, acted: false }); st.units = st.units.filter(x => x !== foe); sync(); });
+  await page.waitForTimeout(200);
+  assert.ok(await page.isVisible('[data-tu="tipOff"]'), 'weiterer Hinweis sichtbar');
+  await page.click('[data-tu="tipOff"]');
+  assert.strictEqual(await page.evaluate(() => localStorage.getItem('pb_tips')), '0', 'Hinweise aus gemerkt');
+  assert.strictEqual(await tip(), null, 'Karte weg');
+  assert.ok(await page.$eval('[data-tips="0"]', b => b.classList.contains('active')), 'Einstellung zeigt Aus');
   noErrors(page);
   await page.context().close();
 });

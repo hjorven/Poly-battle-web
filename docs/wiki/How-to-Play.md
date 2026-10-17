@@ -88,6 +88,8 @@ In a city's build window, the arrow keys switch tiles and the digits 1–9 build
 
 The **Tipp** (Hint) button at the top right asks the AI what it would do in your place right now: attack, move, train, build or research. The suggestion is marked on the map with a short explanation. **Ausführen** (Execute) plays it like a normal move, **Schließen** (Close) lets you decide yourself. Daily and weekly challenges played with hints do not count for the leaderboard.
 
+**Game tips (Spielhinweise):** short tips about the current situation appear to the left of the map, for example when a city is threatened, a free village or a ruin is nearby, a unit is badly hurt or you have saved up many stars. **Zeigen** (Show) moves the map to the tile. Each tip appears at most once per game and stops after three games. Turn them off in the tip itself (**Hinweise aus**) or in the menu under **Spielhinweise**. Tips do not affect the leaderboard.
+
 ## Replay after the game
 
 When a game is over, **Karte ansehen** (View map) shows the whole world without fog and a bar at the bottom: the slider jumps to any turn, **Abspielen** (Play) runs the game – slow, normal or as a **Zeitraffer** (time-lapse). That way you can see who captured which city and when.
