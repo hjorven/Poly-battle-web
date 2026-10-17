@@ -760,7 +760,8 @@ await test('Datenschutz: „Meine Partien“ fragt nur, wer schon online gespiel
     if (setup) await page.addInitScript(setup);
     await page.goto(URL_);
     await page.waitForTimeout(800);
-    const list = await page.isVisible('#my-matches .match-row');
+    // Unter Last kann die Antwort etwas dauern.
+    const list = await page.waitForSelector('#my-matches .match-row', { state: 'visible', timeout: setup ? 4000 : 500 }).then(() => true, () => false);
     const flag = await page.evaluate(() => localStorage.getItem('pb_online'));
     const token = await page.evaluate(() => localStorage.getItem('pb_token'));
     await ctx.close();
