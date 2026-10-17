@@ -86,6 +86,8 @@ Im Bau-Fenster einer Stadt wechseln die Pfeiltasten das Feld und die Ziffern 1�
 
 Der Knopf **Tipp** oben rechts fragt die KI, was sie an deiner Stelle jetzt tun würde: Angriff, Zug, Ausbilden, Bauen oder Forschen. Der Vorschlag wird auf der Karte markiert und kurz begründet. Mit **Ausführen** wird er wie ein normaler Zug ausgeführt, mit **Schließen** entscheidest du selbst. Tages- und Wochen-Herausforderungen mit Tipps zählen nicht für die Bestenliste.
 
+**Spielhinweise:** Links neben der Karte erscheinen kurze Hinweise zur Lage, zum Beispiel bei einer bedrohten Stadt, einem freien Dorf in der Nähe, einer Ruine, einer schwer verletzten Einheit oder vielen gesparten Sternen. „Zeigen“ fährt die Karte zum Feld. Jeder Hinweis kommt höchstens einmal pro Partie und nach drei Partien gar nicht mehr. Abschalten lässt er sich im Hinweis selbst („Hinweise aus“) oder im Menü unter „Spielhinweise“. Hinweise ändern nichts an der Bestenliste.
+
 ## Wiederholung nach Spielende
 
 Nach dem Ende einer Partie zeigt **Karte ansehen** die ganze Welt ohne Nebel und unten eine Leiste: Mit dem Regler springst du zu jeder Runde, **Abspielen** lässt die Partie ablaufen – langsam, normal oder als **Zeitraffer**. So siehst du, wann wer welche Stadt erobert hat.
