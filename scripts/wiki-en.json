@@ -312,5 +312,10 @@
   "Frieden mit anderen Stämmen anbieten": "Offer peace to other tribes",
   "Ballonplatz und Heißluftballon (Späher)": "Balloon field and hot-air balloon (scout)",
   "+2 Sterne pro Runde": "+2 stars per turn",
-  "Ein Riese (40 Leben) erscheint bei der Stadt, kostet 25 Sterne": "A giant (40 HP) appears next to the city, costs 25 stars"
+  "Ein Riese (40 Leben) erscheint bei der Stadt, kostet 25 Sterne": "A giant (40 HP) appears next to the city, costs 25 stars",
+  "Gründet auf einem freien Feld eine neue Stadt (mind. 2 Felder von anderen Städten entfernt, nicht im Gebiet eines anderen Stamms).": "Founds a new city on a free tile (at least 2 tiles away from other cities, not inside another tribe's territory).",
+  "Anderthalbfacher Schaden gegen Reiter, Bogenreiter, Ritter und Paladine – auch beim Gegenschlag.": "1.5× damage against riders, horse archers, knights and paladins, also when striking back.",
+  "Pikenier: stark gegen Reiter, Bogenreiter, Ritter und Paladine": "Pikeman: strong against riders, horse archers, knights and paladins",
+  "Burg: eigene Einheiten darauf haben 3-fache Verteidigung": "Castle: own units on it get 3× defence",
+  "Markt: +1 Stern je angrenzendem Gebäude oder genutztem Rohstoff (bis 5)": "Market: +1 star per adjacent building or used resource (up to 5)"
 }

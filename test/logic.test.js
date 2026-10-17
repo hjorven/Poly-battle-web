@@ -2896,5 +2896,83 @@ test('KI baut einen Brander, wenn feindliche Schiffe nahe sind', () => {
   assert.deepStrictEqual([step.kind, step.type], ['train', 'fireship']);
 });
 
+console.log('\n-- Code-Prüfung Runde 3: Regeln --');
+
+test('Siedler: keine Gründung im Gebiet eines anderen Stamms', () => {
+  const st = makeState();
+  st.cities = [{ q: 5, r: 5, owner: 'player_2', pop: 4, rewards: { 4: 'borders' } }, { q: 1, r: 1, owner: 'player_1', pop: 1, isCapital: true }];
+  const s = unit('s', 'player_1', 'settler', 7, 5);
+  st.units = [s];
+  const res = R.canFound(st, s, 'player_1');
+  assert.strictEqual(res.ok, false);
+  assert.strictEqual(res.reason, 'Fremdes Gebiet');
+  delete st.cities[0].rewards;
+  assert.ok(R.canFound(st, s, 'player_1').ok, 'außerhalb des Gebiets erlaubt');
+});
+
+test('Gegenschlag-Sieg: Beute, Zähler und Protokoll für den Verteidiger', () => {
+  const st = makeState();
+  const a = unit('a', 'player_1', 'warrior', 5, 5, { hp: 1 });
+  const d = unit('d', 'player_2', 'defender', 6, 5);
+  st.units = [a, d];
+  const before = st.stars.player_2;
+  const res = R.attack(st, a, d);
+  assert.ok(res.events.some(e => e.kind === 'kill' && e.unit === a));
+  assert.ok(!st.units.includes(a));
+  assert.strictEqual(st.killsBy.player_2, 1);
+  assert.ok(st.stars.player_2 > before, 'Beute');
+  assert.strictEqual(d.kills, 1);
+  assert.ok(st.log.some(e => e.kind === 'unitLost' && e.victim === 'player_1'));
+});
+
+test('Burg schützt nur Einheiten im eigenen Gebiet', () => {
+  const st = makeState();
+  st.cities = [{ q: 5, r: 5, owner: 'player_1', pop: 1 }];
+  st.improvements = { '6,5': 'fort' };
+  const own = unit('o', 'player_1', 'warrior', 6, 5);
+  st.units = [own];
+  assert.strictEqual(R.defenceBonus(st, own), 3);
+  const foe = unit('f', 'player_2', 'warrior', 6, 5);
+  st.units = [foe];
+  assert.strictEqual(R.defenceBonus(st, foe), 1, 'Besetzer bekommt keinen Burg-Bonus');
+});
+
+test('Ballon baut weder Weg noch Brücke', () => {
+  const st = makeState();
+  st.techs.player_1.push('roads', 'ballooning');
+  const b = unit('b', 'player_1', 'balloon', 5, 5);
+  st.units = [b];
+  assert.strictEqual(R.buildRoad(st, 'player_1', 5, 5, b).ok, false);
+  assert.deepStrictEqual(R.bridgeOptions(st, b), []);
+});
+
+test('Bekehren in der Stadt des Gegners: Einheit zieht hinaus, Stadt bleibt frei', () => {
+  const st = makeState();
+  st.cities = [{ q: 6, r: 5, owner: 'player_2', pop: 1 }];
+  const m = unit('m', 'player_1', 'mindbender', 5, 5);
+  const v = unit('v', 'player_2', 'warrior', 6, 5);
+  st.units = [m, v];
+  R.attack(st, m, v);
+  assert.strictEqual(v.owner, 'player_1');
+  assert.ok(!(v.q === 6 && v.r === 5), 'nicht mehr in der Stadt');
+  assert.strictEqual(R.unitAt(st, 6, 5), null);
+});
+
+test('Bekehren ohne freies Nachbarfeld in fremder Stadt ist nicht möglich', () => {
+  const st = makeState();
+  st.cities = [{ q: 6, r: 5, owner: 'player_2', pop: 1 }];
+  const m = unit('m', 'player_1', 'mindbender', 5, 5);
+  const v = unit('v', 'player_2', 'warrior', 6, 5);
+  st.units = [m, v];
+  let i = 0;
+  for (const [q, r] of neighbors(6, 5)) if (!(q === 5 && r === 5)) st.units.push(unit('x' + i++, 'player_3', 'warrior', q, r));
+  assert.ok(!R.attackTargets(st, m).includes(v));
+});
+
+test('Kampagne: Überlebensmissionen sind markiert, Mission 10 hat ein Ziel aus Eroberungen', () => {
+  assert.ok(K.missionById('m9').survive && K.missionById('m13').survive);
+  assert.ok(!K.missionById('m10').survive);
+});
+
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
 if (failed) process.exit(1);

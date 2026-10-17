@@ -545,6 +545,40 @@ await test('Kampagne: neue Mission startet mit Rammbock und Ziel-Leiste', async 
   await page.context().close();
 });
 
+await test('Kampagne: letzte Eroberung in Mission 10 gibt Sterne, Wiederholen startet die Mission', async () => {
+  const page = await open('pc');
+  await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('pb_profile_v1') || '{"v":1}'); p.v = 1; p.campaign = Object.fromEntries(Array.from({ length: 9 }, (_, i) => ['m' + (i + 1), 1])); localStorage.setItem('pb_profile_v1', JSON.stringify(p)); });
+  await page.reload();
+  await page.waitForTimeout(300);
+  await page.click('[data-mtab="campaign"]');
+  await page.click('[data-mission="m10"]');
+  await page.waitForFunction(() => window.__pb && window.__pb.app.state && window.__pb.app.state.mission === 'm10');
+  const res = await page.evaluate(() => {
+    const { app, R, sync } = window.__pb;
+    const st = app.state;
+    const foes = st.cities.filter(c => c.owner && c.owner !== 'player_1');
+    const last = foes.find(c => c.isCapital);
+    for (const c of foes) if (c !== last) c.owner = 'player_1';
+    st.units = st.units.filter(u => !(u.q === last.q && u.r === last.r));
+    const [q, r] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]].map(([dq, dr]) => [last.q + dq, last.r + dr])
+      .find(([q, r]) => ['field', 'forest', 'hills', 'ice', 'swamp'].includes(R.terrainAt(st, q, r)) && !R.unitAt(st, q, r) && !R.cityAt(st, q, r));
+    const u = { id: 'test_k', owner: 'player_1', type: 'knight', q, r, hp: 10, mp: 3, hasMoved: false, acted: false };
+    st.units.push(u);
+    R.moveUnit(st, u, last.q, last.r);
+    sync();
+    return { reason: st.endReason, stars: st.missionStars };
+  });
+  assert.strictEqual(res.reason, 'mission');
+  assert.ok(res.stars >= 1, 'Sterne vergeben');
+  await page.waitForSelector('#winner-overlay:not(.hidden)');
+  assert.strictEqual(await page.textContent('#winnerRetry'), 'Mission wiederholen');
+  await page.click('#winnerRetry');
+  await page.waitForTimeout(300);
+  assert.ok(await page.evaluate(() => window.__pb.app.state.mission === 'm10' && !window.__pb.app.state.winner), 'Mission neu gestartet');
+  noErrors(page);
+  await page.context().close();
+});
+
 await test('Nach drei Siegen in Folge: schwerere Stufe angeboten und gestartet', async () => {
   const page = await open('pc');
   await page.evaluate(() => {
