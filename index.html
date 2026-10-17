@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Poly Battle</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-f6CSDM0WQezAWGbDIk5zVxcH3VFGmQyhZj0/c8TGZbM=' 'sha256-zQ55UGOn4Fxl++ioOwHymCnaPoAa/65NkT62iEFtMQM=' 'sha256-4wcDvwRi4j2RWdQ9WbHXYfjZ6eWicB4U2R7UkMHlnQ4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="color-scheme" content="light dark">
@@ -103,12 +103,12 @@
       <button class="cam-btn" data-cam="rotL" title="Nach links drehen (Q)" aria-label="Nach links drehen"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.5-5.8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button class="cam-btn" data-cam="tiltUp" title="Steiler von oben (R)" aria-label="Steiler"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button class="cam-btn" data-cam="rotR" title="Nach rechts drehen (E)" aria-label="Nach rechts drehen"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-      <button class="cam-btn" data-cam="reset" title="Ansicht zurücksetzen (N)">N</button>
+      <button class="cam-btn" data-cam="reset" title="Ansicht zurücksetzen (N)" aria-label="Ansicht zurücksetzen">N</button>
       <button class="cam-btn" data-cam="tiltDown" title="Flacher (F)" aria-label="Flacher"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
   </main>
 
-  <div id="menu-overlay" class="overlay hidden">
+  <div id="menu-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Menü">
     <div class="card menu-card">
       <div class="menu-top">
         <div class="menu-brand">
@@ -129,6 +129,7 @@
       <section class="menu-pane" role="tabpanel" id="mpane-play" aria-labelledby="mtab-play">
         <div class="play-grid">
           <div class="play-modes">
+            <p id="storage-warn" class="storage-warn hidden" role="status">Spielstand kann nicht gespeichert werden: Dieser Browser erlaubt keinen Speicher (zum Beispiel privates Fenster oder gesperrte Website-Daten). Nach dem Neuladen ist die Partie weg.</p>
             <button id="continueBtn" class="btn primary big mode-wide hidden">Weiterspielen</button>
             <button id="copyLinkBtn" class="btn big mode-wide hidden">Link zum Spiel kopieren</button>
             <div id="online-actions" class="online-actions hidden"></div>
@@ -152,14 +153,14 @@
             <div id="settings-box" class="settings-box">
           <div class="setting-row">
             <span class="setting-label">Modus</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="Modus">
               <button data-gamemode="conquest" class="chip-btn">Eroberung</button>
               <button data-gamemode="perfection" class="chip-btn">Perfektion (30 Runden)</button>
             </div>
           </div>
           <div class="setting-row">
             <span class="setting-label">Kartengröße</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="Kartengröße">
               <button data-mapsize="small" class="chip-btn">Klein</button>
               <button data-mapsize="normal" class="chip-btn">Normal</button>
               <button data-mapsize="large" class="chip-btn">Groß</button>
@@ -167,7 +168,7 @@
           </div>
           <div class="setting-row">
             <span class="setting-label">Kartentyp</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="Kartentyp">
               <button data-maptype="continents" class="chip-btn">Kontinente</button>
               <button data-maptype="pangaea" class="chip-btn">Pangäa</button>
               <button data-maptype="archipelago" class="chip-btn">Archipel</button>
@@ -175,7 +176,7 @@
           </div>
           <div class="setting-row">
             <span class="setting-label">KI-Stärke</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="KI-Stärke">
               <button data-ai="easy" class="chip-btn">Leicht (Einstieg)</button>
               <button data-ai="normal" class="chip-btn">Normal</button>
               <button data-ai="hard" class="chip-btn">Schwer</button>
@@ -183,7 +184,7 @@
           </div>
           <div class="setting-row">
             <span class="setting-label">Gegner</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="Gegner">
               <button data-bots="1" class="chip-btn">1</button>
               <button data-bots="2" class="chip-btn">2</button>
               <button data-bots="3" class="chip-btn">3</button>
@@ -193,7 +194,7 @@
           </div>
           <div class="setting-row">
             <span class="setting-label">Menschen (Hotseat/Online)</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="Menschen (Hotseat/Online)">
               <button data-humans="2" class="chip-btn">2</button>
               <button data-humans="3" class="chip-btn">3</button>
               <button data-humans="4" class="chip-btn">4</button>
@@ -202,7 +203,7 @@
           </div>
           <div class="setting-row">
             <span class="setting-label">KI im Online-Spiel</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="KI im Online-Spiel">
               <button data-onlinebots="0" class="chip-btn">Keine</button>
               <button data-onlinebots="1" class="chip-btn">1</button>
               <button data-onlinebots="2" class="chip-btn">2</button>
@@ -211,14 +212,14 @@
           </div>
           <div class="setting-row">
             <span class="setting-label">Mitteilung, wenn du online am Zug bist</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="Mitteilung, wenn du online am Zug bist">
               <button data-notify="0" class="chip-btn">Aus</button>
               <button data-notify="1" class="chip-btn">An</button>
             </div>
           </div>
           <div class="setting-row">
             <span class="setting-label">Ansicht</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="Ansicht">
               <button data-view-pick="auto" class="chip-btn">Automatisch</button>
               <button data-view-pick="phone" class="chip-btn">Handy</button>
               <button data-view-pick="large" class="chip-btn">Groß</button>
@@ -226,7 +227,7 @@
           </div>
           <div class="setting-row">
             <span class="setting-label">Darstellung</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="Darstellung">
               <button data-theme-pick="system" class="chip-btn">Wie System</button>
               <button data-theme-pick="light" class="chip-btn">Hell</button>
               <button data-theme-pick="dark" class="chip-btn">Dunkel</button>
@@ -234,7 +235,7 @@
           </div>
           <div class="setting-row">
             <span class="setting-label">Start-Sterne</span>
-            <div class="seg">
+            <div class="seg" role="group" aria-label="Start-Sterne">
               <button data-stars="knapp" class="chip-btn">Knapp (2)</button>
               <button data-stars="normal" class="chip-btn">Standard (5)</button>
               <button data-stars="reich" class="chip-btn">Reich (10)</button>
@@ -311,10 +312,10 @@
     </div>
   </div>
 
-  <div id="tech-overlay" class="overlay hidden">
+  <div id="tech-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="tech-title">
     <div class="card">
       <div class="card-head">
-        <h2>Forschung</h2>
+        <h2 id="tech-title">Forschung</h2>
         <span id="tech-stars" class="stars">0 Sterne</span>
         <button id="techClose" class="btn ghost small">Schließen</button>
       </div>
@@ -331,10 +332,10 @@
     </div>
   </div>
 
-  <div id="overview-overlay" class="overlay hidden">
+  <div id="overview-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="overview-title">
     <div class="card">
       <div class="card-head">
-        <h2>Übersicht</h2>
+        <h2 id="overview-title">Übersicht</h2>
         <button id="overviewClose" class="btn ghost small">Schließen</button>
       </div>
       <div id="overview-list"></div>
@@ -351,7 +352,7 @@
     </div>
   </div>
 
-  <div id="confirm-overlay" class="overlay hidden">
+  <div id="confirm-overlay" class="overlay hidden" role="alertdialog" aria-modal="true" aria-label="Bestätigen" aria-describedby="confirm-text">
     <div class="card narrow">
       <p id="confirm-text" class="confirm-text"></p>
       <div class="menu-buttons">
@@ -379,7 +380,7 @@
     </div>
   </div>
 
-  <div id="reward-overlay" class="overlay hidden">
+  <div id="reward-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="reward-title" aria-describedby="reward-text">
     <div class="card narrow">
       <h2 id="reward-title">Stadt steigt auf</h2>
       <p id="reward-text" class="confirm-text"></p>
@@ -387,7 +388,7 @@
     </div>
   </div>
 
-  <div id="handover-overlay" class="overlay solid hidden">
+  <div id="handover-overlay" class="overlay solid hidden" role="dialog" aria-modal="true" aria-labelledby="handover-title" aria-describedby="handover-text">
     <div class="card narrow">
       <h2 id="handover-title">Spielerwechsel</h2>
       <p id="handover-text" class="confirm-text">Gib das Gerät weiter.</p>
@@ -397,11 +398,11 @@
     </div>
   </div>
 
-  <div id="name-overlay" class="overlay hidden">
+  <div id="name-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="name-title" aria-describedby="name-text">
     <div class="card narrow">
       <h2 id="name-title">Wähle deinen Namen</h2>
       <p class="confirm-text" id="name-text">Mit diesem Namen erscheinst du in der Bestenliste. 3–16 Zeichen, Buchstaben, Ziffern, Leerzeichen, _ und -.</p>
-      <input id="name-input" class="name-input" maxlength="16" autocomplete="nickname" />
+      <input id="name-input" class="name-input" maxlength="16" autocomplete="nickname" aria-labelledby="name-title" />
       <div class="hint" id="name-error"></div>
       <div class="name-extra hidden" id="name-extra"></div>
       <div class="menu-buttons">
@@ -411,7 +412,7 @@
     </div>
   </div>
 
-  <div id="winner-overlay" class="overlay hidden">
+  <div id="winner-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="winner-title" aria-describedby="winner-text">
     <div class="card narrow wide">
       <h1 id="winner-title">Gewonnen!</h1>
       <div id="winner-text"></div>

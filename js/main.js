@@ -1600,7 +1600,11 @@ function adminLoad(state) {
 
 async function startOnline() {
   endReview();
-  app.gen++;
+  // Während auf den Server gewartet wird, kann ein anderes Spiel starten
+  // (Knöpfe sind gesperrt, aber z. B. Neuladen über eine andere Partie):
+  // nach jedem await prüfen, ob dieser Aufruf noch der aktuelle ist.
+  const gen = ++app.gen;
+  const stale = () => app.gen !== gen;
   app.mode = 'online';
   app.online = true;
   app.sel = null;
@@ -1610,7 +1614,8 @@ async function startOnline() {
 
   if (hashId) {
     app.gameId = hashId;
-    const { match, role, error } = await net.joinMatch(hashId);
+    const { match, role, error } = await connecting(gen, () => net.joinMatch(hashId));
+    if (stale()) return;
     if (error) { ui.toast(error, 'warn'); leaveOnline(); showMenu(); return; }
     // Laufende Partien sehen nur Mitspieler (sonst ließe sich der Nebel mit
     // einem zweiten Fenster umgehen).
@@ -1634,7 +1639,8 @@ async function startOnline() {
       mapSize: settings.mapSize, mapType: settings.mapType,
       ai: Array.from({ length: bots }, (_, k) => 'player_' + (k + humans + 1))
     });
-    const { match, error } = await net.createMatch(state);
+    const { match, error } = await connecting(gen, () => net.createMatch(state));
+    if (stale()) return;
     if (error) { ui.toast(error, 'warn'); leaveOnline(); showMenu(); return; }
     adopt(match.game_state);
     app.myRole = 'player_1';
@@ -1654,7 +1660,6 @@ async function startOnline() {
     try { net.unsubscribe(app.channel); } catch (e) { /* ignore */ }
     app.channel = null;
   }
-  const gen = app.gen;
   app.channel = net.subscribe(app.gameId, match => {
     if (!app.online || app.gen !== gen) return;
     if (match.last_move_at) app.lastMoveAt = match.last_move_at;
@@ -1678,6 +1683,19 @@ async function startOnline() {
   });
   clearInterval(app.stallTimer);
   app.stallTimer = setInterval(watchStalledAi, 20000);
+}
+
+// Serveranfrage beim Verbinden: Menüknöpfe sperren und „Verbinde …“ zeigen,
+// bis die Antwort da ist (oder nach der Zeitgrenze in net.js).
+async function connecting(gen, request) {
+  app.connecting = gen;
+  ui.setConnecting(true);
+  if (document.getElementById('menu-overlay').classList.contains('hidden')) ui.toast('Verbinde …');
+  try {
+    return await request();
+  } finally {
+    if (app.connecting === gen) { app.connecting = null; ui.setConnecting(false); }
+  }
 }
 
 // Online-Partie verlassen (Menü, lokales Spiel): Kanal und Zeitgeber aufräumen.
@@ -1763,6 +1781,8 @@ function onOnlineAction(act) {
 }
 
 async function loadMyMatches() {
+  // Nie online gespielt: nichts fragen (kein Aufruf beim Seitenaufruf).
+  if (!net.playedOnline()) { ui.renderMyMatches([]); return; }
   ui.renderMyMatches(null);
   const res = await net.myMatches();
   if (res.error || !Array.isArray(res.data)) { ui.renderMyMatches([]); return; }
@@ -1827,9 +1847,24 @@ async function copyLink() {
   }
 }
 
+// Ohne Browserspeicher (privates Fenster, gesperrte Website-Daten) geht der
+// Spielstand beim Neuladen verloren: einmal im Menü darauf hinweisen.
+function storageWorks() {
+  try {
+    const k = 'pb_storage_test';
+    localStorage.setItem(k, '1');
+    const ok = localStorage.getItem(k) === '1';
+    localStorage.removeItem(k);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 function boot() {
   window.pbBooted = true;
   registerOffline();
+  if (!storageWorks()) document.getElementById('storage-warn')?.classList.remove('hidden');
   const canvas = document.getElementById('gameCanvas');
   const ok = render.initRender(canvas, { onPick: onHexPick });
   if (!ok) {

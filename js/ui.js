@@ -11,7 +11,7 @@ import {
   hpCap, unitCost, tribeOf, cityAt, unitAt, cityPorts, improvementIncome, tradeOption, hireOption, incomeFor, tileYield, improvePreview, monumentProgress, threatenedCities, loadOptions, unloadOptions, upgradeOption, improvementCost, defenseOf, players as playersOf, alive, atPeace, hasMet, canOfferPeace, pendingOffer
 } from './rules.js';
 import { DIRS, toWorld, hexDistance } from './hex.js';
-import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks, project } from './render.js';
+import { openCityView, closeCityView, cityViewPick, cityViewProject, setCityViewMarks, project, setViewInset } from './render.js';
 
 // Himmelsrichtungen der sechs Hex-Richtungen (Kamera blickt nach Norden).
 const DIR_NAMES = ['Osten', 'Nordosten', 'Nordwesten', 'Westen', 'Südwesten', 'Südosten'];
@@ -66,6 +66,7 @@ export function initUI(h) {
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('coachBtn').addEventListener('click', () => handlers.onCoach && handlers.onCoach());
   bindPhoneHud();
+  bindDialogs();
   // Die Karte reicht bis oben; Elemente darunter richten sich nach der Höhe der Kärtchen.
   const syncTop = () => document.documentElement.style.setProperty('--hud-h', $('topbar').offsetHeight + 'px');
   syncTop();
@@ -94,6 +95,20 @@ export function initUI(h) {
   let saved = null;
   try { saved = localStorage.getItem('pb_menu_tab'); } catch (e) { saved = null; }
   menuTab(tabs.some(t => t.dataset.mtab === saved) ? saved : 'play', false);
+  // Weicher Rand an der Seite, auf der noch Reiter liegen.
+  const bar = document.querySelector('.menu-tabs');
+  if (bar) {
+    const fade = () => {
+      const max = bar.scrollWidth - bar.clientWidth;
+      bar.classList.toggle('fade-right', max > 1 && bar.scrollLeft < max - 1);
+      bar.classList.toggle('fade-left', max > 1 && bar.scrollLeft > 1);
+    };
+    bar.addEventListener('scroll', fade, { passive: true });
+    window.addEventListener('resize', fade);
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fade).observe(bar);
+    tabs.forEach(t => t.addEventListener('focus', () => t.scrollIntoView({ block: 'nearest', inline: 'nearest' })));
+    fade();
+  }
   $('winnerMap').addEventListener('click', () => handlers.onReview(true));
   $('rpPlay').addEventListener('click', () => handlers.onReplay('toggle'));
   $('rpSlider').addEventListener('input', e => handlers.onReplay('seek', Number(e.target.value)));
@@ -459,8 +474,11 @@ function placeTutor(box, targets, tile) {
     box.style.top = Math.round(hud + 6) + 'px';
     box.style.bottom = 'auto';
     box.style.maxHeight = Math.max(90, Math.round(limit - hud - 6)) + 'px';
+    // Karte rechts daneben zentrieren, damit die Box Einheit und Zielfelder nicht verdeckt.
+    setViewInset(box.getBoundingClientRect().right / 2);
     return;
   }
+  setViewInset(0);
   box.style.maxHeight = '';
   const h = box.offsetHeight || 120;
   const spots = [{ top: hud + 8 }, { top: barTop - 8 - h }, { top: H - 14 - h }];
@@ -475,6 +493,7 @@ function placeTutor(box, targets, tile) {
 
 export function hideTutor() {
   $('tutor').classList.add('hidden');
+  setViewInset(0);
   document.querySelectorAll('.tu-inline').forEach(b => b.remove());
   document.querySelectorAll('.tu-focus').forEach(e => e.classList.remove('tu-focus'));
   tutorSig = '';
@@ -697,6 +716,13 @@ function bindPhoneHud() {
     if (b !== more && b.id !== 'mapToggleBtn' && b.id !== 'camToggleBtn') b.addEventListener('click', () => setMore(false));
   });
   $('gameCanvas').addEventListener('pointerdown', () => setMore(false));
+  // Esc klappt „Mehr“ zu (wenn kein Fenster offen ist; die Abwahl läuft trotzdem).
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !top.classList.contains('more-open')) return;
+    if ([...document.querySelectorAll('.overlay')].some(o => !o.classList.contains('hidden'))) return;
+    setMore(false);
+    if (top.contains(document.activeElement)) more.focus({ preventScroll: true });
+  });
   // Wird eine Einheit oder Stadt gewählt (auch per Tastatur), klappt „Mehr“ zu: unten braucht die Leiste den Platz.
   if (typeof MutationObserver !== 'undefined') {
     const watch = new MutationObserver(() => {
@@ -1313,11 +1339,12 @@ function openBuild(state, city, ctx) {
   const radius = Math.max(1, ...cityTiles(state, city).map(([q, r]) => hexDistance(q, r, city.q, city.r)));
   build.view3d = openCityView(box.querySelector('.b3-canvas'), city.q, city.r, radius, placeTags);
   if (build.view3d) {
-    box.querySelector('.b3-canvas').addEventListener('click', e => {
+    // Die Leinwand wird bei jedem Öffnen wiederverwendet: onclick ersetzt den alten Handler.
+    box.querySelector('.b3-canvas').onclick = e => {
       const hex = cityViewPick(e.clientX, e.clientY);
       if (!hex || !box.querySelector(`[data-hex="${hex.q},${hex.r}"]`)) return;
       selectBuildHex(hex.q + ',' + hex.r);
-    });
+    };
   } else {
     box.classList.remove('b3');
     box.innerHTML = '';
@@ -2090,6 +2117,21 @@ export function renderOnlineActions(acts) {
   box.querySelectorAll('[data-online-act]').forEach(b => b.addEventListener('click', () => handlers.onOnlineAction?.(acts[+b.dataset.onlineAct])));
 }
 
+// Während eine Online-Partie verbunden wird: Knöpfe für andere Spiele sperren
+// und „Verbinde …“ zeigen (sonst überschreibt die späte Antwort ein neues Spiel).
+export function setConnecting(on) {
+  document.querySelectorAll('#menu-overlay [data-mode], #menu-overlay [data-mission], #continueBtn, #my-matches .match-row')
+    .forEach(b => { b.disabled = !!on; });
+  const btn = document.querySelector('#menu-overlay [data-mode="online"]');
+  const sub = btn && btn.querySelector('.sub');
+  if (sub) {
+    if (on) { if (!sub.dataset.text) sub.dataset.text = sub.textContent; sub.textContent = 'Verbinde …'; }
+    else if (sub.dataset.text) sub.textContent = sub.dataset.text;
+  }
+  if (btn) btn.setAttribute('aria-busy', on ? 'true' : 'false');
+  $('menu-overlay').classList.toggle('connecting', !!on);
+}
+
 // Eigene Online-Partien; null = wird geladen, [] = keine (Liste ausblenden).
 export function renderMyMatches(list) {
   const box = $('my-matches');
@@ -2148,6 +2190,66 @@ export function hideConfirm() {
   handlers._confirmYes = null;
   handlers._confirmNo = null;
   $('confirm-overlay').classList.add('hidden');
+}
+
+// Fenster für Tastatur und Bildschirmleser: Beim Öffnen kommt der Fokus ins
+// Fenster, Tab bleibt im obersten Fenster, Esc bricht die Bestätigung ab. Beim
+// Schließen geht der Fokus nur für Tastatur-Nutzer zurück zum auslösenden
+// Knopf (sonst würde die Leertaste ihn erneut drücken statt „Nächste Einheit“).
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const focusables = o => [...o.querySelectorAll(FOCUSABLE)].filter(e => e.getClientRects().length && !e.closest('.hidden'));
+
+function topDialog() {
+  const open = [...document.querySelectorAll('.overlay')].filter(o => !o.classList.contains('hidden'));
+  let top = null, z = -Infinity;
+  for (const o of open) {
+    const oz = parseInt(getComputedStyle(o).zIndex, 10) || 0;
+    if (oz >= z) { top = o; z = oz; }
+  }
+  return top;
+}
+
+function bindDialogs() {
+  const back = new Map();
+  if (typeof MutationObserver !== 'undefined') {
+    const obs = new MutationObserver(recs => {
+      for (const r of recs) {
+        const o = r.target;
+        const open = !o.classList.contains('hidden');
+        const was = !/(^|\s)hidden(\s|$)/.test(r.oldValue || 'hidden');
+        if (open && !was) {
+          const prev = document.activeElement;
+          back.set(o, prev && prev !== document.body && prev.matches(':focus-visible') ? prev : null);
+          if (!o.contains(document.activeElement)) {
+            const f = o.querySelector('[autofocus]') || o.querySelector('[role="tab"][aria-selected="true"]') || focusables(o)[0];
+            if (f) f.focus({ preventScroll: true });
+          }
+        } else if (!open && was) {
+          const prev = back.get(o);
+          back.delete(o);
+          if (prev && prev.isConnected && prev.getClientRects().length && !topDialog()) prev.focus({ preventScroll: true });
+        }
+      }
+    });
+    document.querySelectorAll('.overlay').forEach(o => obs.observe(o, { attributes: true, attributeFilter: ['class'], attributeOldValue: true }));
+  }
+  document.addEventListener('keydown', e => {
+    const top = topDialog();
+    if (!top) return;
+    if (e.key === 'Escape' && top.id === 'confirm-overlay') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      $('confirmNo').click();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const list = focusables(top);
+    if (!list.length) { e.preventDefault(); return; }
+    const i = list.indexOf(document.activeElement);
+    if (i < 0) { e.preventDefault(); list[e.shiftKey ? list.length - 1 : 0].focus(); return; }
+    if (e.shiftKey && i === 0) { e.preventDefault(); list[list.length - 1].focus(); }
+    else if (!e.shiftKey && i === list.length - 1) { e.preventDefault(); list[0].focus(); }
+  }, true);
 }
 
 const fmtMp = n => String(n).replace('.', ',');
