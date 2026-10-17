@@ -546,7 +546,7 @@ async function saveOnline() {
 function announce(events) {
   for (const ev of events) {
     if (ev.kind === 'capture') {
-      ui.toast(ev.to ? `Stadt erobert! (${needName(app.state, ev.to)})` : 'Stadt neutralisiert', 'good');
+      ui.toast(!ev.to ? 'Stadt neutralisiert' : ev.from ? `Stadt erobert! (${needName(app.state, ev.to)})` : `Dorf eingenommen! (${needName(app.state, ev.to)})`, 'good');
       if (ev.from && R.isBot(app.state, ev.from) && ev.to === viewer()) quote(ev.from, 'loseCity');
       sfx('capture');
       if (ev.city) render.celebrate(ev.city.q, ev.city.r, R.playerColor(app.state, ev.to), true);
@@ -1197,6 +1197,7 @@ function tutorCtx() {
     phone: document.documentElement.classList.contains('phone'),
     touch: !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches),
     has: sel => ui.tutorVisible(sel),
+    exists: sel => !!document.querySelector(sel),
     cam: render.cameraState()
   };
 }

@@ -419,11 +419,14 @@ export function tutorVisible(sel) {
 }
 
 let tutorSig = '';
+// Feld, auf das die Tutorial-Karte gerade zeigt (das Schild am Objekt weicht ihm aus).
+let tutorTile = null;
 let tutorScrolled = '';
 // Tutorial-Karte: Kopf mit Fortschritt, Text, Knöpfe. `focus` hebt Knöpfe
 // hervor; `inline` (Id eines Fensters) zeigt die Karte als Leiste oben in diesem
 // Fenster statt über der Karte. Die Karte meidet Ziel, Tipp und Meldungen.
 export function showTutor({ head, progress, text, buttons = [], focus = null, tile = null, inline = null }) {
+  tutorTile = tile;
   const sig = JSON.stringify([head, text, buttons, inline]);
   const card = inline ? $(inline).querySelector('.card') : null;
   let box = inline ? card.querySelector('.tu-inline') : $('tutor');
@@ -484,10 +487,13 @@ function placeTutor(box, targets, tile) {
   const barTop = Math.min(H, ...bars.map(r => r.top));
   if (side) {
     const limit = Math.min(H, ...bars.filter(r => r.left < 340).map(r => r.top)) - 8;
-    // Meldungen stehen ebenfalls links oben: darunter, wenn genug Platz bleibt.
-    const news = shown('news');
+    // Meldungen stehen ebenfalls oben, der Tipp der KI auf schmalen Schirmen
+    // auch in der linken Spalte: darunter, wenn genug Platz bleibt.
     let top = hud + 6;
-    if (news && limit - (news.bottom + 8) >= 150) top = news.bottom + 8;
+    const coach = shown('coach');
+    for (const r of [shown('news'), coach && coach.left < 340 ? coach : null].filter(Boolean)) {
+      if (limit - (r.bottom + 8) >= 150) top = Math.max(top, r.bottom + 8);
+    }
     box.style.top = Math.round(top) + 'px';
     box.style.bottom = 'auto';
     box.style.maxHeight = Math.max(90, Math.round(limit - top)) + 'px';
@@ -507,6 +513,7 @@ function placeTutor(box, targets, tile) {
 }
 
 export function hideTutor() {
+  tutorTile = null;
   $('tutor').classList.add('hidden');
   setViewInset(0);
   document.querySelectorAll('.tu-inline').forEach(b => b.remove());
@@ -807,6 +814,16 @@ function setAnchor(kind, q, r, html) {
         tag.style.left = p.x + 'px';
         tag.style.top = p.y + 'px';
         tag.style.visibility = p.x < 0 || p.y < 0 || p.x > innerWidth || p.y > innerHeight ? 'hidden' : '';
+        // Das Schild darf das Feld nicht verdecken, auf das Tutorial oder
+        // Hinweis gerade zeigen (z. B. das Dorf direkt hinter der Einheit):
+        // dann klappt es unter das Objekt.
+        const t = tutorTile && project(tutorTile[0], tutorTile[1]);
+        let below = false;
+        if (t && (tutorTile[0] !== anchor.q || tutorTile[1] !== anchor.r)) {
+          const h = tag.offsetHeight, w = tag.offsetWidth;
+          below = Math.abs(t.x - p.x) < w / 2 + 30 && t.y < p.y - 10 && t.y > p.y - 34 - h - 30;
+        }
+        tag.classList.toggle('at-below', below);
       }
       anchor.raf = requestAnimationFrame(step);
     };
