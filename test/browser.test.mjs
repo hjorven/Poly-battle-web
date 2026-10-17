@@ -147,8 +147,8 @@ await test('Menü: Reiter wechseln, Einstellungen bleiben nach Neuladen', async 
   await page.context().close();
 });
 
-await test('Obere Leiste: alle Knöpfe sichtbar von 360 bis 1400 px', async () => {
-  for (const w of [360, 390, 560, 810, 1080, 1400]) {
+await test('Obere Leiste: alle Knöpfe sichtbar von 320 bis 1400 px', async () => {
+  for (const w of [320, 340, 360, 390, 560, 810, 1080, 1400]) {
     const ctx = await browser.newContext({ viewport: { width: w, height: 760 }, hasTouch: w < 1100, isMobile: w < 900 });
     const page = await ctx.newPage();
     await page.route(/supabase\.co/, r => r.fulfill({ status: 200, body: '[]' }));
@@ -597,6 +597,79 @@ await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async ()
   assert.strictEqual(await bg(), dark);
   noErrors(page);
   await page.context().close();
+});
+
+await test('Bedienhilfen: Fenster mit Rolle, Fokus bleibt im Fenster, Esc schließt Bestätigung und „Mehr“', async () => {
+  const page = await open('pc');
+  // Menü ist ein Dialog, der Fokus liegt darin, Tab verlässt es nicht.
+  assert.strictEqual(await page.$eval('#menu-overlay', o => o.getAttribute('role') + '/' + o.getAttribute('aria-modal')), 'dialog/true');
+  assert.ok(await page.evaluate(() => document.getElementById('menu-overlay').contains(document.activeElement)), 'Fokus im Menü');
+  for (let i = 0; i < 60; i++) await page.keyboard.press('Tab');
+  assert.ok(await page.evaluate(() => document.getElementById('menu-overlay').contains(document.activeElement)), 'Tab bleibt im Menü');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('Shift+Tab');
+  assert.ok(await page.evaluate(() => document.getElementById('menu-overlay').contains(document.activeElement)), 'Shift+Tab bleibt im Menü');
+  await startGame(page);
+  // Bestätigung: Fokus darin, Esc bricht ab (Nein-Zweig läuft).
+  await page.evaluate(() => import('./js/ui.js').then(ui => ui.showConfirm('Test?', () => { window.__yes = 1; }, { onNo: () => { window.__no = 1; } })));
+  await page.waitForTimeout(100);
+  assert.strictEqual(await page.$eval('#confirm-overlay', o => o.getAttribute('role')), 'alertdialog');
+  assert.ok(await page.evaluate(() => document.getElementById('confirm-overlay').contains(document.activeElement)), 'Fokus in der Bestätigung');
+  await page.keyboard.press('Escape');
+  assert.ok(await page.$eval('#confirm-overlay', o => o.classList.contains('hidden')), 'Esc schließt die Bestätigung');
+  assert.deepStrictEqual(await page.evaluate(() => [window.__yes, window.__no]), [undefined, 1]);
+  for (const id of ['tech-overlay', 'overview-overlay', 'reward-overlay', 'handover-overlay', 'name-overlay', 'winner-overlay', 'build-overlay', 'learn-overlay']) {
+    assert.match(await page.$eval('#' + id, o => o.getAttribute('role') + '/' + o.getAttribute('aria-modal')), /dialog\/true/, id);
+  }
+  // Zoomen nicht gesperrt, Notch-Ränder wirken.
+  const vp = await page.$eval('meta[name=viewport]', m => m.content);
+  assert.ok(!/user-scalable=no|maximum-scale/.test(vp) && /viewport-fit=cover/.test(vp), vp);
+  noErrors(page);
+  await page.context().close();
+
+  // Handy: Bereit-Knopf und Sterne haben einen lesbaren Namen, Esc klappt „Mehr“ zu.
+  const phone = await open('handy');
+  await startGame(phone);
+  assert.ok(await phone.isVisible('#idleBtn'), 'Bereit-Knopf sichtbar');
+  assert.match(await phone.locator('#idleBtn').ariaSnapshot(), /button "\d+ bereit"/);
+  assert.match(await phone.locator('#treasury').ariaSnapshot(), /Stern/);
+  await phone.click('#moreBtn');
+  assert.ok(await phone.$eval('#topbar', e => e.classList.contains('more-open')));
+  await phone.keyboard.press('Escape');
+  assert.ok(!(await phone.$eval('#topbar', e => e.classList.contains('more-open'))), 'Esc klappt „Mehr“ zu');
+  noErrors(phone);
+  await phone.context().close();
+});
+
+await test('Handy-Menü: Reiter zeigen, dass man wischen kann; ohne Browserspeicher ein Hinweis', async () => {
+  const page = await open('handy');
+  const cls = () => page.$eval('.menu-tabs', e => e.className);
+  const over = await page.$eval('.menu-tabs', e => e.scrollWidth > e.clientWidth + 1);
+  if (over) {
+    assert.match(await cls(), /fade-right/);
+    await page.$eval('.menu-tabs', e => { e.scrollLeft = e.scrollWidth; });
+    await page.waitForTimeout(150);
+    assert.match(await cls(), /fade-left/);
+    assert.doesNotMatch(await cls(), /fade-right/);
+  } else assert.doesNotMatch(await cls(), /fade-/);
+  assert.ok(!(await page.isVisible('#storage-warn')), 'mit Speicher kein Hinweis');
+  await page.context().close();
+
+  const ctx = await browser.newContext(DEVICES.pc);
+  const p2 = await ctx.newPage();
+  p2.errors = [];
+  p2.on('pageerror', e => p2.errors.push(e.message));
+  await p2.route(/supabase\.co/, r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await p2.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new DOMException('gesperrt', 'SecurityError'); } });
+  });
+  await p2.goto(URL_);
+  await p2.waitForTimeout(500);
+  assert.ok(await p2.isVisible('#storage-warn'), 'Hinweis ohne Speicher');
+  assert.match(await p2.$eval('#storage-warn', e => e.textContent), /Spielstand kann nicht gespeichert werden/);
+  await startGame(p2);
+  assert.ok(await p2.isVisible('#endTurnBtn'), 'Spiel läuft trotzdem');
+  assert.deepStrictEqual(p2.errors, []);
+  await ctx.close();
 });
 
 await test('Akku: Bau-Fenster nutzt einen Renderer, Handy-Auflösung höchstens 1,5', async () => {

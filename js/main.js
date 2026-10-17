@@ -1847,9 +1847,24 @@ async function copyLink() {
   }
 }
 
+// Ohne Browserspeicher (privates Fenster, gesperrte Website-Daten) geht der
+// Spielstand beim Neuladen verloren: einmal im Menü darauf hinweisen.
+function storageWorks() {
+  try {
+    const k = 'pb_storage_test';
+    localStorage.setItem(k, '1');
+    const ok = localStorage.getItem(k) === '1';
+    localStorage.removeItem(k);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 function boot() {
   window.pbBooted = true;
   registerOffline();
+  if (!storageWorks()) document.getElementById('storage-warn')?.classList.remove('hidden');
   const canvas = document.getElementById('gameCanvas');
   const ok = render.initRender(canvas, { onPick: onHexPick });
   if (!ok) {

@@ -66,6 +66,7 @@ export function initUI(h) {
   $('menuBtn').addEventListener('click', () => handlers.onMenu());
   $('coachBtn').addEventListener('click', () => handlers.onCoach && handlers.onCoach());
   bindPhoneHud();
+  bindDialogs();
   // Die Karte reicht bis oben; Elemente darunter richten sich nach der Höhe der Kärtchen.
   const syncTop = () => document.documentElement.style.setProperty('--hud-h', $('topbar').offsetHeight + 'px');
   syncTop();
@@ -94,6 +95,20 @@ export function initUI(h) {
   let saved = null;
   try { saved = localStorage.getItem('pb_menu_tab'); } catch (e) { saved = null; }
   menuTab(tabs.some(t => t.dataset.mtab === saved) ? saved : 'play', false);
+  // Weicher Rand an der Seite, auf der noch Reiter liegen.
+  const bar = document.querySelector('.menu-tabs');
+  if (bar) {
+    const fade = () => {
+      const max = bar.scrollWidth - bar.clientWidth;
+      bar.classList.toggle('fade-right', max > 1 && bar.scrollLeft < max - 1);
+      bar.classList.toggle('fade-left', max > 1 && bar.scrollLeft > 1);
+    };
+    bar.addEventListener('scroll', fade, { passive: true });
+    window.addEventListener('resize', fade);
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fade).observe(bar);
+    tabs.forEach(t => t.addEventListener('focus', () => t.scrollIntoView({ block: 'nearest', inline: 'nearest' })));
+    fade();
+  }
   $('winnerMap').addEventListener('click', () => handlers.onReview(true));
   $('rpPlay').addEventListener('click', () => handlers.onReplay('toggle'));
   $('rpSlider').addEventListener('input', e => handlers.onReplay('seek', Number(e.target.value)));
@@ -700,6 +715,13 @@ function bindPhoneHud() {
     if (b !== more && b.id !== 'mapToggleBtn' && b.id !== 'camToggleBtn') b.addEventListener('click', () => setMore(false));
   });
   $('gameCanvas').addEventListener('pointerdown', () => setMore(false));
+  // Esc klappt „Mehr“ zu (wenn kein Fenster offen ist; die Abwahl läuft trotzdem).
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !top.classList.contains('more-open')) return;
+    if ([...document.querySelectorAll('.overlay')].some(o => !o.classList.contains('hidden'))) return;
+    setMore(false);
+    if (top.contains(document.activeElement)) more.focus({ preventScroll: true });
+  });
   // Wird eine Einheit oder Stadt gewählt (auch per Tastatur), klappt „Mehr“ zu: unten braucht die Leiste den Platz.
   if (typeof MutationObserver !== 'undefined') {
     const watch = new MutationObserver(() => {
@@ -2156,6 +2178,66 @@ export function hideConfirm() {
   handlers._confirmYes = null;
   handlers._confirmNo = null;
   $('confirm-overlay').classList.add('hidden');
+}
+
+// Fenster für Tastatur und Bildschirmleser: Beim Öffnen kommt der Fokus ins
+// Fenster, Tab bleibt im obersten Fenster, Esc bricht die Bestätigung ab. Beim
+// Schließen geht der Fokus nur für Tastatur-Nutzer zurück zum auslösenden
+// Knopf (sonst würde die Leertaste ihn erneut drücken statt „Nächste Einheit“).
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const focusables = o => [...o.querySelectorAll(FOCUSABLE)].filter(e => e.getClientRects().length && !e.closest('.hidden'));
+
+function topDialog() {
+  const open = [...document.querySelectorAll('.overlay')].filter(o => !o.classList.contains('hidden'));
+  let top = null, z = -Infinity;
+  for (const o of open) {
+    const oz = parseInt(getComputedStyle(o).zIndex, 10) || 0;
+    if (oz >= z) { top = o; z = oz; }
+  }
+  return top;
+}
+
+function bindDialogs() {
+  const back = new Map();
+  if (typeof MutationObserver !== 'undefined') {
+    const obs = new MutationObserver(recs => {
+      for (const r of recs) {
+        const o = r.target;
+        const open = !o.classList.contains('hidden');
+        const was = !/(^|\s)hidden(\s|$)/.test(r.oldValue || 'hidden');
+        if (open && !was) {
+          const prev = document.activeElement;
+          back.set(o, prev && prev !== document.body && prev.matches(':focus-visible') ? prev : null);
+          if (!o.contains(document.activeElement)) {
+            const f = o.querySelector('[autofocus]') || o.querySelector('[role="tab"][aria-selected="true"]') || focusables(o)[0];
+            if (f) f.focus({ preventScroll: true });
+          }
+        } else if (!open && was) {
+          const prev = back.get(o);
+          back.delete(o);
+          if (prev && prev.isConnected && prev.getClientRects().length && !topDialog()) prev.focus({ preventScroll: true });
+        }
+      }
+    });
+    document.querySelectorAll('.overlay').forEach(o => obs.observe(o, { attributes: true, attributeFilter: ['class'], attributeOldValue: true }));
+  }
+  document.addEventListener('keydown', e => {
+    const top = topDialog();
+    if (!top) return;
+    if (e.key === 'Escape' && top.id === 'confirm-overlay') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      $('confirmNo').click();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const list = focusables(top);
+    if (!list.length) { e.preventDefault(); return; }
+    const i = list.indexOf(document.activeElement);
+    if (i < 0) { e.preventDefault(); list[e.shiftKey ? list.length - 1 : 0].focus(); return; }
+    if (e.shiftKey && i === 0) { e.preventDefault(); list[list.length - 1].focus(); }
+    else if (!e.shiftKey && i === list.length - 1) { e.preventDefault(); list[0].focus(); }
+  }, true);
 }
 
 const fmtMp = n => String(n).replace('.', ',');
