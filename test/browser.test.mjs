@@ -596,6 +596,79 @@ await test('Darstellung: Dunkel wirkt sofort und bleibt nach Neuladen', async ()
   await page.context().close();
 });
 
+await test('Online langsam: „Verbinde …“, gesperrte Knöpfe, späte Antwort überschreibt kein neues Spiel', async () => {
+  const page = await open('pc');
+  await page.unroute(/supabase\.co/);
+  await page.route(/supabase\.co/, async route => {
+    if (/create_match/.test(route.request().url())) {
+      const body = JSON.parse(route.request().postData());
+      await new Promise(r => setTimeout(r, 2500));
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'abc123', game_state: body.p_state, last_move_at: null }) }).catch(() => {});
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.click('[data-mtab="play"]');
+  await page.click('[data-mode="online"]');
+  await page.waitForTimeout(300);
+  assert.ok(await page.$eval('[data-mode="bot"]', b => b.disabled), 'Knöpfe gesperrt');
+  assert.match(await page.$eval('[data-mode="online"] .sub', e => e.textContent), /Verbinde/);
+  // Anderer Startweg während des Wartens: Knopf freigeben und ein KI-Spiel starten.
+  await page.$eval('[data-mode="bot"]', b => { b.disabled = false; });
+  await page.click('[data-mode="bot"]');
+  const before = await page.evaluate(() => window.__pb.app.state.players.length);
+  await page.waitForTimeout(3000);
+  const after = await page.evaluate(() => ({ mode: window.__pb.app.mode, online: window.__pb.app.online, players: window.__pb.app.state.players.length, hash: location.hash }));
+  assert.deepStrictEqual(after, { mode: 'bot', online: false, players: before, hash: '' });
+  assert.ok(!(await page.$eval('[data-mode="bot"]', b => b.disabled)), 'Knöpfe wieder frei');
+  noErrors(page);
+  await page.context().close();
+});
+
+await test('Online: Server hängt, Bestenliste meldet nach der Zeitgrenze „Keine Verbindung“', async () => {
+  const page = await open('pc');
+  await page.unroute(/supabase\.co/);
+  await page.route(/supabase\.co/, () => { /* nie antworten */ });
+  await page.click('[data-mtab="board"]');
+  await page.waitForTimeout(500);
+  assert.match(await page.$eval('#mpane-board', e => e.innerText), /Lädt/);
+  await page.waitForTimeout(10500);
+  assert.match(await page.$eval('#mpane-board', e => e.innerText), /Keine Verbindung zum Server/);
+  noErrors(page);
+  await page.context().close();
+});
+
+await test('Datenschutz: „Meine Partien“ fragt nur, wer schon online gespielt hat', async () => {
+  const calls = async (setup) => {
+    const ctx = await browser.newContext(DEVICES.pc);
+    const page = await ctx.newPage();
+    const seen = [];
+    await page.route(/supabase\.co/, route => {
+      const url = route.request().url();
+      seen.push(url.replace(/^.*\/rpc\//, ''));
+      const body = /pb_my_matches/.test(url)
+        ? JSON.stringify([{ id: 'm1', role: 'player_1', round: 3, last_move_at: new Date().toISOString(), turn: 'player_1', humans: ['player_1', 'player_2'], joined: ['player_1', 'player_2'], ai: [] }])
+        : '[]';
+      route.fulfill({ status: 200, contentType: 'application/json', body });
+    });
+    if (setup) await page.addInitScript(setup);
+    await page.goto(URL_);
+    await page.waitForTimeout(800);
+    const list = await page.isVisible('#my-matches .match-row');
+    const flag = await page.evaluate(() => localStorage.getItem('pb_online'));
+    const token = await page.evaluate(() => localStorage.getItem('pb_token'));
+    await ctx.close();
+    return { seen, list, flag, token };
+  };
+  const fresh = await calls(null);
+  assert.deepStrictEqual(fresh.seen, [], 'Neuer Besuch: keine Serveranfrage');
+  assert.strictEqual(fresh.token, null, 'Neuer Besuch: keine Kennung angelegt');
+  const online = await calls(() => { localStorage.setItem('pb_token', 'abcdefabcdefabcdef12'); localStorage.setItem('pb_online', '1'); });
+  assert.ok(online.seen.some(u => /pb_my_matches/.test(u)) && online.list, 'Online-Spieler sieht seine Partien');
+  // Ältere Browser (Kennung, aber keine Markierung): einmal fragen, Ergebnis merken.
+  const old = await calls(() => { if (!sessionStorage.getItem('x')) { sessionStorage.setItem('x', '1'); localStorage.setItem('pb_token', 'abcdefabcdefabcdef12'); } });
+  assert.ok(old.list && old.flag === '1', 'Alte Kennung mit Partien wird markiert');
+});
+
 await test('Zufallstest: 150 zufällige Klicks und Tasten ohne Fehler', async () => {
   for (const d of ['pc', 'handy']) {
     const page = await open(d);
