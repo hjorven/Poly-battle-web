@@ -10,6 +10,7 @@
     "admin-passwort": "node scripts/set-admin-password.mjs",
     "test:browser": "node test/browser.test.mjs",
     "test:db": "sh scripts/test-db.sh",
+    "test:ui": "node test/ui-audit.mjs",
     "screenshots": "node scripts/screenshots.mjs"
   },
   "devDependencies": {
