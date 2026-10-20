@@ -80,19 +80,54 @@ function reachOf(state, unit) {
   return m;
 }
 
+// Schlüssel für die Diplomatie-Merker der KI (aiWarAt, aiPeaceAt): von → an.
+const dipKey = (from, to) => from + '>' + to;
+
+// Ab diesem Stärkeverhältnis (Punkte des anderen zu den eigenen) bietet die
+// KI Frieden an: Händler früh, Eroberer erst, wenn es eng wird.
+const peaceRatio = persona => (persona === 'merchant' ? 1.1 : persona === 'conqueror' ? 1.6 : 1.3);
+const clearlyStronger = (theirs, mine, persona) => theirs > mine && theirs >= peaceRatio(persona) * mine;
+
 // Frieden brechen, wenn er die KI blockiert (keine anderen Ziele mehr) oder
-// sie nach längerem Frieden klar überlegen ist.
+// sie klar überlegen ist – beides erst nach einer Wartezeit im Frieden.
 function warStep(state, player) {
   const persona = R.personaOf(state, player);
-  // Eroberer brechen Frieden früher, Händler nur, wenn sonst nichts geht.
+  // Eroberer brechen Frieden früher, Händler nie.
   const ratio = persona === 'conqueror' ? 1.25 : persona === 'merchant' ? Infinity : 1.6;
   const wait = persona === 'conqueror' ? 4 : 8;
   for (const other of R.players(state)) {
     if (!R.atPeace(state, player, other)) continue;
     const since = state.peace[[player, other].sort().join('|')];
-    const noTargets = !targetCities(state, player).length;
-    const strong = R.score(state, player) >= ratio * R.score(state, other) && state.round - since >= wait;
-    if (noTargets || strong) return { kind: 'war', target: other };
+    if (state.round - since < wait) continue;
+    const mine = R.score(state, player), theirs = R.score(state, other);
+    if (mine >= ratio * theirs) return { kind: 'war', target: other };
+    // Keine Ziele mehr: Händler bleiben friedlich, und gegen einen klar
+    // Stärkeren bricht niemand den Frieden (sonst bietet er ihn gleich wieder an).
+    if (persona !== 'merchant' && !clearlyStronger(theirs, mine, persona) && !targetCities(state, player).length) {
+      return { kind: 'war', target: other };
+    }
+  }
+  return null;
+}
+
+// Frieden anbieten, wenn der andere klar stärker ist oder mit mindestens zwei
+// Kämpfern vor einer eigenen Stadt steht (und nicht schwächer ist). Nicht kurz
+// nach der eigenen Kriegserklärung und höchstens alle 8 Runden demselben Stamm.
+// Ob ein KI-Stamm annimmt, entscheidet R.offerPeace; ein Mensch bekommt ein Angebot.
+function peaceStep(state, player) {
+  const persona = R.personaOf(state, player);
+  let mine = null;
+  for (const other of R.players(state)) {
+    if (!R.canOfferPeace(state, player, other).ok) continue;
+    const war = state.aiWarAt && state.aiWarAt[dipKey(player, other)];
+    if (war != null && state.round - war < 12) continue;
+    const offer = state.aiPeaceAt && state.aiPeaceAt[dipKey(player, other)];
+    if (offer != null && state.round - offer < 8) continue;
+    if (mine == null) mine = R.score(state, player);
+    const theirs = R.score(state, other);
+    const siege = theirs >= mine && R.citiesFor(state, player).some(c =>
+      state.units.filter(e => e.owner === other && R.canEverAttack(e.type) && hexDistance(e.q, e.r, c.q, c.r) <= 2).length >= 2);
+    if (clearlyStronger(theirs, mine, persona) || siege) return { kind: 'peace', target: other };
   }
   return null;
 }
@@ -364,12 +399,14 @@ function settleGoal(state, s) {
       let score = -d * 1.5;
       for (const [nq, nr] of hexNeighbors(q, r)) {
         const t = R.terrainAt(state, nq, nr);
-        if (R.tileCity(state, nq, nr)) continue;
+        // Gebiet fremder Städte zählt nur, wenn der Stamm die Stadt kennt.
+        const tc = R.tileCity(state, nq, nr);
+        if (tc && knownCity(state, player, tc)) continue;
         score += R.resourceAt(state, nq, nr) ? 2 : t === 'field' || t === 'forest' || t === 'hills' ? 1 : isWater(t) ? 0.5 : 0.3;
       }
       const near = own.length ? Math.min(...own.map(c => hexDistance(q, r, c.q, c.r))) : 3;
       score -= Math.max(0, near - 4) * 2;
-      if (state.cities.some(c => c.owner !== player && hexDistance(q, r, c.q, c.r) <= 3)) score -= 4;
+      if (state.cities.some(c => c.owner !== player && knownCity(state, player, c) && hexDistance(q, r, c.q, c.r) <= 3)) score -= 4;
       if (foes.some(e => hexDistance(q, r, e.q, e.r) <= 2)) score -= 6;
       if (!best || score > best.score) best = { q, r, k, score };
     }
@@ -460,7 +497,8 @@ function cartMove(state, cart) {
     return owner && (owner === cart.owner || R.atPeace(state, cart.owner, owner));
   });
   if (!cities.length) return null;
-  const worth = c => (home ? hexDistance(home.q, home.r, c.q, c.r) : 3) * (c.owner === cart.owner ? 1 : 1.5) - hexDistance(cart.q, cart.r, c.q, c.r) * 0.6;
+  // Fremd zählt, wie der Stamm den Besitzer kennt (seenOwner), nicht der echte.
+  const worth = c => (home ? hexDistance(home.q, home.r, c.q, c.r) : 3) * (seenOwner(state, cart.owner, c) === cart.owner ? 1 : 1.5) - hexDistance(cart.q, cart.r, c.q, c.r) * 0.6;
   const goal = cities.reduce((a, b) => (worth(b) > worth(a) ? b : a));
   const reach = reachOf(state, cart);
   let best = null, bd = hexDistance(cart.q, cart.r, goal.q, goal.r);
@@ -639,7 +677,8 @@ function rewardStep(state, player) {
     if (!opts.length) continue;
     let pick = opts[0];
     if (opts.includes('wall')) {
-      const threat = state.units.some(u => u.owner !== player && hexDistance(u.q, u.r, city.q, city.r) <= 3);
+      // Nur Feinde zählen, keine Einheiten von Friedenspartnern.
+      const threat = state.units.some(u => R.hostile(state, player, u.owner) && hexDistance(u.q, u.r, city.q, city.r) <= 3);
       pick = threat ? 'wall' : 'resources';
     } else if (opts.includes('borders')) pick = 'borders';
     // Riese nur, wenn danach noch genug Sterne übrig sind, sonst Park.
@@ -859,8 +898,14 @@ function planStep(state, player) {
   const reward = rewardStep(state, player);
   if (reward) return reward;
 
-  const war = warStep(state, player);
-  if (war) return war;
+  // Krieg und Frieden nur für KI-Stämme: Der Tipp für Menschen (gleiche
+  // Planung) soll auch im Frieden Züge vorschlagen statt einer Kriegserklärung.
+  if (R.isBot(state, player)) {
+    const war = warStep(state, player);
+    if (war) return war;
+    const peace = peaceStep(state, player);
+    if (peace) return peace;
+  }
 
   let bestAttack = null;
   for (const u of mine) {
@@ -875,8 +920,12 @@ function planStep(state, player) {
       // Bekehren hat keinen Gegenschlag: nur wertlose Ziele auslassen.
       if (converts && UNIT_VALUE[t.type] < 2) continue;
       if (!converts && res.damage < t.hp && res.retaliation >= u.hp) continue;
-      // Leichte KI greift nur an, wenn sie dabei mehr austeilt als einsteckt.
-      if (!converts && easy && res.damage < t.hp && res.damage <= res.retaliation) continue;
+      // Leichte KI greift nur an, wenn sie dabei mehr austeilt als einsteckt –
+      // außer das Ziel ist schon angeschlagen (unter halben Leben) oder
+      // mindestens zwei eigene Einheiten stehen daneben (sonst erobert sie nie
+      // eine verteidigte Stadt).
+      if (!converts && easy && res.damage < t.hp && res.damage <= res.retaliation && t.hp * 2 >= R.hpCap(t) &&
+        mine.filter(m => hexDistance(m.q, m.r, t.q, t.r) === 1).length < 2) continue;
       const s = attackScore(state, u, t);
       if (!bestAttack || s > bestAttack.score) bestAttack = { kind: 'attack', attacker: u, defender: t, score: s };
     }
@@ -962,18 +1011,25 @@ function planStep(state, player) {
     // Bestes Wunschziel, das hier gerade möglich ist (Land- und Schiffsplatz getrennt).
     for (const t of order) {
       if (!unlocked.includes(t)) continue;
+      // Schiffe baut nur der Flottenblock darunter (mit Obergrenze),
+      // Luftschiffe nur Städte mit Ballonplatz.
+      if (water(t) || (R.isAir(t) && !R.cityAirfields(state, c).length)) continue;
       if (share(t) > (CAVALRY.includes(t) ? CAVALRY_MAX : 0.35)) continue;
       if (R.unitCost(state, player, t) > stars) continue;
-      if (water(t) && !canShip) continue;
       if (R.canTrain(state, c, t, player).ok) return { kind: 'train', city: c, type: t };
       // Nur bis zum ersten bezahlbaren Landwunsch suchen: sonst spart die KI nie.
-      if (!UNITS[t].abilities.includes('water')) break;
+      // Ein belegter Ballonplatz hält die Suche nicht auf.
+      if (!R.isAir(t)) break;
     }
-    // Küstenstädte bauen auch Schiffe, solange die KI keine hat.
+    // Küstenstädte bauen auch Schiffe: eines je angefangene 3 Hafenstädte,
+    // Seefahrer dreimal so viele.
     const naval = ['battleship', 'ship', 'boat'].find(t => unlocked.includes(t) && R.unitCost(state, player, t) <= stars - 2);
-    const fleet = state.units.filter(u => u.owner === player && UNITS[u.type].abilities.includes('water') && !u.carry).length;
-    if (naval && canShip && fleet < (persona === 'seafarer' ? 3 : 1) &&
-      R.canTrain(state, c, naval, player).ok) return { kind: 'train', city: c, type: naval };
+    if (naval && canShip) {
+      const fleet = mine.filter(u => water(u.type) && !u.carry).length;
+      const ports = R.citiesFor(state, player).filter(pc => R.cityPorts(state, pc).length).length;
+      const cap = Math.ceil(ports / 3) * (persona === 'seafarer' ? 3 : 1);
+      if (fleet < cap && R.canTrain(state, c, naval, player).ok) return { kind: 'train', city: c, type: naval };
+    }
   }
 
   for (const u of mine) {
@@ -1103,7 +1159,17 @@ export function applyStep(state, step, player) {
     }
     case 'research': return R.research(state, step.tech, player);
     case 'reward': return R.chooseReward(state, step.city, step.choice, player);
-    case 'war': return R.declareWar(state, player, step.target);
+    case 'war': {
+      const res = R.declareWar(state, player, step.target);
+      // Auf dem echten Stand merken: peaceStep bietet danach länger keinen Frieden an.
+      if (res.ok) { if (!state.aiWarAt) state.aiWarAt = {}; state.aiWarAt[dipKey(player, step.target)] = state.round; }
+      return res;
+    }
+    case 'peace': {
+      const res = R.offerPeace(state, player, step.target);
+      if (res.ok) { if (!state.aiPeaceAt) state.aiPeaceAt = {}; state.aiPeaceAt[dipKey(player, step.target)] = state.round; }
+      return res;
+    }
     case 'upgrade': return R.upgradeUnit(state, step.unit, player);
     case 'trade': return R.trade(state, step.unit, player);
     case 'hire': return R.hireMercenary(state, step.unit, player);

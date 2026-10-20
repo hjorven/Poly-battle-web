@@ -85,7 +85,7 @@ export const ABILITY_INFO = {
   convert: { name: 'Bekehren', desc: 'Übernimmt eine benachbarte feindliche Einheit.' },
   land: { name: 'Land', desc: 'Kann auf Land stehen.' },
   water: { name: 'Wasser', desc: 'Kann sich ausschließlich auf Wasser und Ozean bewegen.' },
-  settle: { name: 'Siedeln', desc: 'Gründet auf einem freien Feld eine neue Stadt (mind. 2 Felder von anderen Städten entfernt).' },
+  settle: { name: 'Siedeln', desc: 'Gründet auf einem freien Feld eine neue Stadt (mind. 2 Felder von anderen Städten entfernt, nicht im Gebiet eines anderen Stamms).' },
   scout: { name: 'Spähen', desc: 'Greift nicht an, betritt Berge ohne Klettern und sieht von Bergen 1 Feld weiter.' },
   air: { name: 'Fliegen', desc: 'Fliegt über Wasser, Berge und Wald (je 1 Bewegung) und ignoriert Kontrollzonen. Nahkämpfer erreichen sie nicht. Erobert keine Städte, heilt nur im eigenen Gebiet.' },
   fragile: { name: 'Zerbrechlich', desc: 'Ein Treffer eines Fernkämpfers (Bogenschütze, Katapult, Schiff, Luftschiff) zerstört sie sofort.' },
@@ -93,7 +93,7 @@ export const ABILITY_INFO = {
   cargo: { name: 'Transport', desc: 'Nimmt eine benachbarte eigene Landeinheit auf und setzt sie anderswo ab.' },
   siege: { name: 'Belagerung', desc: 'Dreifacher Schaden gegen Einheiten in Städten und auf Burgen; dort ohne Gegenschlag.' },
   trade: { name: 'Handel', desc: 'In oder neben einer anderen Stadt: einmalig Sterne, mehr je weiter von der Heimatstadt entfernt. Erobert keine Städte.' },
-  pikes: { name: 'Pikenwall', desc: 'Anderthalbfacher Schaden gegen Reiter, Ritter und Paladine – auch beim Gegenschlag.' },
+  pikes: { name: 'Pikenwall', desc: 'Anderthalbfacher Schaden gegen Reiter, Bogenreiter, Ritter und Paladine – auch beim Gegenschlag.' },
   ranger: { name: 'Pfadfinder', desc: 'Wald, Hügel und Sumpf kosten nur 1 Bewegung und halten nicht auf; aus dem Wald +1 Angriff.' },
   banner: { name: 'Banner', desc: 'Eigene Einheiten direkt daneben haben +0,5 Angriff (mehrere Banner zählen nicht doppelt).' },
   fireship: { name: 'Brandsatz', desc: 'Geht beim Angriff unter, trifft aber auch alle Feinde neben dem Ziel mit halbem Schaden. Kein Gegenschlag.' }
@@ -261,9 +261,9 @@ export const TECHS = {
   mills: { name: 'Mühlenbau', tier: 4, req: 'construction', desc: 'Windmühle: +1 Stern je angrenzender Farm' },
   rotation: { name: 'Fruchtfolge', tier: 5, req: 'mills', desc: 'Jede Farm bringt +1 Stern zusätzlich' },
 
-  pikes: { name: 'Pikeniere', tier: 3, req: 'shields', desc: 'Pikenier: stark gegen Reiter, Ritter und Paladine' },
+  pikes: { name: 'Pikeniere', tier: 3, req: 'shields', desc: 'Pikenier: stark gegen Reiter, Bogenreiter, Ritter und Paladine' },
   diplomacy: { name: 'Diplomatie', tier: 4, req: 'pikes', desc: 'Frieden mit anderen Stämmen anbieten' },
-  castles: { name: 'Burgbau', tier: 5, req: 'diplomacy', desc: 'Burg: Einheiten darauf haben 3-fache Verteidigung' },
+  castles: { name: 'Burgbau', tier: 5, req: 'diplomacy', desc: 'Burg: eigene Einheiten darauf haben 3-fache Verteidigung' },
 
   smithery: { name: 'Schmiedekunst', tier: 3, req: 'mining', desc: 'Schwertkämpfer ausbilden' },
   smelting: { name: 'Verhüttung', tier: 4, req: 'smithery', desc: 'Schmelzhütte: +2 Sterne je angrenzender Mine' },
@@ -290,7 +290,7 @@ export const TECHS = {
   airships: { name: 'Luftschiffbau', tier: 5, req: 'ballooning', desc: 'Kriegsluftschiff' },
 
   trade: { name: 'Handel', tier: 3, req: 'roads', desc: '+1 Stern pro Stadt' },
-  markets: { name: 'Märkte', tier: 4, req: 'trade', desc: 'Markt: +1 Stern je angrenzendem Gebäude (bis 4)' },
+  markets: { name: 'Märkte', tier: 4, req: 'trade', desc: 'Markt: +1 Stern je angrenzendem Gebäude oder genutztem Rohstoff (bis 5)' },
   guilds: { name: 'Zünfte', tier: 5, req: 'markets', desc: 'Alle Gebäude kosten 2 Sterne weniger' },
 
   chivalry: { name: 'Ritterlichkeit', tier: 3, req: 'freespirit', desc: 'Ritter ausbilden' },

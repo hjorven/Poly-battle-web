@@ -16,9 +16,9 @@ The tech tree has 45 technologies in five tiers. Costs rise with the tier, the n
 | 4 | **Milling** | Construction | Windmill: +1 star per adjacent farm |
 | 5 | **Crop Rotation** | Milling | Every farm gives +1 extra star |
 | 2 | **Shields** | Organization | Train defenders |
-| 3 | **Pikemen** | Shields | Pikeman: strong against riders, knights and paladins |
+| 3 | **Pikemen** | Shields | Pikeman: strong against riders, horse archers, knights and paladins |
 | 4 | **Diplomacy** | Pikemen | Offer peace to other tribes |
-| 5 | **Castle Building** | Diplomacy | Castle: units on it get 3× defence |
+| 5 | **Castle Building** | Diplomacy | Castle: own units on it get 3× defence |
 
 ## Climbing
 
@@ -69,7 +69,7 @@ The tech tree has 45 technologies in five tiers. Costs rise with the tier, the n
 | 1 | **Riding** | – | Branch: Roads, Free Spirit |
 | 2 | **Roads** | Riding | Build roads (half movement) and bridges; forest and mountains cost only 1 in own territory |
 | 3 | **Trade** | Roads | +1 star per city |
-| 4 | **Markets** | Trade | Market: +1 star per adjacent building (up to 4) |
+| 4 | **Markets** | Trade | Market: +1 star per adjacent building or used resource (up to 5) |
 | 5 | **Guilds** | Markets | All buildings cost 2 stars less |
 | 2 | **Free Spirit** | Riding | Banner bearer; branch: Chivalry |
 | 3 | **Chivalry** | Free Spirit | Train knights |

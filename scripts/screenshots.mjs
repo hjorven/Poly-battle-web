@@ -2,9 +2,10 @@
 // Fester Zufall, damit die Bilder bei jedem Lauf gleich aussehen.
 // Aufruf: npm run screenshots   → schreibt docs/menu.png, docs/screenshot.png, docs/city.png, docs/build.png
 // Dunkle Darstellung, so wie das Spiel bei dunkler Systemeinstellung aussieht.
-// PB_CHROMIUM: eigener Chromium-Pfad, falls Playwrights eigener fehlt.
+// PB_CHROMIUM (oder CHROMIUM): eigener Chromium-Pfad, siehe scripts/chromium-path.mjs.
 
 import { chromium } from 'playwright';
+import { chromiumPath } from './chromium-path.mjs';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -28,7 +29,7 @@ const server = createServer(async (req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const URL_ = `http://127.0.0.1:${server.address().port}/`;
 
-const browser = await chromium.launch({ executablePath: process.env.PB_CHROMIUM || undefined, args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: chromiumPath(), args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 860 }, deviceScaleFactor: 1, colorScheme: 'dark' });
 const page = await ctx.newPage();
 page.on('pageerror', e => console.error('Fehler auf der Seite:', e.message));

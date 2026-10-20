@@ -16,9 +16,9 @@ Der Forschungsbaum hat 45 Technologien in fünf Stufen. Die Kosten steigen mit d
 | 4 | **Mühlenbau** | Baukunst | Windmühle: +1 Stern je angrenzender Farm |
 | 5 | **Fruchtfolge** | Mühlenbau | Jede Farm bringt +1 Stern zusätzlich |
 | 2 | **Schildmacher** | Organisation | Verteidiger ausbilden |
-| 3 | **Pikeniere** | Schildmacher | Pikenier: stark gegen Reiter, Ritter und Paladine |
+| 3 | **Pikeniere** | Schildmacher | Pikenier: stark gegen Reiter, Bogenreiter, Ritter und Paladine |
 | 4 | **Diplomatie** | Pikeniere | Frieden mit anderen Stämmen anbieten |
-| 5 | **Burgbau** | Diplomatie | Burg: Einheiten darauf haben 3-fache Verteidigung |
+| 5 | **Burgbau** | Diplomatie | Burg: eigene Einheiten darauf haben 3-fache Verteidigung |
 
 ## Klettern
 
@@ -69,7 +69,7 @@ Der Forschungsbaum hat 45 Technologien in fünf Stufen. Die Kosten steigen mit d
 | 1 | **Reiten** | – | Zweig: Wege, Freier Geist |
 | 2 | **Wege** | Reiten | Wege (halbe Bewegung) und Brücken bauen; im eigenen Gebiet kosten Wald und Berg nur 1 |
 | 3 | **Handel** | Wege | +1 Stern pro Stadt |
-| 4 | **Märkte** | Handel | Markt: +1 Stern je angrenzendem Gebäude (bis 4) |
+| 4 | **Märkte** | Handel | Markt: +1 Stern je angrenzendem Gebäude oder genutztem Rohstoff (bis 5) |
 | 5 | **Zünfte** | Märkte | Alle Gebäude kosten 2 Sterne weniger |
 | 2 | **Freier Geist** | Reiten | Bannerträger; Zweig: Ritterlichkeit |
 | 3 | **Ritterlichkeit** | Freier Geist | Ritter ausbilden |
