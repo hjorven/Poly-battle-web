@@ -194,7 +194,7 @@ export function toggleBridge(st, q, r) {
   if (!st.bridges) st.bridges = {};
   const k = hk(q, r);
   if (st.bridges[k] != null) { delete st.bridges[k]; return { ok: true }; }
-  // Achse: die Richtung mit Land auf beiden Seiten, sonst Ost-West.
+  // Achse: die erste Richtung mit Land auf mindestens einer Seite, sonst Ost-West.
   const land = (x, y) => { const d = TERRAIN[R.terrainAt(st, x, y)]; return d && d.walkable; };
   const dirs = [[1, 0], [1, -1], [0, -1]];
   const axis = dirs.findIndex(([dq, dr]) => land(q + dq, r + dr) || land(q - dq, r - dr));
@@ -225,7 +225,7 @@ export function paintTerrain(st, q, r, t) {
 function fitsAfter(st, u, q, r, t) {
   if (hasAbility(u.type, 'air')) return true;
   if (hasAbility(u.type, 'water')) return isWet(t);
-  return TERRAIN[t].walkable || (isWet(t) && t === 'water' && R.bridgeAt(st, q, r));
+  return TERRAIN[t].walkable || (t === 'water' && R.bridgeAt(st, q, r));
 }
 
 export function setResource(st, q, r, res) {

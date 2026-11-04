@@ -10,7 +10,7 @@ function ownerColor(owner) {
 }
 
 const TILE_GAP = 0.94;
-const DIESE_DUR = 620;
+const DIE_DUR = 620;
 
 let renderer, scene, camera, controls, raycaster;
 let tileMeshes = [];
@@ -21,7 +21,6 @@ let highlightGroup;
 let idleGroup;
 let selectedMesh = null;
 let targetMesh = null;
-let selectedKey = null;
 let tweens = [];
 let shadowDirty = true;
 let frameNo = 0;
@@ -58,6 +57,16 @@ function maxPixelRatio() {
 function freshMat(color) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true });
 }
+
+// Unbeleuchtete Teile (Flammen, Glut, Bodenschatten, Lichtkegel) teilen sich
+// ebenfalls ihr Material: Einheiten, Gebäude und Geschosse werden oft entfernt,
+// eigene Materialien dort würden nie freigegeben.
+const flameMat = new THREE.MeshBasicMaterial({ color: 0xff8a1f });
+const burnerMat = new THREE.MeshBasicMaterial({ color: 0xffa53d });
+const airShadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false });
+const beamMat = new THREE.MeshBasicMaterial({
+  color: 0xffe08a, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, fog: false
+});
 
 // Entdeckt, aber gerade außer Sicht: Gelände leicht abgedunkelt.
 const dimMats = new Map();
@@ -498,9 +507,7 @@ function lighthouseNode() {
   for (const m of g.children) m.castShadow = true;
   // Lichtkegel: flacher, halbtransparenter Strahl, der sich dreht.
   const beamGeo = geo('lhBeam', () => new THREE.ConeGeometry(0.32, 2.4, 12, 1, true).rotateZ(Math.PI / 2).translate(1.2, 0, 0));
-  const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({
-    color: 0xffe08a, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, fog: false
-  }));
+  const beam = new THREE.Mesh(beamGeo, beamMat);
   beam.position.y = lamp.position.y;
   beam.renderOrder = 14;
   beam.visible = false;
@@ -566,14 +573,7 @@ function roadNode(arms) {
 function roadThroughDecor(t, sig) {
   const arms = sig ? [...sig.slice(1)].map(Number) : [];
   const env = { road: !!sig, arms };
-  let best = null;
-  if (sig) {
-    for (let k = 0; k < 6; k++) {
-      const ang = Math.PI / 6 + k * Math.PI / 3, vx = Math.cos(ang), vz = Math.sin(ang);
-      const gap = Math.min(Math.PI, ...arms.map(d => Math.acos(Math.max(-1, Math.min(1, vx * DIR_VEC[d][0] + vz * DIR_VEC[d][1])))));
-      if (!best || gap > best.gap) best = { vx, vz, gap };
-    }
-  }
+  const best = sig ? freeCorner(arms) : null;
   // Bäume auf dem Weg rücken an den Rand zwischen die Straßenarme (der Wald
   // bleibt Wald); nur wenn dort kein Platz ist, verschwinden sie.
   const moved = new Map();
@@ -591,7 +591,7 @@ function roadThroughDecor(t, sig) {
     for (const d of t.decor) {
       if (!d.userData.tree || moved.has(keyOf(d))) continue;
       const [x, z] = d.userData.tree;
-      if (!onRoadPath(x, z, env, 0.24)) { moved.set(keyOf(d), [x, z, 1]); taken.push([x, z]); continue; }
+      if (!onRoadPath(x, z, env, 0.24)) { moved.set(keyOf(d), [x, z, 1]); taken.push([x, z]); }
     }
     for (const d of t.decor) {
       if (!d.userData.tree || moved.has(keyOf(d))) continue;
@@ -664,19 +664,18 @@ function syncRoad(state, key, t) {
 function bridgeNode(axis) {
   const g = new THREE.Group();
   const wood = mat(0x8a5a33), dark = mat(0x5c3d22);
-  const part = g;
   const deck = new THREE.Mesh(geo('brDeck', () => new THREE.BoxGeometry(1.78, 0.07, 0.44)), wood);
   deck.castShadow = true;
   deck.receiveShadow = true;
-  part.add(deck);
+  g.add(deck);
   for (const z of [-0.2, 0.2]) {
     const rail = new THREE.Mesh(geo('brRail', () => new THREE.BoxGeometry(1.7, 0.04, 0.04)), dark);
     rail.position.set(0, 0.13, z);
-    part.add(rail);
+    g.add(rail);
     for (const x of [-0.75, -0.25, 0.25, 0.75]) {
       const post = new THREE.Mesh(geo('brPost', () => new THREE.BoxGeometry(0.04, 0.13, 0.04)), dark);
       post.position.set(x, 0.07, z);
-      part.add(post);
+      g.add(post);
     }
   }
 
@@ -903,7 +902,7 @@ function paintMinimap() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#1e3a5f';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const explored = viewer && state.explored && state.explored[viewer] ? new Set(state.explored[viewer]) : null;
+  const explored = exploredSet(state, viewer);
   const visible = explored ? visibleKeys(state, viewer) : null;
   const rad = scale * 0.9;
   const dot = (q, r, size, color) => {
@@ -982,7 +981,7 @@ export function setIdleMarkers(units) {
 let threatRings = [];
 export function setThreatMarkers(cities) {
   if (!initialized) return;
-  for (const m of threatRings) idleGroup.remove(m);
+  for (const m of threatRings) { idleGroup.remove(m); m.material.dispose(); }
   threatRings = [];
   const ringGeo = geo('threatRing', () => new THREE.RingGeometry(0.72, 0.86, 6).rotateX(-Math.PI / 2).rotateY(Math.PI / 6));
   for (const c of cities) {
@@ -1082,16 +1081,21 @@ function buildingSpot(env) {
   // Mitte nur, wenn dort nichts anderes steht: Straße, Einheit, Bäume, Berggipfel.
   const crowded = env.road || env.occupied || env.terrain === 'forest' || env.terrain === 'mountain';
   if (!crowded) return [0, 0, 1];
+  const { vx, vz } = freeCorner(env.arms || []);
+  // Auf Bergen außerhalb des Gipfels (Radius 0,52), sonst etwas näher zur Mitte.
+  const rad = env.terrain === 'mountain' ? 0.64 : 0.42;
+  return [vx * rad, vz * rad, env.terrain === 'mountain' ? 0.75 : 0.85];
+}
+
+// Richtung zur Feldecke mit dem größten Winkelabstand zu allen Straßenarmen.
+function freeCorner(arms) {
   let best = null;
   for (let k = 0; k < 6; k++) {
-    const ang = Math.PI / 6 + k * Math.PI / 3;
-    const vx = Math.cos(ang), vz = Math.sin(ang);
-    const gap = Math.min(Math.PI, ...(env.arms || []).map(d => Math.acos(Math.max(-1, Math.min(1, vx * DIR_VEC[d][0] + vz * DIR_VEC[d][1])))));
-    // Auf Bergen außerhalb des Gipfels (Radius 0,52), sonst etwas näher zur Mitte.
-    const rad = env.terrain === 'mountain' ? 0.64 : 0.42;
-    if (!best || gap > best.gap) best = { x: vx * rad, z: vz * rad, gap };
+    const ang = Math.PI / 6 + k * Math.PI / 3, vx = Math.cos(ang), vz = Math.sin(ang);
+    const gap = Math.min(Math.PI, ...arms.map(d => Math.acos(Math.max(-1, Math.min(1, vx * DIR_VEC[d][0] + vz * DIR_VEC[d][1])))));
+    if (!best || gap > best.gap) best = { vx, vz, gap };
   }
-  return [best.x, best.z, env.terrain === 'mountain' ? 0.75 : 0.85];
+  return best;
 }
 
 // Acker über das ganze Feld: Furchen (Erde) mit Pflanzen, Feldweg wo die
@@ -1279,7 +1283,7 @@ function buildingNode(type) {
     const chim = new THREE.Mesh(geo('fgChim', () => new THREE.CylinderGeometry(0.035, 0.045, 0.24, 6)), mat(0x57534e));
     chim.position.set(-0.08, 0.28, -0.05);
     g.add(chim);
-    const glow = new THREE.Mesh(geo('fgGlow', () => new THREE.BoxGeometry(0.08, 0.06, 0.01)), new THREE.MeshBasicMaterial({ color: 0xff8a1f }));
+    const glow = new THREE.Mesh(geo('fgGlow', () => new THREE.BoxGeometry(0.08, 0.06, 0.01)), flameMat);
     glow.position.set(0.04, 0.06, 0.111);
     g.add(glow);
     const anvil = new THREE.Mesh(geo('fgAnvil', () => new THREE.BoxGeometry(0.08, 0.05, 0.04)), mat(0x3f3f46));
@@ -1484,7 +1488,6 @@ function mulberry(seed) {
 }
 
 function buildTiles(state) {
-  const tileGeoCache = new Map();
   const trunkGeo = geo('tree_trunk', () => new THREE.CylinderGeometry(0.04, 0.05, 0.22, 5));
   const foliageGeo = geo('tree_foliage', () => new THREE.ConeGeometry(0.2, 0.46, 5));
   const trunkMat = mat(0x5c4033);
@@ -1499,13 +1502,11 @@ function buildTiles(state) {
     for (let q = 0; q < MAP_W; q++) {
       const t = state.terrain[r * MAP_W + q];
       const def = TERRAIN[t];
-      if (!tileGeoCache.has(t)) {
-        tileGeoCache.set(t, new THREE.CylinderGeometry(
-          HEX_SIZE * TILE_GAP, HEX_SIZE * TILE_GAP, def.height, 6
-        ));
-      }
+      // Über den globalen Cache, damit ein Neuaufbau der Karte keine neuen
+      // Geometrien anlegt (die alten würden nie freigegeben).
+      const tileGeo = geo('tile' + def.height, () => new THREE.CylinderGeometry(HEX_SIZE * TILE_GAP, HEX_SIZE * TILE_GAP, def.height, 6));
       const baseMat = mat(def.color);
-      const mesh = new THREE.Mesh(tileGeoCache.get(t), baseMat);
+      const mesh = new THREE.Mesh(tileGeo, baseMat);
       const p = toWorld(q, r);
       mesh.position.set(p.x, def.height / 2, p.z);
       mesh.receiveShadow = true;
@@ -1610,35 +1611,21 @@ function syncImprovement(t, imp, env = {}) {
   t.impNode = inode;
 }
 
-// Materialien, die nur zu diesem Knoten gehören (Flammen, Schatten, Lichtkegel),
-// beim Abbau freigeben; geteilte (Caches) bleiben. Geometrien sind alle geteilt.
-function disposeOwned(root, shared) {
-  root.traverse(o => {
-    const list = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
-    for (const m of list) if (!shared.has(m)) m.dispose();
-  });
-}
-
 // Alles vom vorherigen Spiel entfernen, damit eine neue Karte (neues Spiel,
-// geladener Spielstand, Online-Partie) korrekt aufgebaut wird.
+// geladener Spielstand, Online-Partie) korrekt aufgebaut wird. Geometrien und
+// Materialien von Feldern, Städten und Leuchttürmen sind alle geteilt; nur
+// Einheiten besitzen eigene (Teamfarben, Lebensanzeige).
 function clearBoard() {
-  const shared = new Set([...matCache.values(), ...dimMats.values(), ...discMats.values(), ...geoCache.values(), lampOn, lampOff, fogTileMat, fogTargetMat]);
   for (const t of tiles.values()) {
     scene.remove(t.mesh);
   }
   tiles.clear();
   tileMeshes = [];
-  for (const node of unitNodes.values()) {
-    scene.remove(node.group);
-    node.sprite.userData.texture?.dispose();
-    node.sprite.material.dispose();
-    for (const m of node.group.userData.teamMats) m.dispose();
-    disposeOwned(node.group, shared);
-  }
+  for (const node of unitNodes.values()) disposeUnitNode(node);
   unitNodes.clear();
-  for (const node of cityNodes.values()) { scene.remove(node.group); disposeOwned(node.group, shared); }
+  for (const node of cityNodes.values()) scene.remove(node.group);
   cityNodes.clear();
-  for (const g of lightNodes.values()) { scene.remove(g); disposeOwned(g, shared); }
+  for (const g of lightNodes.values()) scene.remove(g);
   lightNodes.clear();
   // Laufende Animationen beenden, damit wartende Promises nicht hängen.
   const pending = tweens;
@@ -1708,7 +1695,7 @@ function drawHp(sprite, hp, vet = false, color = 0x18181b) {
   ctx.clearRect(0, 0, 128, 64);
   const x = vet ? 10 : 22, w = vet ? 108 : 84;
   roundRect(ctx, x, 8, w, 48, 14);
-  ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+  ctx.fillStyle = cssColor(color);
   ctx.fill();
   ctx.lineWidth = 6;
   ctx.strokeStyle = hp <= 3 ? '#dc2626' : vet ? '#facc15' : 'rgba(9,9,11,0.9)';
@@ -2054,9 +2041,8 @@ function unitBody(type, color, passenger = null, plume = null) {
     for (const [x, z] of [[0.1, -0.05], [0.12, 0.06], [-0.18, 0]]) {
       put(g, cyl(0.04, 0.05, 0.08, 6), mat(0x8a6a44), x, top + 0.04, z);
     }
-    const flame = new THREE.MeshBasicMaterial({ color: 0xff8a1f });
     for (const [x, z, h] of [[0.1, -0.05, 0.12], [0.12, 0.06, 0.09], [-0.18, 0, 0.1]]) {
-      const f = new THREE.Mesh(cone(0.035, h, 5), flame);
+      const f = new THREE.Mesh(cone(0.035, h, 5), flameMat);
       f.position.set(x, top + 0.08 + h / 2, z);
       g.add(f);
     }
@@ -2266,8 +2252,7 @@ function placeCityNode(state, city) {
 // Holzgondel an Seilen, Hülle in Stammesfarbe (Brandballon dunkel mit Band).
 const AIR_Y = 0.62;
 function airBody(type, g, put, teamMat) {
-  const shadow = new THREE.Mesh(geo('airShadow', () => new THREE.CircleGeometry(0.26, 16).rotateX(-Math.PI / 2)),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }));
+  const shadow = new THREE.Mesh(geo('airShadow', () => new THREE.CircleGeometry(0.26, 16).rotateX(-Math.PI / 2)), airShadowMat);
   shadow.position.y = 0.015;
   shadow.castShadow = false;
   g.add(shadow);
@@ -2321,7 +2306,7 @@ function airBody(type, g, put, teamMat) {
   put(g, box(bw, 0.11, bw), wicker, 0, AIR_Y + 0.06, 0);
   for (const x of [-bw / 2, bw / 2]) for (const z of [-bw / 2, bw / 2]) ropes(x, z, AIR_Y + 0.11, x * 1.6, z * 1.6, AIR_Y + 0.5 - R * 0.8);
   // Brennerflamme.
-  const flame = put(g, cone(0.035, 0.09, 6), new THREE.MeshBasicMaterial({ color: 0xffa53d }), 0, AIR_Y + 0.27, 0);
+  const flame = put(g, cone(0.035, 0.09, 6), burnerMat, 0, AIR_Y + 0.27, 0);
   flame.castShadow = false;
   if (big) put(g, box(0.12, 0.08, 0.1), mat(WOOD_DARK), 0, AIR_Y + 0.15, 0); // Frachtkiste
   if (fire) {
@@ -2375,12 +2360,18 @@ function turnNode(node, dx, dz, dur = 140) {
   addTween({ dur, ease: easeOut, update: t => { g.rotation.y = from + (to - from) * t; } });
 }
 
-function removeUnitNode(id, node) {
+function disposeUnitNode(node) {
   scene.remove(node.group);
   node.sprite.userData.texture?.dispose();
   node.sprite.material.dispose();
   for (const m of node.group.userData.teamMats) m.dispose();
-  unitNodes.delete(id);
+}
+
+function removeUnitNode(id, node) {
+  disposeUnitNode(node);
+  // Nur den eigenen Eintrag löschen: Unter derselben Kennung kann inzwischen
+  // ein neuer Knoten stehen (sterbende Einheit, deren Kennung wieder auftaucht).
+  if (unitNodes.get(id) === node) unitNodes.delete(id);
 }
 
 function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
@@ -2492,9 +2483,11 @@ export function syncBoard(state, viewer = null) {
   for (const u of state.units) {
     alive.add(u.id);
     let node = unitNodes.get(u.id);
-    // Ein-/Ausschiffen wechselt den Typ: Modell neu aufbauen.
+    // Ein-/Ausschiffen wechselt den Typ: Modell neu aufbauen. Ein noch
+    // sterbender Knoten (Kennung taucht nach Laden/Rücksprung wieder auf)
+    // würde am Ende seiner Animation entfernt – ebenfalls neu aufbauen.
     const lk = lookFor(state, u.owner);
-    if (node && (node.type !== u.type || node.passenger !== passengerOf(u) || node.plume !== (lk && lk.plume))) {
+    if (node && (node.dying || node.type !== u.type ||node.passenger !== passengerOf(u) || node.plume !== (lk && lk.plume))) {
       removeUnitNode(u.id, node);
       node = null;
     }
@@ -2582,7 +2575,7 @@ export function syncBoard(state, viewer = null) {
     const g = node.group;
     const y0 = g.position.y;
     addTween({
-      dur: DIESE_DUR,
+      dur: DIE_DUR,
       // Erst umkippen, dann versinken.
       update: t => {
         const tip = Math.min(1, t / 0.55);
@@ -2593,13 +2586,7 @@ export function syncBoard(state, viewer = null) {
           g.position.y = y0 - 0.25 * k;
         }
       },
-      resolve: () => {
-        scene.remove(g);
-        node.sprite.userData.texture.dispose();
-        node.sprite.material.dispose();
-        for (const m of g.userData.teamMats) m.dispose();
-        unitNodes.delete(id);
-      }
+      resolve: () => removeUnitNode(id, node)
     });
   }
   return Promise.all(promises);
@@ -2682,7 +2669,7 @@ function projectileMesh(type) {
     g.add(new THREE.Mesh(geo('pjStone', () => new THREE.IcosahedronGeometry(0.07, 0)), mat(0x9b9b94)));
   } else if (type === 'fireballoon') {
     g.add(new THREE.Mesh(geo('pjPot', () => new THREE.IcosahedronGeometry(0.06, 0)), mat(0xb45309)));
-    const fire = new THREE.Mesh(geo('pjFire', () => new THREE.ConeGeometry(0.04, 0.1, 5)), new THREE.MeshBasicMaterial({ color: 0xff8a1f }));
+    const fire = new THREE.Mesh(geo('pjFire', () => new THREE.ConeGeometry(0.04, 0.1, 5)), flameMat);
     fire.position.y = 0.07;
     g.add(fire);
   } else {
@@ -2798,7 +2785,6 @@ export function setHighlights({ selected = null, move = null, attack = null, cit
   if (!initialized) return;
   while (highlightGroup.children.length) highlightGroup.remove(highlightGroup.children[0]);
   selectedMesh = null;
-  selectedKey = selected;
 
   const addDisc = (q, r, kind, dy = 0.05) => {
     const t = tiles.get(hk(q, r));
@@ -2913,7 +2899,7 @@ export function resetCamera() {
   orbit(dTheta, want.phi - sph.phi, 380);
 }
 
-export function worldOf(q, r) {
+function worldOf(q, r) {
   const p = toWorld(q, r);
   return new THREE.Vector3(p.x, hexTop(hk(q, r)), p.z);
 }
@@ -3148,7 +3134,6 @@ export function snapshotMap(state, w = 1720, h = 1000) {
   return out;
 }
 
-// Nur für Tests/Entwicklung: Kamera direkt setzen (Konsole: __pb.cam(...)).
 // Kamerastand fürs Tutorial: Blickpunkt, Abstand, Drehung; `moving` während
 // einer Kamerafahrt.
 export function cameraState() {
@@ -3157,6 +3142,7 @@ export function cameraState() {
   return { x: controls.target.x, z: controls.target.z, dist: off.length(), az: Math.atan2(off.x, off.z), moving: tweens.length > 0 };
 }
 
+// Nur für Tests/Entwicklung: Kamera direkt setzen (Konsole: __pb.cam(...)).
 export function debugCamera(x = 15, y = 3.2, z = 17.5, tx = 15, tz = 12) {
   if (!initialized) return;
   controls.target.set(tx, 0.5, tz);

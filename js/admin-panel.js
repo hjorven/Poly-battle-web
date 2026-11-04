@@ -179,7 +179,7 @@ const cur = { player: null, unit: 'warrior', unitAct: 'heal', cityAct: 'grow', i
 function playerPick(st) {
   const p = target();
   return `<label class="adm-row">Für Spieler
-    <select data-set="player">${st.players.map(x => `<option value="${x}"${x === p ? ' selected' : ''}>${esc(playerName(st, x))}</option>`).join('')}</select>
+    <select data-set="player">${st.players.map(x => `<option value="${esc(x)}"${x === p ? ' selected' : ''}>${esc(playerName(st, x))}</option>`).join('')}</select>
   </label>`;
 }
 

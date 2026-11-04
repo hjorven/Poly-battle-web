@@ -13,8 +13,9 @@ function audio() {
     if (!AC) return null;
     ctx = new AC();
   }
-  // Browser starten Audio erst nach einer Nutzeraktion.
-  if (ctx.state === 'suspended') ctx.resume();
+  // Browser starten Audio erst nach einer Nutzeraktion. Scheitert das
+  // Fortsetzen, bleibt es still (ältere Safari liefern kein Promise).
+  if (ctx.state === 'suspended') Promise.resolve(ctx.resume()).catch(() => {});
   return ctx;
 }
 

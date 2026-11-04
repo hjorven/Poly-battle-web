@@ -27,7 +27,7 @@ The tech tree has 45 technologies in five tiers. Costs rise with the tier, the n
 | 1 | **Climbing** | – | Units can enter mountains |
 | 2 | **Mining** | Climbing | Build mines (+1 income) |
 | 3 | **Smithery** | Mining | Train swordsmen |
-| 4 | **Smelting** | Smithery | Smelter: +2 stars per adjacent mine |
+| 4 | **Smelting** | Smithery | Smelter: +2 stars per adjacent mine, +1 per mountain without a mine |
 | 5 | **Steel** | Smelting | Warriors, defenders, pikemen and swordsmen +1 attack |
 | 2 | **Meditation** | Climbing | Build temples |
 | 3 | **Philosophy** | Meditation | Mind Bender; research -20 % |

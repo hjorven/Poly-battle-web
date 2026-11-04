@@ -266,7 +266,7 @@ export const TECHS = {
   castles: { name: 'Burgbau', tier: 5, req: 'diplomacy', desc: 'Burg: eigene Einheiten darauf haben 3-fache Verteidigung' },
 
   smithery: { name: 'Schmiedekunst', tier: 3, req: 'mining', desc: 'Schwertkämpfer ausbilden' },
-  smelting: { name: 'Verhüttung', tier: 4, req: 'smithery', desc: 'Schmelzhütte: +2 Sterne je angrenzender Mine' },
+  smelting: { name: 'Verhüttung', tier: 4, req: 'smithery', desc: 'Schmelzhütte: +2 Sterne je angrenzender Mine, +1 je Berg ohne Mine' },
   steel: { name: 'Stahl', tier: 5, req: 'smelting', desc: 'Krieger, Verteidiger, Pikeniere und Schwertkämpfer +1 Angriff' },
 
   philosophy: { name: 'Philosophie', tier: 3, req: 'meditation', desc: 'Gedankenbeuger; Forschung -20 %' },
@@ -298,11 +298,11 @@ export const TECHS = {
   paladins: { name: 'Ritterorden', tier: 5, req: 'horseshoes', desc: 'Paladin: schwerer Ritter' }
 };
 
-// Stufe-4-Boni: Technologie → Wirkung (in rules.js ausgewertet).
 // Ausgemusterte Technologien: nicht mehr erforschbar und ohne Wirkung. Alte
 // Spielstände dürfen sie noch enthalten (siehe save.js).
 export const RETIRED_TECHS = ['planning', 'espionage', 'plate', 'printing', 'naval', 'shipyards', 'spiritualism', 'engineering', 'banking', 'tournaments'];
 
+// Boni später Stufen: Technologie → Wirkung (in rules.js: techBonus ausgewertet).
 export const TECH_BONUS = {
   steel: { atk: { warrior: 1, defender: 1, pikeman: 1, swordsman: 1 } },
   seapower: { move: { boat: 1, ship: 1, battleship: 1 } },
@@ -314,8 +314,6 @@ export const TECH_BONUS = {
   fishfarming: { fishBonus: 1 },
   guilds: { buildDiscount: 2 }
 };
-
-export const TECH_TIERS = [1, 2, 3, 4, 5].map(t => Object.keys(TECHS).filter(k => TECHS[k].tier === t));
 
 // Echte Stämme (reguläre Auswahl) mit Farbe, Start-Technologie und Starteinheit.
 export const TRIBES = {
@@ -349,7 +347,7 @@ export function researchCost(tier, cityCount, hasPhilosophy = false, known = 0) 
   return cost;
 }
 
-// Ressourcen auf Feldern. „bonus“ = +1 Einkommen der angrenzenden Stadt.
+// Ressourcen auf Feldern: +1 Einkommen der Stadt, zu deren Gebiet das Feld gehört.
 export const RESOURCES = {
   fruit: { name: 'Obst', terrain: ['field'], color: 0xe0526e },
   animals: { name: 'Wildtiere', terrain: ['forest'], color: 0x9c5a2b },

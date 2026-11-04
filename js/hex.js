@@ -31,21 +31,6 @@ export function toWorld(q, r) {
   };
 }
 
-export function fromWorld(x, z) {
-  const qf = (Math.sqrt(3) / 3 * x - z / 3) / HEX_SIZE;
-  const rf = (2 / 3 * z) / HEX_SIZE;
-  return axialRound(qf, rf);
-}
-
-function axialRound(qf, rf) {
-  const sf = -qf - rf;
-  let q = Math.round(qf), r = Math.round(rf), s = Math.round(sf);
-  const dq = Math.abs(q - qf), dr = Math.abs(r - rf), ds = Math.abs(s - sf);
-  if (dq > dr && dq > ds) q = -r - s;
-  else if (dr > ds) r = -q - s;
-  return [q, r];
-}
-
 export function forEachHex(fn) {
   for (let r = 0; r < MAP_H; r++) {
     for (let q = 0; q < MAP_W; q++) fn(q, r);

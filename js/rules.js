@@ -41,7 +41,7 @@ export function perkOf(state, player) {
   return t && t.perk ? t.perk.id : null;
 }
 
-// Summe eines Stufe-4-Bonus über alle erforschten Technologien, z. B.
+// Summe eines Technologie-Bonus (TECH_BONUS) über alle erforschten Technologien, z. B.
 // techBonus(state, p, 'move', 'rider').
 export function techBonus(state, player, kind, type = null) {
   let sum = 0;
@@ -108,6 +108,8 @@ const pairKey = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
 
 export function atPeace(state, a, b) {
   if (!a || !b || a === b || !state.peace) return false;
+  // Ohne Friedensschlüsse gar nicht erst den Paarschlüssel bauen: hostile()
+  // läuft in Kontrollzone und KI sehr oft.
   for (const _ in state.peace) return state.peace[pairKey(a, b)] != null;
   return false;
 }
@@ -238,11 +240,6 @@ export function findUnit(state, id) {
   return state.units.find(u => u.id === id) || null;
 }
 
-export function cityOwner(state, q, r) {
-  const c = cityAt(state, q, r);
-  return c ? c.owner : undefined;
-}
-
 export function citiesFor(state, player) {
   return state.cities.filter(c => c.owner === player);
 }
@@ -307,12 +304,10 @@ export function cityTiles(state, city) {
   return territory(city).filter(([q, r]) => tileCity(state, q, r) === city);
 }
 
-// Einkommen einer Stadt: Bevölkerung + gesammelte Ressourcen + Gebäude
-// im umliegenden Stadtterritorium.
 // Ertrag eines Gebäudes: fester Wert plus Nachbarschaftsbonus (Windmühle je
 // Farm, Schmelzhütte je Mine, Markt je Gebäude) – nur eigene Nachbarfelder.
 export function improvementIncome(state, owner, type, q, r) {
-  const def = IMPROVEMENTS[type];
+  const def = own(IMPROVEMENTS, type);
   if (!def) return 0;
   let s = def.pop;
   if (def.adjacent) {
@@ -320,7 +315,7 @@ export function improvementIncome(state, owner, type, q, r) {
     for (const [nq, nr] of neighbors(q, r)) {
       const imp = improvementAt(state, nq, nr);
       if (!imp || !ownLand(state, owner, nq, nr)) continue;
-      const each = def.adjacent[imp] ?? (def.adjacent['*'] && imp !== type && !IMPROVEMENTS[imp].monument ? def.adjacent['*'] : 0);
+      const each = def.adjacent[imp] ?? (def.adjacent['*'] && imp !== type && own(IMPROVEMENTS, imp) && !IMPROVEMENTS[imp].monument ? def.adjacent['*'] : 0);
       n += each;
     }
     // Schmelzhütte: auch ein Berg ohne Mine daneben bringt etwas.
@@ -336,22 +331,14 @@ export function improvementIncome(state, owner, type, q, r) {
   return s;
 }
 
+// Einkommen einer Stadt: Bevölkerung + Ertrag ihrer Felder (Rohstoffe und
+// Gebäude, siehe tileYield) + Belohnungen und Stammes-Fähigkeiten.
 export function cityIncome(state, city) {
   let s = city.pop;
-  for (const [nq, nr] of cityTiles(state, city)) {
-    const res = resourceAt(state, nq, nr);
-    if (res) s += 1 + (res === 'fish' && city.owner ? techBonus(state, city.owner, 'fishBonus') : 0);
-    else {
-      const imp = improvementAt(state, nq, nr);
-      if (imp && own(IMPROVEMENTS, imp)) s += improvementIncome(state, city.owner, imp, nq, nr);
-    }
-  }
+  for (const [q, r] of cityTiles(state, city)) s += tileYield(state, city, q, r);
   if (hasReward(city, 'workshop')) s += 1;
   if (hasReward(city, 'park')) s += 2;
   const perk = city.owner ? perkOf(state, city.owner) : null;
-  if (perk === 'harvest') {
-    s += cityTiles(state, city).filter(([q, r]) => improvementAt(state, q, r) === 'farm').length;
-  }
   if (perk === 'splendor' && city.isCapital) s += 2;
   if (perk === 'legion' && city.isCapital) s += 1;
   return s;
@@ -430,15 +417,16 @@ function hasTech(state, owner, tech) {
   return !!tech && !!state.techs[owner] && state.techs[owner].includes(tech);
 }
 
-// q/r sind optional: Nur mit Koordinaten werden Brücken berücksichtigt.
 export function isAir(type) {
   return hasAbility(type, 'air');
 }
 
+// q/r sind optional: Nur mit Koordinaten zählen Brücken, Häfen und Städte.
 export function canEnter(state, unit, tile, q, r) {
   const t = TERRAIN[tile];
   if (!t) return false;
-  // Luft-Einheiten fliegen überall hin, nur nicht in fremde Städte.
+  // Luft-Einheiten fliegen überall hin, nur nicht in fremde Städte; dorthin
+  // dürfen auch Händlerkarren nicht (Handel geht von außen).
   if (isAir(unit.type) || hasAbility(unit.type, 'trade')) {
     const c = q != null ? cityAt(state, q, r) : null;
     if (c && c.owner !== unit.owner) return false;
@@ -709,16 +697,22 @@ export function isVisible(state, player, q, r) {
   for (const c of state.cities) {
     if (c.owner === player && hexDistance(c.q, c.r, q, r) <= VISION.city) return true;
   }
+  // Wachtürme wie in visibleKeys: sonst wäre ein Feld nebelfrei, der Gegner
+  // darauf aber unsichtbar und nicht angreifbar. Nur die nahen Felder prüfen.
+  for (let nr = r - MAX_IMP_SIGHT; nr <= r + MAX_IMP_SIGHT; nr++) {
+    for (let nq = q - MAX_IMP_SIGHT; nq <= q + MAX_IMP_SIGHT; nq++) {
+      const imp = improvementAt(state, nq, nr);
+      const sight = imp && own(IMPROVEMENTS, imp) && IMPROVEMENTS[imp].sight;
+      if (sight && hexDistance(nq, nr, q, r) <= sight && ownLand(state, player, nq, nr)) return true;
+    }
+  }
   return false;
 }
+const MAX_IMP_SIGHT = Math.max(0, ...Object.values(IMPROVEMENTS).map(d => d.sight || 0));
 
 // Spieler, der keine Städte mehr hat (z. B. Mensch im KI-Modus besiegt).
 export function isEliminated(state, player) {
   return players(state).includes(player) && !alive(state, player);
-}
-
-export function canAct(state, player) {
-  return !state.winner && state.turn === player;
 }
 
 // Steht eine feindliche Einheit so nah, dass sie diese Einheit angreifen könnte?
@@ -755,13 +749,11 @@ export function startTurn(state) {
 
   for (const u of state.units) {
     if (u.owner !== p || !canRegenerate(state, u)) continue;
-    const cap = hpCap(u);
-    if (u.hp >= cap) continue;
     const city = cityAt(state, u.q, u.r);
     const home = city || tileCity(state, u.q, u.r);
     const cloister = home && home.owner === p && cityTiles(state, home).some(([q, r]) => improvementAt(state, q, r) === 'monastery') ? 2 : 0;
     const amt = (city && city.owner === p ? 4 : 2) + spirit + cloister;
-    u.hp = Math.min(cap, u.hp + amt);
+    u.hp = Math.min(hpCap(u), u.hp + amt);
   }
   for (const u of state.units) {
     if (u.owner !== p || !hasAbility(u.type, 'heal') || u.acted || u.hasMoved) continue;
@@ -1344,7 +1336,8 @@ export function improve(state, city, type, q, r, player) {
   if (def.monument) {
     if (!state.improvements) state.improvements = {};
     state.improvements[hk(q, r)] = type;
-    state.monumentsBuilt[player].push(type);
+    if (!state.monumentsBuilt) state.monumentsBuilt = {};
+    (state.monumentsBuilt[player] || (state.monumentsBuilt[player] = [])).push(type);
     growCity(state, city, MONUMENT_POP);
     return { ok: true };
   }
@@ -1366,17 +1359,11 @@ export function attackPreview(state, attacker) {
 
 // --- Brücken ----------------------------------------------------------------
 
-// Achse einer Brücke (0–2): verbindet die Nachbarn in Richtung DIRS[a] und
-// DIRS[a + 3].
+// Gespeichert wird je Brückenfeld die Achse (0–2): Die Brücke verbindet die
+// Nachbarn in Richtung DIRS[a] und DIRS[a + 3].
 function bridgeable(state, q, r) {
   return terrainAt(state, q, r) === 'water' && !bridgeAt(state, q, r) &&
     !unitAt(state, q, r) && !cityAt(state, q, r) && !improvementAt(state, q, r);
-}
-
-function landAt(state, q, r) {
-  if (!inBounds(q, r)) return false;
-  const t = TERRAIN[terrainAt(state, q, r)];
-  return t.walkable || bridgeAt(state, q, r);
 }
 
 // Mögliche Brücken für eine Landeinheit: in jeder Richtung 1 oder 2 Felder
@@ -1391,7 +1378,8 @@ export function bridgeOptions(state, unit) {
       if (!inBounds(q, r) || !bridgeable(state, q, r)) break;
       tiles.push([q, r]);
       const eq = q + dq, er = r + dr;
-      if (landAt(state, eq, er) && terrainAt(state, eq, er) !== 'water' && terrainAt(state, eq, er) !== 'ocean') {
+      // Brücken stehen nur auf Wasser, also zählt hier nur echtes Land.
+      if (inBounds(eq, er) && TERRAIN[terrainAt(state, eq, er)].walkable) {
         out.push({ dir, tiles: tiles.slice(), cost: tiles.length * BRIDGE.costPerTile });
         break;
       }
@@ -1466,9 +1454,6 @@ export function disbandUnit(state, unit, player) {
   return { ok: true, refund };
 }
 
-// --- Bereite Einheiten (Tipps) ---------------------------------------------
-
-// Was eine Einheit in diesem Zug noch sinnvoll tun kann (leer = nichts).
 // --- Lastenballon ----------------------------------------------------------------
 // Nimmt eine benachbarte eigene Landeinheit auf (sie verschwindet von der Karte)
 // und setzt sie später auf ein freies Nachbarfeld ab. Fällt der Ballon, ist
@@ -1547,6 +1532,9 @@ export function upgradeUnit(state, unit, player) {
   return { ok: true, to: opt.to, cost: opt.cost };
 }
 
+// --- Bereite Einheiten (Tipps) ---------------------------------------------
+
+// Was eine Einheit in diesem Zug noch sinnvoll tun kann (leer = nichts).
 export function unitOptions(state, unit) {
   if (unit.acted && unit.mp <= 0) return [];
   const out = [];
@@ -1778,7 +1766,7 @@ function placeBridges(state, rand, channel, sq, sr) {
   // Erreichbares Land (ohne Brückenfelder selbst) darf nicht schrumpfen.
   const landReach = () => {
     let n = 0;
-    for (const k of floodReachable(state, sq, sr)) if (!state.bridges[k] && state.bridges[k] !== 0) n++;
+    for (const k of floodReachable(state, sq, sr)) if (state.bridges[k] == null) n++;
     return n;
   };
   const want = landReach();
@@ -2027,15 +2015,6 @@ export function createGame(seed = Date.now(), playerCount = 4, opts = null) {
   return state;
 }
 
-export function stateSummary(state, player) {
-  return {
-    cities: citiesFor(state, player).length,
-    units: state.units.filter(u => u.owner === player).length,
-    stars: state.stars[player],
-    techs: state.techs[player].length
-  };
-}
-
 // --- Stadtstufen & Belohnungen ----------------------------------------------
 
 // Bevölkerung erhöhen; jede neu erreichte Stufe (2–5) wartet auf eine
@@ -2182,9 +2161,9 @@ export function claimRuin(state, unit, forced = null) {
     else reward = 'stars';
   }
   if (reward === 'pop') {
-    const own = citiesFor(state, p).filter(c => c.pop < MAX_POP)
+    const mine = citiesFor(state, p).filter(c => c.pop < MAX_POP)
       .sort((a, b) => hexDistance(unit.q, unit.r, a.q, a.r) - hexDistance(unit.q, unit.r, b.q, b.r));
-    if (own.length) { growCity(state, own[0], 1); text = '+1 Bevölkerung in der nächsten Stadt'; }
+    if (mine.length) { growCity(state, mine[0], 1); text = '+1 Bevölkerung in der nächsten Stadt'; }
     else reward = 'stars';
   }
   if (reward === 'reveal') {
@@ -2500,20 +2479,52 @@ export function recordFrame(state) {
   lastFrameBase.set(state, { before: prev, now: { imps: { ...imps }, roads: { ...roads } } });
   if (replacing) state.replay[state.replay.length - 1] = frame;
   else state.replay.push(frame);
-  // Obergrenze: sehr lange Partien behalten jede zweite frühe Runde.
-  if (state.replay.length > 150) state.replay = state.replay.filter((f, i) => i % 2 === 0 || i > state.replay.length - 50);
+  // Obergrenze: sehr lange Partien behalten jede zweite frühe Runde. Die
+  // Gebäude- und Wegänderungen eines entfallenden Schnappschusses gehen in den
+  // nächsten über, sonst fehlten sie beim Nachbauen (replayState).
+  const n = state.replay.length;
+  if (n > 150) {
+    const kept = [];
+    for (let i = 0; i < n; i++) {
+      if (i % 2 === 0 || i > n - 50) kept.push(state.replay[i]);
+      else state.replay[i + 1] = mergeFrameChanges(state.replay[i], state.replay[i + 1]);
+    }
+    state.replay = kept;
+  }
+}
+
+// Änderungen zweier aufeinanderfolgender Schnappschüsse zu einer zusammenfassen
+// (Felder und Einheiten gelten vom späteren).
+function mergeFrameChanges(a, b) {
+  if (b.full) return b;
+  const { i: _i, x: _x, w: _w, y: _y, ...out } = b;
+  if (a.full) out.full = 1;
+  const bGone = new Set(b.x || []), bRoadGone = new Set(b.y || []);
+  const imps = {};
+  for (const [k, v] of Object.entries(a.i || {})) if (!bGone.has(k)) imps[k] = v;
+  Object.assign(imps, b.i || {});
+  const gone = [...new Set([...(a.x || []), ...(b.x || [])])].filter(k => !Object.hasOwn(imps, k));
+  const roads = [...new Set([...(a.w || []).filter(k => !bRoadGone.has(k)), ...(b.w || [])])];
+  const roadSet = new Set(roads);
+  const roadGone = [...new Set([...(a.y || []), ...(b.y || [])])].filter(k => !roadSet.has(k));
+  if (Object.keys(imps).length) out.i = imps;
+  if (gone.length) out.x = gone;
+  if (roads.length) out.w = roads;
+  if (roadGone.length) out.y = roadGone;
+  return out;
 }
 
 // Spielstand für Schnappschuss i nachbauen (Gelände, Brücken usw. vom aktuellen
 // Stand; Städte, Einheiten, Gebäude und Wege aus der Wiederholung).
 export function replayState(state, index) {
   const frames = state.replay || [];
-  const f = frames[Math.max(0, Math.min(frames.length - 1, index))];
+  const fi = Math.max(0, Math.min(frames.length - 1, index));
+  const f = frames[fi];
   if (!f) return state;
   const pl = players(state);
   const owner = i => (Number.isInteger(i) && i >= 0 && pl[i]) || null;
   const imps = {}, roads = {};
-  for (let k = 0; k <= frames.indexOf(f); k++) {
+  for (let k = 0; k <= fi; k++) {
     const fr = frames[k];
     if (fr.full) { for (const key of Object.keys(imps)) delete imps[key]; for (const key of Object.keys(roads)) delete roads[key]; }
     Object.assign(imps, fr.i || {});

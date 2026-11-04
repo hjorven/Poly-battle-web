@@ -101,7 +101,7 @@ function drawChart(ctx, state, box) {
 }
 
 // Zeichnet das Bild; `me` = eigener Stamm (oder null), `headline` z. B. „Sieg!“.
-export function drawShareImage(state, me, headline, mapImage = null) {
+function drawShareImage(state, me, headline, mapImage = null) {
   // Doppelte Auflösung, damit Städte und Straßen beim Heranzoomen scharf bleiben.
   const canvas = document.createElement('canvas');
   canvas.width = W * 2; canvas.height = H * 2;

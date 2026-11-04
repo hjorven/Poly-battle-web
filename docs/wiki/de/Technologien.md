@@ -27,7 +27,7 @@ Der Forschungsbaum hat 45 Technologien in fünf Stufen. Die Kosten steigen mit d
 | 1 | **Klettern** | – | Einheiten können Berge betreten |
 | 2 | **Bergbau** | Klettern | Minen bauen (+1 Einkommen) |
 | 3 | **Schmiedekunst** | Bergbau | Schwertkämpfer ausbilden |
-| 4 | **Verhüttung** | Schmiedekunst | Schmelzhütte: +2 Sterne je angrenzender Mine |
+| 4 | **Verhüttung** | Schmiedekunst | Schmelzhütte: +2 Sterne je angrenzender Mine, +1 je Berg ohne Mine |
 | 5 | **Stahl** | Verhüttung | Krieger, Verteidiger, Pikeniere und Schwertkämpfer +1 Angriff |
 | 2 | **Meditation** | Klettern | Tempel bauen |
 | 3 | **Philosophie** | Meditation | Gedankenbeuger; Forschung -20 % |

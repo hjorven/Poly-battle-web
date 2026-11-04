@@ -5,6 +5,8 @@ import * as R from './rules.js';
 
 const ME = 'player_1';
 const mine = st => st.cities.filter(c => c.owner === ME);
+// Fremde Hauptstädte: alle Hauptstädte in deiner Hand außer der eigenen Start-Hauptstadt.
+const foreignCapitals = st => mine(st).filter(c => c.isCapital && !(st.home && c.q === st.home.q && c.r === st.home.r)).length;
 
 export const MISSIONS = [
   {
@@ -55,8 +57,7 @@ export const MISSIONS = [
     story: 'Die Hauptstadt des Feindes ist sein Stolz. Nimm sie ihm.',
     goal: 'Erobere eine gegnerische Hauptstadt.',
     setup: { mapSize: 'small', mapType: 'continents', count: 2, aiLevel: 'normal', tribe: 'oumaji' },
-    // Fremde Hauptstädte: alle Hauptstädte in deiner Hand außer der eigenen Start-Hauptstadt.
-    progress: st => [mine(st).filter(c => c.isCapital && !(st.home && c.q === st.home.q && c.r === st.home.r)).length, 1], par: [20, 14]
+    progress: st => [foreignCapitals(st), 1], par: [20, 14]
   },
   {
     id: 'm8', title: 'Gelehrte',
@@ -102,7 +103,7 @@ export const MISSIONS = [
       const spot = home && R.freeLandAround(st, home.q, home.r);
       if (spot) st.units.push({ id: 'm12_ram', owner: ME, type: 'ram', q: spot[0], r: spot[1], hp: R.maxHp('ram'), mp: 1, hasMoved: false, acted: false });
     },
-    progress: st => [mine(st).filter(c => c.isCapital && !(st.home && c.q === st.home.q && c.r === st.home.r)).length, 1], par: [22, 15]
+    progress: st => [foreignCapitals(st), 1], par: [22, 15]
   },
   {
     id: 'm13', title: 'Wacht an der Grenze',
