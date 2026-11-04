@@ -78,8 +78,9 @@ function clearTile(st, q, r) {
 // (fremde Dörfer, Ruinen) in Sichtweite, Plätze A1–A3 in einer Richtung.
 function baseSetup(st) {
   const c = home(st);
-  const d = DIRS[roomyDir(c)];
-  const side = DIRS[(roomyDir(c) + 1) % 6];
+  const dir = roomyDir(c);
+  const d = DIRS[dir];
+  const side = DIRS[(dir + 1) % 6];
   const A = k => [c.q + d[0] * k, c.r + d[1] * k];
   const B1 = [c.q + side[0], c.r + side[1]];
   // Alles in Sichtweite außer der eigenen Hauptstadt aufräumen.

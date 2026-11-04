@@ -120,7 +120,6 @@ function refresh() {
   AP.update();
 }
 
-// Bedrohte Städte rot markieren und einmal pro Zug darauf hinweisen.
 // Zugbeginn: Einkommen über der Hauptstadt zeigen, Schonfrist ankündigen.
 function turnStartFeedback() {
   if (!myTurn() || app.state.winner) return;
@@ -268,12 +267,14 @@ function announceMonuments() {
   }
 }
 
+// Bedrohte Städte rot markieren und einmal pro Zug darauf hinweisen.
 function warnThreats() {
   const mine = myTurn() && !app.state.winner;
   const threats = mine ? R.threatenedCities(app.state, actAs()) : [];
   render.setThreatMarkers(threats);
   if (!threats.length) return;
-  const key = `${app.state.round}:${actAs()}`;
+  // Mit app.gen: sonst bliebe die Warnung in Runde 1 einer neuen Partie aus.
+  const key = `${app.gen}:${app.state.round}:${actAs()}`;
   if (app.threatWarned === key) return;
   app.threatWarned = key;
   ui.toast(threats.length === 1
@@ -366,7 +367,8 @@ function checkWinnerUI() {
     const me = app.mode === 'online' ? app.myRole : 'player_1';
     sfx(app.state.winner && (app.mode === 'hotseat' || app.state.winner === me) ? 'win' : 'lose');
   }
-  if (app.state.winner) { clearSave(); ui.showWinner(app.state, ctx()); recordProfile(); }
+  // Online-Partien liegen nicht im lokalen Spielstand: den einer lokalen Partie behalten.
+  if (app.state.winner) { if (!app.online) clearSave(); ui.showWinner(app.state, ctx()); recordProfile(); }
   else if (humanDefeated()) {
     clearSave();
     // Mission, Herausforderung und Lektion starten beim Wiederholen sich selbst neu, nicht leichter.
@@ -462,8 +464,17 @@ async function submitScore(claim, retry = false) {
   else if (res.error) ui.toast('Bestenliste: ' + res.error, 'warn');
 }
 
+// Nur ein Durchlauf zugleich (Seitenstart und „online“ können sich überschneiden),
+// sonst ginge dasselbe Ergebnis doppelt an den Server.
+let retryingScores = false;
 async function retryScores() {
-  for (const claim of scoreOutbox()) await submitScore(claim, true);
+  if (retryingScores || !scoreOutbox().length) return;
+  retryingScores = true;
+  try {
+    for (const claim of scoreOutbox()) await submitScore(claim, true);
+  } finally {
+    retryingScores = false;
+  }
 }
 
 function chooseName() {
@@ -590,20 +601,20 @@ async function saveOnline() {
   // Server hat den Zug abgelehnt: auf den gültigen Stand der Datenbank zurück.
   // Rechnete dieses Gerät gerade KIs, hat das inzwischen ein Mitspieler
   // übernommen: aufhören, sonst rechnen zwei Geräte dieselben Züge.
-  if (rejected) {
-    if (app.botDriver) {
-      app.botRun = (app.botRun || 0) + 1;
-      app.botDriver = false;
-      app.busy = false;
-    }
-    const { match } = await net.fetchMatch(app.gameId);
-    if (match && validState(match.game_state)) {
-      app.lastMoveAt = match.last_move_at || app.lastMoveAt;
-      adopt(match.game_state);
-      app.sel = null;
-      render.syncBoard(app.state, viewer());
-      refresh();
-    }
+  if (app.botDriver) {
+    app.botRun = (app.botRun || 0) + 1;
+    app.botDriver = false;
+    app.busy = false;
+  }
+  const { match } = await net.fetchMatch(app.gameId);
+  // Inzwischen eine andere Partie geöffnet: deren Stand nicht überschreiben.
+  if (app.gen !== gen) return;
+  if (match && validState(match.game_state)) {
+    app.lastMoveAt = match.last_move_at || app.lastMoveAt;
+    adopt(match.game_state);
+    app.sel = null;
+    render.syncBoard(app.state, viewer());
+    refresh();
   }
 }
 
@@ -683,6 +694,8 @@ function doOfferPeace(to) {
 function doDeclareWar(to) {
   if (!myTurn()) return;
   ui.showConfirm(`${needName(app.state, to)} den Krieg erklären? Ein neuer Frieden ist frühestens in 3 Runden möglich.`, () => {
+    // Der Dialog kann offen bleiben, während ein Online-Update den Zug beendet.
+    if (!myTurn()) return;
     const res = R.declareWar(app.state, actAs(), to);
     if (!res.ok) { ui.toast(res.reason, 'warn'); return; }
     L.logAction(app.state, L.entry.war(to));
@@ -718,6 +731,17 @@ function offerDiplomacy() {
 
 function actAs() {
   return ctx().actAs;
+}
+
+function showLastReport() {
+  if (app.lastReport) ui.showNews(app.lastReport);
+  else ui.toast('Noch kein Rundenbericht in diesem Spiel');
+}
+
+function toggleDetails() {
+  if (!app.sel || app.sel.kind !== 'unit') return;
+  app.panelOpen = !app.panelOpen;
+  refresh();
 }
 
 // Übersicht immer mit dem Knopf für den letzten Rundenbericht, wenn es einen gibt.
@@ -1020,7 +1044,7 @@ async function doEndTurn() {
   if (!myTurn()) return;
   const idle = R.idleUnits(app.state, actAs());
   if (app.mode !== 'hotseat' && idle.length) {
-    ui.showConfirm(`Noch bereit: ${ui.describeUnits(idle)}. Zug trotzdem beenden?`, doEndTurnNow);
+    ui.showConfirm(`Noch bereit: ${ui.describeUnits(idle)}. Zug trotzdem beenden?`, () => { if (myTurn()) doEndTurnNow(); });
     return;
   }
   await doEndTurnNow();
@@ -1633,8 +1657,11 @@ async function runCoachStep(step) {
   const unit = u => R.findUnit(st, u.id);
   const city = c => R.cityAt(st, c.q, c.r);
   switch (step.kind) {
-    case 'attack': return doAttack(unit(step.attacker), unit(step.defender));
-    case 'move': return doMove(unit(step.unit), step.q, step.r);
+    case 'attack': {
+      const a = unit(step.attacker), d = unit(step.defender);
+      return a && d ? doAttack(a, d) : undefined;
+    }
+    case 'move': { const u = unit(step.unit); return u ? doMove(u, step.q, step.r) : undefined; }
     case 'train': return doTrain(city(step.city), step.type);
     case 'buyPop': return doBuyPop(city(step.city));
     case 'improve': return doImprove(city(step.city), step.type, step.q, step.r);
@@ -1702,8 +1729,11 @@ function resetLocal(mode) {
   app.myRole = null;
   app.hasOpponent = true;
   app.sel = null;
+  app.pending = null;
   app.busy = false;
   app.idleWarned = null;
+  // Der Rundenbericht gehört zur vorigen Partie.
+  app.lastReport = null;
 }
 
 function startLocal(mode, override = null) {
@@ -1749,15 +1779,7 @@ function focusHome() {
 function continueGame() {
   const data = loadGame();
   if (!data) { ui.setContinue(null); ui.toast('Kein Spielstand gefunden', 'warn'); return; }
-  app.gen++;
-  app.mode = data.mode;
-  app.online = false;
-  app.gameId = null;
-  app.myRole = null;
-  app.hasOpponent = true;
-  app.sel = null;
-  app.busy = false;
-  app.idleWarned = null;
+  resetLocal(data.mode);
   adopt(data.state);
   if (app.mode === 'hotseat') {
     enterLocal();
@@ -1773,16 +1795,7 @@ function continueGame() {
 
 // Admin-Panel: geladenen Spielstand als lokale Partie fortsetzen.
 function adminLoad(state) {
-  app.gen++;
-  app.mode = state.ai && state.ai.length ? 'bot' : 'hotseat';
-  app.online = false;
-  app.gameId = null;
-  app.myRole = null;
-  app.hasOpponent = true;
-  app.sel = null;
-  app.busy = false;
-  app.idleWarned = null;
-  app.lastReport = null;
+  resetLocal(state.ai && state.ai.length ? 'bot' : 'hotseat');
   adopt(state);
   enterLocal();
   persist();
@@ -1797,11 +1810,15 @@ async function startOnline() {
   // nach jedem await prüfen, ob dieser Aufruf noch der aktuelle ist.
   const gen = ++app.gen;
   const stale = () => app.gen !== gen;
+  // Kanal und Zeitgeber der vorigen Partie sofort beenden: sonst prüfte
+  // watchStalledAi während des Wartens noch den alten Stand.
+  leaveOnline();
   app.mode = 'online';
   app.online = true;
   app.sel = null;
+  app.pending = null;
   app.busy = false;
-  app.botDriver = false;
+  app.lastReport = null;
   const hashId = location.hash.slice(1);
 
   if (hashId) {
@@ -1851,10 +1868,6 @@ async function startOnline() {
   }
   document.getElementById('copyLinkBtn').classList.remove('hidden');
 
-  if (app.channel) {
-    try { net.unsubscribe(app.channel); } catch (e) { /* ignore */ }
-    app.channel = null;
-  }
   app.channel = net.subscribe(app.gameId, match => {
     if (!app.online || app.gen !== gen) return;
     if (match.last_move_at) app.lastMoveAt = match.last_move_at;
@@ -1876,7 +1889,6 @@ async function startOnline() {
     refresh();
     watchStalledAi();
   });
-  clearInterval(app.stallTimer);
   app.stallTimer = setInterval(watchStalledAi, 20000);
 }
 
@@ -1933,7 +1945,9 @@ function announceHanded(before, after) {
 
 // Stamm an die KI geben (Aufgeben, freier Platz, Abwesender).
 async function handToAi(role) {
+  const gen = app.gen;
   const res = await net.handToAi(app.gameId, role);
+  if (app.gen !== gen) return;
   if (res.error) { ui.toast(res.error, 'warn'); return; }
   const st = res.match.game_state;
   if (!validState(st)) return;
@@ -1979,7 +1993,10 @@ async function loadMyMatches() {
   // Nie online gespielt: nichts fragen (kein Aufruf beim Seitenaufruf).
   if (!net.playedOnline()) { ui.renderMyMatches([]); return; }
   ui.renderMyMatches(null);
+  // Menü schnell mehrmals geöffnet: nur die letzte Antwort zeigen.
+  const ask = app.matchesAsk = (app.matchesAsk || 0) + 1;
   const res = await net.myMatches();
+  if (ask !== app.matchesAsk) return;
   if (res.error || !Array.isArray(res.data)) { ui.renderMyMatches([]); return; }
   ui.renderMyMatches(res.data.map(m => ({
     ...m,
@@ -2089,7 +2106,7 @@ function boot() {
     onNextIdle: nextIdle,
     onSelectCity: (q, r) => { app.sel = { kind: 'city', q, r }; sfx('select'); refresh(); },
     onSelectUnit: id => { if (R.findUnit(app.state, id)) { selectUnit(id, true); sfx('select'); refresh(); } },
-    onUnitDetails: () => { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = !app.panelOpen; refresh(); } },
+    onUnitDetails: toggleDetails,
     onCamera: cmd => {
       if (cmd === 'rotL') render.rotateCamera(-1);
       else if (cmd === 'rotR') render.rotateCamera(1);
@@ -2103,9 +2120,9 @@ function boot() {
       else if (key === 'end') { if (myTurn()) doEndTurn(); }
       else if (key === 'tech') ui.openTech(app.state, ctx());
       else if (key === 'overview') ui.showOverview(app.state, overviewCtx());
-      else if (key === 'details') { if (app.sel && app.sel.kind === 'unit') { app.panelOpen = !app.panelOpen; refresh(); } }
+      else if (key === 'details') toggleDetails();
       else if (key === 'home') focusHome();
-      else if (key === 'report') { if (app.lastReport) ui.showNews(app.lastReport); else ui.toast('Noch kein Rundenbericht in diesem Spiel'); }
+      else if (key === 'report') showLastReport();
       else if (key === 'sound') { setMuted(!isMuted()); ui.setSoundIcon(isMuted()); }
       else if (key === 'deselect') { app.sel = null; refresh(); }
       else if (key === 'panL') render.panCamera(-1, 0);
@@ -2221,13 +2238,12 @@ function boot() {
       // Leichter: erst die Stufe senken, dann einen Gegner weniger.
       if (easier) { if (aiLevel !== 'easy') aiLevel = levels[levels.indexOf(aiLevel) - 1]; else count = Math.max(2, count - 1); }
       startLocal('bot', { count, aiLevel, tribe: st.tribes && st.tribes.player_1, mapSize: st.mapSize, mapType: st.mapType, turnLimit: st.turnLimit });
-      if (easier) ui.toast(`Neues Spiel: ${AI_LEVELS[aiLevel].label}, ${count - 1} ${count === 2 ? 'Gegner' : 'Gegner'}`, 'good');
+      if (easier) ui.toast(`Neues Spiel: ${AI_LEVELS[aiLevel].label}, ${count - 1} Gegner`, 'good');
     },
     onContinue: continueGame,
     onMode: mode => mode === 'online' ? startOnline() : mode === 'tutorial' ? ui.showLearn(T.LESSONS, T.doneLessons()) : mode === 'daily' ? startDaily() : mode === 'weekly' ? startWeekly() : mode.startsWith('mission:') ? startMission(mode.slice(8)) : startLocal(mode),
     onTutor,
     onLesson: startLesson,
-    onCopyLink: copyLink,
     onOnlineAction,
     onOpenMatch: openMatch
   });
@@ -2250,7 +2266,7 @@ function boot() {
     validState,
     loadState: adminLoad,
     offerReward,
-    showReport: () => { if (app.lastReport) ui.showNews(app.lastReport); else ui.toast('Noch kein Rundenbericht in diesem Spiel'); },
+    showReport: showLastReport,
     askCode: onSave => ui.askName('', onSave, { title: 'Admin-Code', max: 40, ok: 'Freischalten', text: 'Nur für den Entwickler: Code eingeben, um das Admin-/Kreativ-Panel freizuschalten.' }),
     profileChanged: () => { if (!document.getElementById('menu-overlay').classList.contains('hidden')) showMenu(); },
     setPicking: on => document.body.classList.toggle('adm-picking', on)
@@ -2271,8 +2287,8 @@ function boot() {
   });
 
   // Ohne Verbindung beendete Bestenlisten-Partien nachreichen.
-  if (scoreOutbox().length) retryScores();
-  window.addEventListener('online', () => { if (scoreOutbox().length) retryScores(); });
+  retryScores();
+  window.addEventListener('online', retryScores);
 
   window.__pb = { app, notifyTurn, project: render.project, R, botStep, sync: () => { render.syncBoard(app.state, viewer()); refresh(); }, cam: render.debugCamera, tutor: () => tutor.last };
 }
