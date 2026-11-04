@@ -10,7 +10,7 @@ import * as R from './rules.js';
 import { botStep, applyStep } from './ai.js';
 import * as P from './profile.js';
 
-export const HUMAN = 'player_1';
+const HUMAN = 'player_1';
 const pos = o => [o.q, o.r];
 
 // Neue Herausforderungspartie, genau so, wie das Spiel sie startet.

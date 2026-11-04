@@ -13,7 +13,7 @@ function getClient() {
 // Geheime Spieler-Kennung dieses Browsers. Die Datenbank speichert nur
 // ihren SHA-256-Hash; geschrieben wird ausschließlich über die Funktionen
 // create_match / join_match / save_match (siehe supabase/migrations).
-export function getToken() {
+function getToken() {
   try {
     let t = localStorage.getItem('pb_token');
     if (!t || t.length < 16) { t = crypto.randomUUID(); localStorage.setItem('pb_token', t); }
@@ -50,7 +50,7 @@ export function playedOnline() {
 // Zeitgrenze für Serveranfragen: Hängt die Verbindung, kommt nach dieser Zeit
 // „Keine Verbindung zum Server.“ statt endlosem Warten. Spielstände sind größer
 // und werden auf dem Server geprüft, dafür gibt es etwas mehr Zeit.
-export const RPC_TIMEOUT = 10000;
+const RPC_TIMEOUT = 10000;
 const SAVE_TIMEOUT = 20000;
 const OFFLINE = 'Keine Verbindung zum Server.';
 
@@ -79,8 +79,12 @@ async function callRpc(sb, fn, args, ms = RPC_TIMEOUT) {
 
 const isNetErr = error => !!error && /Failed to fetch|NetworkError|Load failed|network|abort/i.test(error.message || '');
 
+// Ältere Antworten liefern den Stand als Text. Unlesbarer Text wird zu null,
+// dann lehnt validState den Stand ab, statt dass die Partie abstürzt.
 function parseState(match) {
-  if (match && typeof match.game_state === 'string') match.game_state = JSON.parse(match.game_state);
+  if (match && typeof match.game_state === 'string') {
+    try { match.game_state = JSON.parse(match.game_state); } catch (e) { match.game_state = null; }
+  }
   return match;
 }
 
@@ -93,8 +97,8 @@ export async function createMatch(state, adminKey = null) {
   if (!sb) return { error: 'Multiplayer-Bibliothek nicht geladen.' };
   const { data, error } = await callRpc(sb, 'create_match', { p_state: state, p_token: getToken(), ...adminArg(adminKey) }, SAVE_TIMEOUT);
   if (isNetErr(error)) return { error: 'Spiel konnte nicht erstellt werden: ' + OFFLINE };
-  if (!error && data) markOnline();
   if (error || !data) return { error: 'Spiel konnte nicht erstellt werden: ' + (error ? error.message : 'keine Antwort') };
+  markOnline();
   return { match: parseState(data) };
 }
 
@@ -119,7 +123,7 @@ export async function fetchMatch(gameId) {
     if (error || !data || !data.match) return { error: 'Spiel nicht gefunden.' };
     return { match: parseState(data.match), role: data.role || null };
   } catch (e) {
-    return { error: 'Keine Verbindung zum Server.' };
+    return { error: OFFLINE };
   }
 }
 
@@ -132,13 +136,19 @@ export async function fetchMatch(gameId) {
 export function subscribe(gameId, onUpdate) {
   const sb = getClient();
   if (!sb) return null;
-  let busy = false;
+  let busy = false, again = false;
   const pull = async () => {
-    if (busy) return;
+    if (channel.pbClosed) return;
+    // Klingelt es während einer Abfrage, hat die laufende den neuen Zug
+    // vielleicht noch nicht gesehen: danach gleich noch einmal fragen.
+    if (busy) { again = true; return; }
     busy = true;
     try {
-      const { match, role } = await fetchMatch(gameId);
-      if (match) onUpdate(match, role);
+      do {
+        again = false;
+        const { match, role } = await fetchMatch(gameId);
+        if (match && !channel.pbClosed) onUpdate(match, role);
+      } while (again && !channel.pbClosed);
     } finally {
       busy = false;
     }
@@ -147,7 +157,8 @@ export function subscribe(gameId, onUpdate) {
     .on('broadcast', { event: 'moved' }, () => pull())
     .subscribe(status => {
       if (status === 'SUBSCRIBED') pull();
-      else if (priv && status === 'CHANNEL_ERROR' && !channel.pbAlt) {
+      // Nach unsubscribe keinen Ersatzkanal mehr öffnen (bliebe sonst offen).
+      else if (priv && status === 'CHANNEL_ERROR' && !channel.pbAlt && !channel.pbClosed) {
         // Gleiches Thema zweimal stört sich: den privaten Kanal erst schließen.
         sb.removeChannel(channel);
         channel.pbAlt = listen(false);
@@ -161,6 +172,7 @@ export function subscribe(gameId, onUpdate) {
 export function unsubscribe(channel) {
   const sb = getClient();
   if (!channel) return;
+  channel.pbClosed = true;
   clearInterval(channel.pbPoll);
   if (sb) sb.removeChannel(channel);
   if (sb && channel.pbAlt) sb.removeChannel(channel.pbAlt);
@@ -189,6 +201,7 @@ export async function saveMatch(gameId, state, adminKey = null) {
 export async function handToAi(gameId, role) {
   const res = await rpc('pb_hand_to_ai', { p_id: gameId, p_token: getToken(), p_role: role });
   if (res.error) return res;
+  if (!res.data || !res.data.match) return { error: 'Spiel nicht gefunden.' };
   return { match: parseState(res.data.match), role: res.data.role || null };
 }
 
@@ -221,7 +234,6 @@ async function rpc(fn, args) {
 }
 
 export const claimName = name => rpc('pb_claim_name', { p_token: getToken(), p_name: name });
-export const myRemoteProfile = () => rpc('pb_my_profile', { p_token: getToken() });
 export const saveRemoteProfile = (data, level) => rpc('pb_save_profile', { p_token: getToken(), p_data: data, p_level: level });
 // Mit Zugprotokoll: der Server spielt die Partie nach, erst dann zählt sie.
 export const submitScore = (kind, period, score, tribe, round, actions) =>

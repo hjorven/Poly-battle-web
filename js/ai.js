@@ -26,7 +26,6 @@ function attackScore(state, attacker, defender) {
   return score;
 }
 
-// Kriegsziele: Städte aller Stämme ohne Frieden (auch neutrale).
 // Fremde Stadt, deren Feld der Stamm schon entdeckt hat.
 const knownCity = (state, player, c) => c.owner === player || R.isExplored(state, player, c.q, c.r);
 
@@ -48,6 +47,7 @@ function seenOwner(state, player, c) {
 let stepCtx = { state: null };
 const stepData = state => (stepCtx.state === state ? stepCtx : (stepCtx = { state }));
 
+// Kriegsziele: bekannte Städte aller Stämme ohne Frieden (auch neutrale).
 function targetCities(state, player) {
   const ctx = stepData(state);
   const key = 'targets|' + player;
@@ -155,7 +155,6 @@ function defendStep(state, player) {
   return null;
 }
 
-// Ein Spion pro KI ab Runde 3, solange noch Land unentdeckt ist.
 // Ein Heißluftballon als Späher, sobald ein Ballonplatz steht.
 function balloonTrainStep(state, player) {
   if (state.units.some(u => u.owner === player && u.type === 'balloon')) return null;
@@ -166,6 +165,7 @@ function balloonTrainStep(state, player) {
   return null;
 }
 
+// Ein Spion pro KI ab Runde 3, solange noch Land unentdeckt ist.
 function spyTrainStep(state, player) {
   if (state.round < 3 || state.units.some(u => u.owner === player && u.type === 'spy')) return null;
   const explored = (state.explored && state.explored[player]) || [];
@@ -465,7 +465,7 @@ function healerMove(state, mb) {
   const friends = state.units.filter(u => u.owner === mb.owner && u !== mb && UNITS[u.type].atk > 0);
   const foes = state.units.filter(e => R.hostile(state, mb.owner, e.owner) && e.owner && !R.graceProtects(state, mb.owner, e.owner));
   let best = null;
-  const here = [[mb.q, mb.r, 0], ...[...reach.keys()].map(k => [...k.split(',').map(Number), 1])];
+  const here = [[mb.q, mb.r], ...[...reach.keys()].map(k => k.split(',').map(Number))];
   for (const [q, r] of here) {
     if ((q !== mb.q || r !== mb.r) && R.unitAt(state, q, r)) continue;
     let score = 0;
@@ -811,7 +811,7 @@ function bannerMove(state, b) {
   return mv;
 }
 
-// Waldläufer: Deckungsfeld neben dem Ziel, von dem aus er angreifen kann.
+// Deckungswert der Felder für Waldläufer.
 const COVER = { forest: 3, hills: 2, swamp: 1 };
 
 // Schwere Reiterei: zusammen höchstens dieser Anteil der Landkämpfer.
@@ -821,6 +821,8 @@ function cavalryShare(mine) {
   const army = mine.filter(u => !UNITS[u.type].abilities.includes('water') && UNITS[u.type].atk > 0);
   return army.length < 4 ? 0 : army.filter(u => CAVALRY.includes(u.type)).length / army.length;
 }
+
+// Waldläufer: Deckungsfeld neben dem Ziel, von dem aus er angreifen kann.
 function rangerCover(state, u, target) {
   if (u.hasMoved || u.mp <= 0 || COVER[R.terrainAt(state, u.q, u.r)]) return null;
   let best = null;

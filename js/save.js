@@ -50,8 +50,8 @@ function checkState(st) {
   if (!isInt(W) || !isInt(H) || W < 4 || H < 4 || W > 80 || H > 80 || st.terrain.length !== W * H) return false;
   if (!st.terrain.every(t => own(TERRAIN, t))) return false;
   if (!listOf(st.players, p => typeof p === 'string' && PLAYER_ID.test(p)) || st.players.length < 2 || st.players.length > 9) return false;
-  if (new Set(st.players).size !== st.players.length) return false;
   const P = new Set(st.players);
+  if (P.size !== st.players.length) return false;
   const isPlayer = p => typeof p === 'string' && P.has(p);
   const owner = p => p === null || p === undefined || isPlayer(p);
   if (!isPlayer(st.turn)) return false;

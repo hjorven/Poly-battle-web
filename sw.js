@@ -5,7 +5,7 @@
 
 const CACHE = 'pb-v4';
 const CORE = [
-  './', 'index.html', 'css/style.css',
+  './', 'index.html', 'datenschutz.html', 'css/style.css',
   'js/main.js', 'js/ui.js', 'js/render.js', 'js/rules.js', 'js/ai.js', 'js/config.js', 'js/hex.js',
   'js/net.js', 'js/save.js', 'js/profile.js', 'js/campaign.js', 'js/tutorial.js', 'js/share.js', 'js/sound.js',
   'js/admin.js', 'js/admin-panel.js', 'js/actionlog.js', 'js/names.js',
@@ -29,7 +29,12 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
   event.respondWith(fetch(req).then(res => {
-    if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
+    // Umgeleitete Antworten nicht merken: offline als Seitenaufruf ausgeliefert,
+    // lehnt der Browser sie ab. Voller Speicher darf den Abruf nicht stören.
+    if (res.ok && !res.redirected) {
+      const copy = res.clone();
+      caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+    }
     return res;
   }).catch(() => caches.match(req, { ignoreSearch: true })
     .then(hit => hit || (req.mode === 'navigate' ? caches.match('index.html') : Response.error()))));

@@ -23,7 +23,7 @@ const DIGITS = { '0': 'o', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '9'
 
 // Name zum Vergleich vereinfachen: klein, ohne Trennzeichen, „ph“ als „f“,
 // Ziffern als Buchstaben (die 1 einmal als i, einmal als l).
-export function nameForms(name) {
+function nameForms(name) {
   const base = String(name || '').toLowerCase().replace(/[\s_-]/g, '').replace(/ph/g, 'f');
   const forms = [];
   for (const one of ['i', 'l']) {
