@@ -39,6 +39,9 @@ export function loadProfile(store) {
 // Spiel nie lahmlegen (z. B. riesige Erfahrung, falsche Typen).
 const num = (v, max = 1e7) => (Number.isFinite(v) && v >= 0 ? Math.min(Math.floor(v), max) : 0);
 const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+// Zähler und Bestwerte je Stamm, Tag oder Woche: nur Zahlen behalten, sonst
+// rechnet recordGame mit Text weiter und die Anzeige bekommt fremdes HTML.
+const counts = v => Object.fromEntries(Object.entries(obj(v)).filter(([, x]) => Number.isFinite(x) && x >= 0));
 function sanitize(p) {
   const base = emptyProfile();
   const d = obj(p.daily);
@@ -47,16 +50,16 @@ function sanitize(p) {
     xp: num(p.xp), games: num(p.games), wins: num(p.wins), losses: num(p.losses),
     winStreak: num(p.winStreak), bestWinStreak: num(p.bestWinStreak), bestScore: num(p.bestScore, 1e9),
     fastestWin: Number.isFinite(p.fastestWin) && p.fastestWin > 0 ? p.fastestWin : null,
-    tribeWins: obj(p.tribeWins), achievements: obj(p.achievements),
+    tribeWins: counts(p.tribeWins), achievements: obj(p.achievements),
     totals: Object.fromEntries(['kills', 'captures', 'trained', 'rounds', 'techs'].map(k => [k, num(obj(p.totals)[k], 1e9)])),
-    tribeGames: obj(p.tribeGames),
+    tribeGames: counts(p.tribeGames),
     recent: Array.isArray(p.recent) ? p.recent.filter(x => x && typeof x === 'object').slice(-10) : [],
     seen: Array.isArray(p.seen) ? p.seen.filter(x => typeof x === 'string').slice(-50) : [],
     daily: {
       last: typeof d.last === 'string' ? d.last : null,
-      streak: num(d.streak), bestStreak: num(d.bestStreak), best: obj(d.best)
+      streak: num(d.streak), bestStreak: num(d.bestStreak), best: counts(d.best)
     },
-    weekly: { best: obj(obj(p.weekly).best) },
+    weekly: { best: counts(obj(p.weekly).best) },
     look: Object.fromEntries(Object.entries(obj(p.look)).filter(([k, v]) => typeof v === 'string' && COSMETICS[k] && COSMETICS[k].items[v])),
     campaign: Object.fromEntries(Object.entries(obj(p.campaign)).map(([k, v]) => [k, Math.min(3, num(v))])),
     name: typeof p.name === 'string' && p.name.length <= 16 ? p.name : null
@@ -86,7 +89,8 @@ export function xpFor(level) {
   return 100 * level * (level - 1);
 }
 
-// Direkt berechnet (keine Schleife): größtes n mit 100·n·(n−1) ≤ xp.
+// Direkt berechnet: größtes n mit 100·n·(n−1) ≤ xp; die Schleifen gleichen
+// nur Rundungsfehler der Wurzel aus.
 export function levelOf(xp) {
   const x = Number.isFinite(xp) && xp > 0 ? Math.min(xp, 1e12) : 0;
   let n = Math.max(1, Math.floor((1 + Math.sqrt(1 + x / 25)) / 2));
@@ -346,10 +350,10 @@ export function recordGame(profile, facts) {
   let mission = null;
   if (facts.mission) {
     if (!profile.campaign) profile.campaign = {};
-    const before = profile.campaign[facts.mission] || 0;
-    profile.campaign[facts.mission] = Math.max(before, facts.missionStars || 0);
-    gain += Math.max(0, (facts.missionStars || 0) - before) * 60;
-    mission = { id: facts.mission, stars: facts.missionStars || 0, best: profile.campaign[facts.mission], improved: (facts.missionStars || 0) > before };
+    const prevStars = profile.campaign[facts.mission] || 0;
+    profile.campaign[facts.mission] = Math.max(prevStars, facts.missionStars || 0);
+    gain += Math.max(0, (facts.missionStars || 0) - prevStars) * 60;
+    mission = { id: facts.mission, stars: facts.missionStars || 0, best: profile.campaign[facts.mission], improved: (facts.missionStars || 0) > prevStars };
   }
   let weekly = null;
   if (facts.weekly) {

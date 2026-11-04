@@ -139,7 +139,7 @@ export function initUI(h) {
   document.querySelectorAll('[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => handlers.onMode(btn.dataset.mode));
   });
-  buildTribePicker(h.onTribe || (() => {}));
+  buildTribePicker();
   buildSettings();
 }
 
@@ -369,10 +369,9 @@ export function updateStrip(state, ctx) {
   flag.classList.toggle('hidden', !state.admin);
 }
 
-// Lautsprecher als kleine Vektorgrafik (keine Emojis); durchgestrichen = stumm.
 // Kleine Symbole als SVG (keine Schriftzeichen/Emojis).
-const STAR_ICON = '<svg class="ico" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" fill="currentColor"/></svg>';
 const CHECK_ICON = '<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// Lautsprecher; durchgestrichen = stumm.
 const SPEAKER = '<path d="M3 9v6h4l5 4V5L7 9H3z" fill="currentColor"/>';
 const WAVES = '<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
 const CROSS = '<path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
@@ -557,7 +556,7 @@ export function renderProfile(profile, lp, daily, achievements, weekly = null) {
   if (weekly) {
     const wb = profile.weekly && profile.weekly.best[weekly.key];
     const wt = TRIBES[weekly.tribe] ? TRIBES[weekly.tribe].name : weekly.tribe;
-    $('weeklyBtn').innerHTML = `Woche ${esc(weekly.key.split('-W')[1])}: ${esc(weekly.name)}<span class="sub">${esc(weekly.desc)} ${esc(wt)}, ${weekly.turnLimit} Runden${wb != null ? `, Bestwert ${wb}` : ''}</span>`;
+    $('weeklyBtn').innerHTML = `Woche ${esc(weekly.key.split('-W')[1])}: ${esc(weekly.name)}<span class="sub">${esc(weekly.desc)} ${esc(wt)}, ${weekly.turnLimit} Runden${wb != null ? `, Bestwert ${num(wb)}` : ''}</span>`;
     $('weeklyBtn').title = 'Wochen-Herausforderung: jede Woche eine feste Karte mit Sonderregel';
   }
   const winRate = profile.games ? Math.round(100 * profile.wins / profile.games) : 0;
@@ -572,7 +571,7 @@ export function renderProfile(profile, lp, daily, achievements, weekly = null) {
   $('profile-card').querySelector('[data-pcode]').addEventListener('click', () => handlers.onProfileCode());
   const best = profile.daily.best[daily.key];
   const tribe = TRIBES[daily.tribe] ? TRIBES[daily.tribe].name : daily.tribe;
-  $('dailyBtn').innerHTML = `Heute, ${fmtDate(daily.key)}<span class="sub">Tagesherausforderung: ${esc(tribe)}, ${esc(MAP_TYPES[daily.mapType].label)}, 30 Runden${best != null ? `, Bestwert ${best}` : ''}</span>`;
+  $('dailyBtn').innerHTML = `Heute, ${fmtDate(daily.key)}<span class="sub">Tagesherausforderung: ${esc(tribe)}, ${esc(MAP_TYPES[daily.mapType].label)}, 30 Runden${best != null ? `, Bestwert ${num(best)}` : ''}</span>`;
   renderStats(profile);
   const ids = Object.keys(achievements);
   const got = ids.filter(id => profile.achievements[id]);
@@ -587,10 +586,10 @@ function renderStats(profile) {
   const top = o => { const e = Object.entries(o || {}).sort((a, b) => b[1] - a[1])[0]; return e ? `${tribeName(e[0])} (${e[1]})` : '–'; };
   const cell = (label, v) => `<div class="stat">${esc(label)}<b>${esc(String(v))}</b></div>`;
   // Tagesherausforderung: Bestwerte der letzten 14 Tage als Balken.
-  const days = Object.entries((profile.daily && profile.daily.best) || {}).sort().slice(-14);
+  const days = Object.entries((profile.daily && profile.daily.best) || {}).sort().slice(-14).map(([k, v]) => [k, num(v)]);
   const max = Math.max(1, ...days.map(d => d[1]));
   const bars = days.length ? `<div class="stat-bars">${days.map(([k, v]) => `<div title="${esc(k)}: ${v} Punkte"><span style="height:${Math.round(v / max * 100)}%"></span><em>${esc(k.slice(8))}</em></div>`).join('')}</div>` : '<div class="hint">Noch keine Tagesherausforderung gespielt.</div>';
-  const recent = (profile.recent || []).slice().reverse().map(r => `<li class="${r.won ? 'won' : ''}"><div><b>${r.won ? 'Sieg' : 'Niederlage'}</b> · ${esc(MODE_NAMES[r.mode] || r.mode || '')} · ${esc(tribeName(r.tribe))} · Runde ${r.round} · ${r.score} Punkte</div><span>${esc((r.date || '').split('-').reverse().join('.'))}</span></li>`).join('');
+  const recent = (profile.recent || []).slice().reverse().map(r => `<li class="${r.won ? 'won' : ''}"><div><b>${r.won ? 'Sieg' : 'Niederlage'}</b> · ${esc(MODE_NAMES[r.mode] || r.mode || '')} · ${esc(tribeName(r.tribe))} · Runde ${num(r.round)} · ${num(r.score)} Punkte</div><span>${esc(String(r.date || '').split('-').reverse().join('.'))}</span></li>`).join('');
   $('stats').innerHTML = `<div class="stat-row">
       ${cell('Spiele', profile.games)}${cell('Siege', profile.wins)}${cell('Siegquote', profile.games ? Math.round(100 * profile.wins / profile.games) + ' %' : '–')}
       ${cell('Beste Serie', profile.bestWinStreak)}${cell('Bestwert', profile.bestScore)}${cell('Schnellster Sieg', profile.fastestWin ? 'Runde ' + profile.fastestWin : '–')}
@@ -649,11 +648,11 @@ export function renderBoard(res, kind, myName) {
   const d = res.data || {};
   const top = d.top || [];
   const tribe = id => (TRIBES[id] ? TRIBES[id].name : '');
-  const rows = top.map(r => `<li class="${myName && r.name === myName ? 'me' : ''}"><span>${r.rank}.</span><span>${esc(r.name)} <span class="b-sub">${r.level != null ? `Stufe ${r.level} · ` : ''}${esc(tribe(r.tribe))} · Runde ${r.round}</span></span><b>${r.score}</b></li>`).join('');
-  const me = d.me && !top.some(r => r.name === d.me.name) ? `<li class="me"><span>${d.me.rank}.</span><span>${esc(d.me.name)}</span><b>${d.me.score}</b></li>` : '';
-  box.innerHTML = top.length ? `<ol class="board-list">${rows}${me}</ol><div class="hint">${d.total} ${d.total === 1 ? 'Spieler' : 'Spieler'} ${kind === 'daily' ? 'heute' : 'diese Woche'}</div>`
+  const rows = top.map(r => `<li class="${myName && r.name === myName ? 'me' : ''}"><span>${num(r.rank)}.</span><span>${esc(r.name)} <span class="b-sub">${r.level != null ? `Stufe ${num(r.level)} · ` : ''}${esc(tribe(r.tribe))} · Runde ${num(r.round)}</span></span><b>${num(r.score)}</b></li>`).join('');
+  const me = d.me && !top.some(r => r.name === d.me.name) ? `<li class="me"><span>${num(d.me.rank)}.</span><span>${esc(d.me.name)}</span><b>${num(d.me.score)}</b></li>` : '';
+  box.innerHTML = top.length ? `<ol class="board-list">${rows}${me}</ol><div class="hint">${num(d.total)} Spieler ${kind === 'daily' ? 'heute' : 'diese Woche'}</div>`
     : `<div class="hint">Noch keine Einträge ${kind === 'daily' ? 'heute' : 'diese Woche'} – spiel die ${kind === 'daily' ? 'Tages' : 'Wochen'}-Herausforderung und sei die Nummer 1!</div>`;
-  if (d.pending) box.innerHTML += `<div class="hint">${d.pending === 1 ? 'Ein Ergebnis von dir wird' : d.pending + ' Ergebnisse von dir werden'} gerade geprüft und erscheint danach hier.</div>`;
+  if (d.pending) box.innerHTML += `<div class="hint">${d.pending === 1 ? 'Ein Ergebnis von dir wird' : num(d.pending) + ' Ergebnisse von dir werden'} gerade geprüft und erscheint danach hier.</div>`;
   if (d.rejected) box.innerHTML += `<div class="hint">Ein Ergebnis wurde nicht gewertet: ${esc(d.rejected)}</div>`;
   if (!myName) box.innerHTML += '<div class="hint">Wähle oben im Profil einen Namen, damit deine Punkte hier erscheinen.</div>';
 }
@@ -979,22 +978,6 @@ export function hideUnitChip() {
   if (anchor.kind === 'unit') clearAnchor();
 }
 
-// Einheit und Stadt auf demselben Feld: Knopf zum Wechseln zwischen den Menüs.
-function switchToCity(state, unit, ctx) {
-  const city = cityAt(state, unit.q, unit.r);
-  if (!city || !cityView(state, ctx.viewer, city)) return '';
-  const label = city.owner === ctx.actAs ? 'Stadtmenü öffnen' : 'Stadt ansehen';
-  return `<div class="action-list"><button class="btn action ghost" data-open-city><span>${label}<span class="sub">Die Einheit steht in einer ${city.isCapital ? 'Hauptstadt' : 'Stadt'} – ausbilden, Bevölkerung, Gebäude</span></span></button></div>`;
-}
-
-function switchToUnit(state, city, ctx) {
-  const u = unitAt(state, city.q, city.r);
-  if (!u) return '';
-  const def = UNITS[u.carry || u.type];
-  const mine = u.owner === ctx.actAs;
-  return `<button class="btn small unit-in-city" data-open-unit="${esc(u.id)}" title="Steht in der Stadt${mine ? ' – ziehen, angreifen, auflösen' : ''}">${mine ? 'Einheit wählen' : 'Einheit ansehen'}: ${def.name}</button>`;
-}
-
 export function showCityPanel(state, city, ctx) {
   // Fremde Städte außer Sicht nur so zeigen, wie man sie zuletzt gesehen hat.
   const view = cityView(state, ctx.viewer, city);
@@ -1048,7 +1031,7 @@ export function showCityPanel(state, city, ctx) {
   panel(`
     <div class="tb-cap">
       <span>${cap ? esc(cap) : ''}</span>
-      ${u0 ? `<button class="btn ghost small" data-open-unit="${u0.id}">${u0.owner === ctx.actAs ? 'Einheit wählen' : 'Einheit ansehen'}: ${UNITS[u0.carry || u0.type].name}</button>` : ''}
+      ${u0 ? `<button class="btn ghost small" data-open-unit="${esc(u0.id)}">${u0.owner === ctx.actAs ? 'Einheit wählen' : 'Einheit ansehen'}: ${UNITS[u0.carry || u0.type].name}</button>` : ''}
       ${city.owner !== ctx.actAs ? '<button class="btn ghost small" data-build-open>Gebiet ansehen</button>' : ''}
       <button class="btn ghost small" data-close>Schließen</button>
     </div>
@@ -1088,13 +1071,6 @@ function showRememberedCity(state, view) {
     <div class="hint">Im Nebel – so hast du die Stadt zuletzt gesehen. Schick eine Einheit oder einen Spion hin, um den aktuellen Stand zu sehen.</div>
   `);
   wirePanel($('panel'));
-}
-
-function levelChips(city) {
-  const got = Object.entries(city.rewards || {}).sort((a, b) => a[0] - b[0]);
-  if (!got.length) return '';
-  return `<div class="level-row">${got.map(([lvl, id]) =>
-    `<span class="level-chip" title="Stufe ${lvl}: ${CITY_REWARDS[id].desc}">${CITY_REWARDS[id].name}</span>`).join('')}</div>`;
 }
 
 // Auswahl-Dialog für die Belohnung einer aufgestiegenen Stadt.
@@ -1151,7 +1127,7 @@ const IMP_EFFECT = {
   watchtower: 'Sicht 3 Felder, Einheiten darauf und daneben verteidigen anderthalbfach',
   fishhut: '+1 Stern, +1 je Fischgrund daneben'
 };
-const impEffect = id => IMPROVEMENTS[id].monument ? `+${3} Bevölkerung, 200 Punkte (einmalig je Stamm)` : IMP_EFFECT[id] || '';
+const impEffect = id => IMPROVEMENTS[id].monument ? `+3 Bevölkerung, 200 Punkte (einmalig je Stamm)` : IMP_EFFECT[id] || '';
 
 const build = { open: false, city: null, sel: null, state: null, ctx: null, opts: [] };
 
@@ -1247,10 +1223,6 @@ export function closeBuild() {
   $('build-overlay').classList.add('hidden');
 }
 
-export function isBuildOpen() {
-  return build.open;
-}
-
 function renderBuild(state, city, ctx) {
   build.state = state; build.city = city; build.ctx = ctx;
   const mineCity = city.owner === ctx.actAs;
@@ -1306,12 +1278,7 @@ function renderBuild(state, city, ctx) {
       <span class="hx-gain" aria-hidden="true"></span>
     </button>`;
   }).join('');
-  box.querySelectorAll('[data-hex]').forEach(b => b.addEventListener('click', () => {
-    build.sel = b.dataset.hex;
-    renderBuild(build.state, build.city, build.ctx);
-    const again = $('build-map').querySelector(`[data-hex="${build.sel}"]`);
-    if (again) again.focus({ preventScroll: true });
-  }));
+  box.querySelectorAll('[data-hex]').forEach(b => b.addEventListener('click', () => selectBuildHex(b.dataset.hex)));
   renderBuildDetail(state, city, ctx, info.find(t => t.key === build.sel));
   // Fokus nach dem Neuzeichnen (z. B. nach dem Bauen) auf dem gewählten Feld halten.
   if (build.open && (!document.activeElement || document.activeElement === document.body)) {
@@ -1539,7 +1506,7 @@ function bindTechNav() {
     zoomAt(e.deltaY < 0 ? 1.12 : 0.89, e.clientX - rect.left, e.clientY - rect.top);
   }, { passive: false });
   const pointers = new Map();
-  const pinch = { prevDist: 0, cx: 0, cy: 0 };
+  const pinch = { prevDist: 0 };
   let dragAcc = 0;
   tree.addEventListener('pointerdown', e => {
     lastTechTarget = e.target.closest('.tech-hex') || null;
@@ -1549,8 +1516,6 @@ function bindTechNav() {
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       pinch.prevDist = Math.hypot(a.x - b.x, a.y - b.y);
-      pinch.cx = (a.x + b.x) / 2;
-      pinch.cy = (a.y + b.y) / 2;
     }
     tree.classList.add('grabbing');
   });
@@ -1574,8 +1539,6 @@ function bindTechNav() {
         zoomAt(dist / pinch.prevDist, (a.x + b.x) / 2 - rect.left, (a.y + b.y) / 2 - rect.top);
       }
       pinch.prevDist = dist;
-      pinch.cx = (a.x + b.x) / 2;
-      pinch.cy = (a.y + b.y) / 2;
     }
   });
   const endPointer = e => {
@@ -1778,7 +1741,6 @@ export function openTech(state, ctx, keepView = false) {
   svg.setAttribute('height', TREE_H);
   svg.innerHTML = lines;
 
-  lastTechIds = new Set(mine);
   for (const id in TECHS) {
     const t = TECHS[id];
     const p = pos[id];
@@ -1802,12 +1764,6 @@ export function openTech(state, ctx, keepView = false) {
     renderTechDetail(state, ctx);
   };
 }
-
-function doneFor(id) {
-  return lastTechIds.has(id);
-}
-
-let lastTechIds = new Set();
 
 export function closeTech() {
   lastTechClick = null;
