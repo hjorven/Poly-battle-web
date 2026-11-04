@@ -1513,7 +1513,7 @@ function tipTick() {
   tips.cur = { id: tip.id, tile: v.tile || null };
   render.setTutorMarker(v.tile || null);
   ui.showTutor({
-    head: 'Hinweis', progress: 0, text: v.text, focus: v.el || null, tile: v.tile || null,
+    head: 'Hinweis', progress: 0, text: v.text, focus: v.el || null, tile: v.tile || null, tip: true,
     buttons: [['tipOff', 'Hinweise aus'], ...(v.tile ? [['tipShow', 'Zeigen']] : []), ['tipOk', 'OK', true]]
   });
 }

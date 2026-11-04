@@ -266,7 +266,7 @@ export const TECHS = {
   castles: { name: 'Burgbau', tier: 5, req: 'diplomacy', desc: 'Burg: eigene Einheiten darauf haben 3-fache Verteidigung' },
 
   smithery: { name: 'Schmiedekunst', tier: 3, req: 'mining', desc: 'Schwertkämpfer ausbilden' },
-  smelting: { name: 'Verhüttung', tier: 4, req: 'smithery', desc: 'Schmelzhütte: +2 Sterne je angrenzender Mine' },
+  smelting: { name: 'Verhüttung', tier: 4, req: 'smithery', desc: 'Schmelzhütte: +2 Sterne je angrenzender Mine, +1 je Berg ohne Mine' },
   steel: { name: 'Stahl', tier: 5, req: 'smelting', desc: 'Krieger, Verteidiger, Pikeniere und Schwertkämpfer +1 Angriff' },
 
   philosophy: { name: 'Philosophie', tier: 3, req: 'meditation', desc: 'Gedankenbeuger; Forschung -20 %' },

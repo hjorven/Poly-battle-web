@@ -424,7 +424,8 @@ let tutorScrolled = '';
 // Tutorial-Karte: Kopf mit Fortschritt, Text, Knöpfe. `focus` hebt Knöpfe
 // hervor; `inline` (Id eines Fensters) zeigt die Karte als Leiste oben in diesem
 // Fenster statt über der Karte. Die Karte meidet Ziel, Tipp und Meldungen.
-export function showTutor({ head, progress, text, buttons = [], focus = null, tile = null, inline = null }) {
+// `tip`: kurzer Spielhinweis statt Lektion (auf dem Handy weichen die Kamera-Knöpfe).
+export function showTutor({ head, progress, text, buttons = [], focus = null, tile = null, inline = null, tip = false }) {
   tutorTile = tile;
   const sig = JSON.stringify([head, text, buttons, inline]);
   const card = inline ? $(inline).querySelector('.card') : null;
@@ -446,6 +447,7 @@ export function showTutor({ head, progress, text, buttons = [], focus = null, ti
     box.querySelectorAll('[data-tu]').forEach(b => b.addEventListener('click', () => handlers.onTutor(b.dataset.tu)));
   }
   box.classList.remove('hidden');
+  box.classList.toggle('tu-tip', tip && !inline);
   // Hervorhebung neu setzen (Leisten werden beim Neuzeichnen ersetzt).
   const targets = tutorTargets(focus).slice(0, 12);
   document.querySelectorAll('.tu-focus').forEach(e => { if (!targets.includes(e)) e.classList.remove('tu-focus'); });

@@ -1390,6 +1390,8 @@ html.phone .cam-btn { width: 40px; height: 40px; }
 /* Kamera-Knöpfe nie unter einer Leiste: weg, solange „Tipp der KI“ oder „Karte ansehen“ offen ist,
    quer auch, solange unten eine Einheit oder Stadt gewählt ist (dort reicht die Höhe nicht für beides). */
 html.phone:has(#coach:not(.hidden), #review-bar:not(.hidden)) #camera-pad { display: none; }
+/* Ein Spielhinweis steht oben, wo auch die Kamera-Knöpfe liegen; er ist nach „OK“ weg. */
+html.phone:has(#tutor.tu-tip:not(.hidden)) #camera-pad { display: none; }
 @media (orientation: landscape) {
   html.phone:has(#unit-chip:not(.hidden), #panel:not(.hidden), #replay-bar:not(.hidden)) #camera-pad { display: none; }
 }

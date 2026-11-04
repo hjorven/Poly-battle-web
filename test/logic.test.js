@@ -2361,6 +2361,9 @@ test('Wachturm: Sicht 3 und anderthalbfache Verteidigung daneben', () => {
   st.improvements['6,5'] = 'watchtower';
   assert.strictEqual(R.defenceBonus(st, d), 1.5);
   assert.ok(R.visibleKeys(st, 'player_1').has(hk(9, 5)), 'sieht 3 Felder vom Turm');
+  // Gegner auf einem Feld, das nur der Turm sieht, ist sichtbar wie das Feld selbst.
+  assert.ok(R.isVisible(st, 'player_1', 9, 5), 'isVisible zählt den Turm mit');
+  assert.ok(!R.isVisible(st, 'player_1', 10, 5), 'dahinter Nebel');
 });
 
 test('Fischerhütte: +1 je Fischgrund daneben; Markt zählt Rohstoffe', () => {

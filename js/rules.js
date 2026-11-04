@@ -697,8 +697,18 @@ export function isVisible(state, player, q, r) {
   for (const c of state.cities) {
     if (c.owner === player && hexDistance(c.q, c.r, q, r) <= VISION.city) return true;
   }
+  // Wachtürme wie in visibleKeys: sonst wäre ein Feld nebelfrei, der Gegner
+  // darauf aber unsichtbar und nicht angreifbar. Nur die nahen Felder prüfen.
+  for (let nr = r - MAX_IMP_SIGHT; nr <= r + MAX_IMP_SIGHT; nr++) {
+    for (let nq = q - MAX_IMP_SIGHT; nq <= q + MAX_IMP_SIGHT; nq++) {
+      const imp = improvementAt(state, nq, nr);
+      const sight = imp && own(IMPROVEMENTS, imp) && IMPROVEMENTS[imp].sight;
+      if (sight && hexDistance(nq, nr, q, r) <= sight && ownLand(state, player, nq, nr)) return true;
+    }
+  }
   return false;
 }
+const MAX_IMP_SIGHT = Math.max(0, ...Object.values(IMPROVEMENTS).map(d => d.sight || 0));
 
 // Spieler, der keine Städte mehr hat (z. B. Mensch im KI-Modus besiegt).
 export function isEliminated(state, player) {

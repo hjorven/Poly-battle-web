@@ -857,6 +857,13 @@ function visibleSet(state, player) {
     add(u.q, u.r, sight.get(k));
   }
   for (const c of state.cities) if (c.owner === player) add(c.q, c.r, VISION.city);
+  // Wachtürme wie in R.visibleKeys.
+  for (const [k, imp] of Object.entries(state.improvements || {})) {
+    const def = Object.hasOwn(IMPROVEMENTS, imp) && IMPROVEMENTS[imp];
+    if (!def || !def.sight) continue;
+    const [q, r] = k.split(',').map(Number);
+    if (R.ownLand(state, player, q, r)) add(q, r, def.sight);
+  }
   return keys;
 }
 // Nebel-Ausschnitt → Menge der dabei sichtbaren Felder (für seenOwner).

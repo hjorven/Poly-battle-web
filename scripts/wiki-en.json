@@ -161,7 +161,7 @@
   "Minen bauen (+1 Einkommen)": "Build mines (+1 income)",
   "Schwertkämpfer ausbilden": "Train swordsmen",
   "Verhüttung": "Smelting",
-  "Schmelzhütte: +2 Sterne je angrenzender Mine": "Smelter: +2 stars per adjacent mine",
+  "Schmelzhütte: +2 Sterne je angrenzender Mine, +1 je Berg ohne Mine": "Smelter: +2 stars per adjacent mine, +1 per mountain without a mine",
   "Stahl": "Steel",
   "Krieger, Verteidiger, Pikeniere und Schwertkämpfer +1 Angriff": "Warriors, defenders, pikemen and swordsmen +1 attack",
   "Plattenrüstung": "Plate Armour",
